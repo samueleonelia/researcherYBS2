@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# macOS
+.DS_Store
+
+# Run output: rebuilt by every run, large
+runs/
+
+# Show archive fetched from YouTube: large, regenerable by /ybs-shows
+shows/raw/
+shows/transcripts/
+shows/new/
+
+# Secrets
+.env
+.env.*
+*.key
+credentials.json

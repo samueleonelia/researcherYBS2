@@ -1,0 +1,266 @@
+{
+  "storylines": [
+    {
+      "rank": 1,
+      "name": "The Iran war that ended with nothing settled: sanctions bluster and the Strait of Hormuz",
+      "shows": 11,
+      "note": "the strikes never found the uranium, Iran rearmed during the pause and is now being handed toll rights over the strait, so sanctions theater like Bessent's 'financial D-Day' is a bluff he says Washington will never call."
+    },
+    {
+      "rank": 2,
+      "name": "Trump's tariff war and the collapse of the Canada deal",
+      "shows": 9,
+      "note": "he calls the '$60 billion loss' to Canada five-year-old economics, says Canada should have gone to zero tariffs unilaterally instead of retaliating, and reads the 50% tariffs as cronyism that raises the cost of living Trump promised to cut."
+    },
+    {
+      "rank": 3,
+      "name": "The empty US arsenal and a military being degraded from the top",
+      "shows": 8,
+      "note": "Patriot and Tomahawk stocks are drained by Ukraine and Iran while Raytheon and Lockheed block competition, and Hegseth's appointees disband drone units and swap electromagnetic catapults for steam."
+    },
+    {
+      "rank": 4,
+      "name": "The $40 trillion debt, surging long yields, and Bessent's attempts to manage them",
+      "shows": 7,
+      "note": "long rates are rising because investors doubt the debt will ever be repaid, buybacks and yield-curve tricks just move money between pockets, and only spending cuts (entitlements) fix it since revenue is capped near 18% of GDP."
+    },
+    {
+      "rank": 5,
+      "name": "Israel squeezed: withdraw-before-disarm in Gaza, and Turkey as the next flashpoint",
+      "shows": 6,
+      "note": "he backs Netanyahu's refusal to leave Gaza before Hamas disarms, treats the Syrian air base strike as legitimate preemptive deterrence, and reads the Saudi-Turkey-Pakistan pact as Trump handing the region to Islamist powers."
+    },
+    {
+      "rank": 6,
+      "name": "Ukraine defenseless and Russia testing how far it can go",
+      "shows": 6,
+      "note": "Ukraine has no answer left to Russian ballistic missiles, letting it build Storm Shadow parts itself beats shipping finished weapons, and the CIA director's Moscow trip probably warns Putin off a Baltic probe that a 2021 warning failed to prevent."
+    },
+    {
+      "rank": 7,
+      "name": "AI data centers becoming the thing both parties run against",
+      "shows": 5,
+      "note": "data centers now poll worse than nuclear plants, Paxton wants criminal liability and Shapiro signed restrictions, and he blames AI companies for fueling the fear instead of making the case."
+    },
+    {
+      "rank": 8,
+      "name": "Democrats' hard-left primary wins: Mamdani, DSA, El-Sayed",
+      "shows": 5,
+      "note": "the DSA wing keeps taking nominations because it is the only side with conviction, and its actual programs (city supermarkets, rent freezes) produce the opposite of what cost-of-living voters wanted."
+    },
+    {
+      "rank": 9,
+      "name": "Government taking equity stakes and picking industries",
+      "shows": 4,
+      "note": "about 31 equity deals with no congressional vote, plus subsidies and import bans on Chinese robots, are left-style central planning under a Republican label."
+    },
+    {
+      "rank": 10,
+      "name": "Tucker Carlson building a movement",
+      "shows": 3,
+      "note": "his ten-point manifesto fuses far-left and MAGA-right around hatred of Israel and of finance, and the Shapiro monologue shows the antisemitic conspiracy underneath; he thinks Tucker running would be more dangerous than Trump."
+    },
+    {
+      "rank": 11,
+      "name": "Trump selling advance access to his own market-moving posts",
+      "shows": 3,
+      "note": "the $100,000-a-month Truth Social scheme is insider trading in plain sight and impeachable on its own, the latest entry in a pattern he calls the Picasso of corruption."
+    },
+    {
+      "rank": 12,
+      "name": "His new series answering capitalism's popular critics",
+      "shows": 2,
+      "note": "he has started taking viral critics apart line by line, from Benn Jordan's 'leveragism' to Stanford's new encyclopedia entry on capitalism, because millions hear these claims and no rebuttal."
+    }
+  ],
+  "themes": [
+    {
+      "rank": 1,
+      "name": "Capitalism versus the mixed economy",
+      "angle": "we have never had capitalism, only a mixed economy drifting toward statism, and the problems people blame on markets trace to specific government policies."
+    },
+    {
+      "rank": 2,
+      "name": "The Trump administration",
+      "angle": "judged on results, not on which side he is on: not pro-market, not pro-free-speech, and foreign policy is the worst of it."
+    },
+    {
+      "rank": 3,
+      "name": "Technology and human achievement",
+      "angle": "innovation is presumptively good and opposition to it is unearned fear; he ends most shows celebrating what people built this week."
+    },
+    {
+      "rank": 4,
+      "name": "Spending, entitlements and the fiscal arithmetic",
+      "angle": "the deficit is a spending problem, taxes cannot close it, and the gerontocracy transfers wealth from the young because old people vote."
+    },
+    {
+      "rank": 5,
+      "name": "Free trade",
+      "angle": "a tariff is a tax paid at home, and unilateral free trade benefits whoever adopts it no matter what the other side does."
+    },
+    {
+      "rank": 6,
+      "name": "Israel, antisemitism and the double standard",
+      "angle": "Israel is held to a standard Russia and Iran are not, and the loudest attacks on it now come from the populist right as much as the left."
+    },
+    {
+      "rank": 7,
+      "name": "Nobody is defending capitalism",
+      "angle": "the DSA left and the Vance/Tucker right are both statist, so the moral case for markets goes unmade on every platform that matters."
+    },
+    {
+      "rank": 8,
+      "name": "Ideas drive history",
+      "angle": "Marx is the unacknowledged foundation of almost all talk about capitalism, and bad philosophy travels from journals to podcasts to policy."
+    },
+    {
+      "rank": 9,
+      "name": "Individual responsibility",
+      "angle": "companies are liable for force and fraud, not for what people choose to overuse; parents, not platforms or the state, raise children."
+    },
+    {
+      "rank": 10,
+      "name": "Art, culture and Objectivism",
+      "angle": "he judges a work by whether reason and human agency drive it, and notes how completely Rand is left out of serious treatments of capitalism."
+    },
+    {
+      "name": "Art and aesthetics",
+      "angle": "judge a work on its own terms and by whether reason is the source of the hero's power, not by fidelity or casting rows",
+      "fading": true,
+      "missed_runs": 1,
+      "rank": 11
+    },
+    {
+      "name": "Debt, deficits, inflation and the Fed",
+      "angle": "spending is the disease, price rises from supply shocks are not monetary inflation, and stagnation is the likeliest ending",
+      "fading": true,
+      "missed_runs": 1,
+      "rank": 12
+    },
+    {
+      "name": "Defending capitalism against its critics",
+      "angle": "the critics never define the word, they leave the entrepreneur out of the picture, and Marx's exploitation story still sits under nearly all of it",
+      "fading": true,
+      "missed_runs": 1,
+      "rank": 13
+    },
+    {
+      "name": "Free trade and immigration",
+      "angle": "unilateral free trade pays whoever adopts it, and skilled immigrants grow the pie rather than take a slice of it",
+      "fading": true,
+      "missed_runs": 1,
+      "rank": 14
+    },
+    {
+      "name": "Technology and AI as human progress",
+      "angle": "presumptively good and worth defending out loud; the fear is unearned and deregulation, not permission, is the answer",
+      "fading": true,
+      "missed_runs": 1,
+      "rank": 15
+    },
+    {
+      "name": "The human achievement roundup",
+      "angle": "rockets, mRNA vaccines, drones and falling battery prices as the standing evidence that free people and markets deliver",
+      "fading": true,
+      "missed_runs": 1,
+      "rank": 16
+    },
+    {
+      "name": "Tribalism and the crisis of reason on both left and right",
+      "angle": "woke never left, it changed targets; the vice is caring about loyalty rather than truth, and the right has it too",
+      "fading": true,
+      "missed_runs": 1,
+      "rank": 17
+    },
+    {
+      "name": "American power abroad",
+      "angle": "perceived weakness is what invites the next war, from Iran to Taiwan",
+      "fading": true,
+      "missed_runs": 2,
+      "rank": 18
+    },
+    {
+      "name": "China",
+      "angle": "genuinely innovative and forward-looking, and simultaneously in real economic trouble",
+      "fading": true,
+      "missed_runs": 2,
+      "rank": 19
+    },
+    {
+      "name": "Free speech and government power over media and speech",
+      "angle": "an FCC licence review or an FTC bias rule is censorship whichever party writes it",
+      "fading": true,
+      "missed_runs": 2,
+      "rank": 20
+    },
+    {
+      "name": "Objectivist ethics: altruism against self-interest",
+      "angle": "the moral premise, not ignorance, is what keeps people reaching for socialism",
+      "fading": true,
+      "missed_runs": 2,
+      "rank": 21
+    },
+    {
+      "name": "Personal responsibility against corporate liability",
+      "angle": "force and fraud are the only grounds for blame; parents, not platforms, raise children",
+      "fading": true,
+      "missed_runs": 2,
+      "rank": 22
+    },
+    {
+      "name": "Tribalism and the collapse of reason",
+      "angle": "woke never died, it changed target, and the same anti-truth loyalty now runs the right too",
+      "fading": true,
+      "missed_runs": 2,
+      "rank": 23
+    },
+    {
+      "name": "Trump and the MAGA right",
+      "angle": "judged on results and on principle, and by that test the right is as statist as the left",
+      "fading": true,
+      "missed_runs": 2,
+      "rank": 24
+    }
+  ],
+  "moves": {
+    "main": "whatever gets blamed on capitalism, name the specific government policy that actually caused it",
+    "secondary": [
+      "economic power is a trade you can walk away from; political power is the gun",
+      "make the critic define the term first, because 'capitalism' and 'leverage' usually dissolve on contact",
+      "do the arithmetic before the morality: show the program cannot be paid for, then say it is also wrong",
+      "apply the same test to both tribes, and check 'pro-market' or 'pro-free-speech' claims against actions rather than labels",
+      "ask who actually pays and who actually benefits, whether it is a tariff, a subsidy or an entitlement",
+      "count the unseen cost, not just the visible gain (Bastiat, applied to equity stakes and industrial policy)",
+      "put the entrepreneur back in the picture: any account of the economy that omits the producer is broken",
+      "hold the policy against its own stated goal and let the contradiction do the work",
+      "trace the idea back to its source, from Marx to the seminar room to the podcast",
+      "let prices carry the information: a planner overriding the market is claiming to know what the market knows",
+      "judge governments by whether they initiate force, not by the good intentions they announce"
+    ]
+  },
+  "built_utc": "2026-08-30T08:54:00Z",
+  "built_local_date": "2026-08-30",
+  "shows": [
+    "rzNFI4uKqcY",
+    "KkFrGluzXhk",
+    "RdW7wmHwW6w",
+    "MV-2lBzPaz4",
+    "66x869m8D6g",
+    "_8rd9pSE4r0",
+    "s8WTEaxNoGk",
+    "oj4Aj7jEJJA",
+    "9JkNes9Te6M",
+    "fVGsHVEbtSM",
+    "A4FIB98E2dU",
+    "qp8JLCXYjyM",
+    "uR8UU3iPVZY",
+    "AFajoVTNuOA",
+    "4hDC05-WIfI"
+  ],
+  "range": {
+    "first": "2026-07-30",
+    "last": "2026-08-26",
+    "undated": 0
+  }
+}

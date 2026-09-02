@@ -1,0 +1,22 @@
+{
+  "events": [
+    {
+      "utc": "2026-08-24T08:19:56Z",
+      "type": "list_failed",
+      "detail": "Step 1 listing failed: first ybs4-shows-list agent returned LIST_EMPTY (grid did not render); retry timed out twice in ego-browser and wrote no listing.json. Run stopped before Step 2.",
+      "show": ""
+    },
+    {
+      "utc": "2026-08-25T07:03:49Z",
+      "type": "fetch_failed",
+      "detail": "KkFrGluzXhk transcript blocked twice by YouTube rate limit; the transcript package returned its rate-limit notice as tool content, which fetch wrote as a 44-word transcript. Raw file deleted both times. Profile left at 2026-08-24 build.",
+      "show": ""
+    },
+    {
+      "utc": "2026-08-25T07:36:45Z",
+      "type": "no_transcript",
+      "detail": "Correction to the fetch_failed event logged earlier today: this was never a rate limit and the IP was never blocked. YouTube holds no captions for this show yet (yt-dlp --list-subs: 'has no automatic captions / has no subtitles'). The transcript package reports every failure as a rate limit, which is what misled the run.",
+      "show": "KkFrGluzXhk"
+    }
+  ]
+}

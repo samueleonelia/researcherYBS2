@@ -39,3 +39,29 @@
 - Raise `triage_batch_size` to 10 and verify against a past run's verdicts.
 - Consider adding `world news` / `u.s. news` to `_sections.md`.
 - Fix the 4 pre-existing test failures.
+
+## 2026-09-02 — GitHub remote, triage batch size
+
+**Status:** `main`, pushed to `github.com/samueleonelia/researcherYBS2` (private).
+
+**Done**
+- Created the GitHub repo (private) and pushed `main` plus the
+  `v4.1-single-source-template` tag.
+- Raised `triage_batch_size` from 3 to 10 in `settings.md`
+  (225 non-admitted articles: 75 batches -> 23). Rebuilt agent files, same 4
+  pre-existing test failures, no new ones.
+
+**Open issues**
+- The batch-size change was **not verified with a live verdict diff**: this
+  session cannot launch the project's own `ybs4-triage` subagent outside the
+  running `/ybs-brief-v4` skill (only the fixed built-in agent types are
+  available here). Reasoned safe from the agent's own rules instead (tiny
+  input, one-word output, code re-batches malformed files, cross-contamination
+  already forbidden explicitly) — but the next real run is the first live
+  check.
+
+**Next**
+- On the next real `/ybs-brief-v4` run: compare its triage verdicts against a
+  past batch-3 run's for the same articles, watch for flips.
+- Consider adding `world news` / `u.s. news` to `_sections.md`.
+- Fix the 4 pre-existing test failures.

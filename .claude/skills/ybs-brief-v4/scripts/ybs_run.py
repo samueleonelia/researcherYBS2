@@ -856,19 +856,7 @@ def cmd_fill(args):
         if tpl_missing:
             die(f"{run['slot']}.md asks for {', '.join(tpl_missing)}, "
                 f"which nothing provides")
-        marker = "<!-- STRUCTURE:BEGIN -->"
-        struct_src = (skill_dir() / "BRIEF-STRUCTURE.md").read_text(encoding="utf-8")
-        if marker not in struct_src:
-            die(f"BRIEF-STRUCTURE.md has no {marker} marker")
-        struct_src = "\n".join(
-            l for l in struct_src.split(marker, 1)[1].splitlines()
-            if not l.lstrip().startswith(">"))
-        structure, st_missing = render(struct_src, ns)
-        if st_missing:
-            die(f"BRIEF-STRUCTURE.md asks for {', '.join(st_missing)}, "
-                f"which nothing provides")
         ns.update({"TEMPLATE": tpl,
-                   "STRUCTURE": structure.strip(),
                    "PICKS": picks_block(run_dir),
                    "COUNTERPOINTS": counterpoints_block(run_dir)})
 

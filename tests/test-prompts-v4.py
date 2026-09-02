@@ -68,7 +68,6 @@ RUN_VARS = {
     "ARTICLES", "NOTES", "PICKS", "COUNTERPOINTS", "TEMPLATE",
     "PART_NOTE", "PART_ITEMS", "PARTS",
     "ARTICLE_ID", "WHAT_HAPPENED", "PRINCIPLE", "ANGLE", "ITEM_POOL",
-    "STRUCTURE",
     "AUDIT_LINE",
 }
 
@@ -107,6 +106,15 @@ def test_placeholders():
     check("morning.md: every placeholder is one the script can fill", not unknown,
           f"nothing provides {sorted(unknown)}")
     check("morning.md carries the audit-line placeholder", "{{AUDIT_LINE}}" in tpl)
+
+    # The template is the only statement of the brief's shape, and write.md the
+    # only statement of its sentences. Neither may drift into the other's job.
+    wr = (SKILL / "prompts" / "write.md").read_text()
+    for s in ("What leads", "Secondary Topics", "Worth Yaron", "COUNTERPOINT -",
+              "AUDIT_LINE"):
+        check(f"write.md does not restate the shape ({s})", s not in wr)
+    for s in ("words", "clause", "dash", "semicolon", "metaphor"):
+        check(f"morning.md carries no sentence rule ({s})", s not in tpl)
 
 
 def test_agent_files_are_generated():

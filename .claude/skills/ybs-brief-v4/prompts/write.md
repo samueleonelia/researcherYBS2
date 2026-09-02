@@ -24,35 +24,36 @@ then talk about on air.
 
 ## The template
 
-Follow this shape exactly.
+The template is the whole shape of the brief: the sections and their order, the
+heading levels, what a story's source list holds, where a counterpoint sits.
+Follow it exactly. Nothing below repeats it; everything below is about the
+sentences.
 
 ````
 {{TEMPLATE}}
 ````
 
-## What each part of it holds
-
-{{STRUCTURE}}
-
 ## What the brief is for
 
 {{LENS}}
 
+## Who is reading
+
+He is skimming at 9am, distracted, and will talk about these stories on air in an
+hour. He reads the heading, then decides whether to read on. Everything below it
+has to land the first time, read out loud, without going back to the start of the
+sentence. A story he cannot rely on is worse than one he never saw.
+
 ## How to write a story
 
-Each story is a heading followed by short sentences. There is no target
-length: a story takes the sentences it needs and stops.
-
-**The reader is skimming at 9am, and he is distracted.** He reads the heading,
-then decides whether to read on. Everything below it has to land the first time,
-read out loud, without going back to the start of the sentence.
+There is no target length: a story takes the sentences it needs and stops.
 
 ### Clarity is the priority, not compression
 
 The failure to avoid is not a story that runs long. It is a story he has to read
-twice. Never pack two facts into one sentence to save a line, never drop the word
-that makes a sentence plain, and never compress a story into something clever.
-Given the choice between shorter and clearer, write clearer.
+twice. Never drop the word that makes a sentence plain, and never compress a
+story into something clever. Given the choice between shorter and clearer, write
+clearer.
 
 1. **One fact per sentence.** If a sentence carries two facts joined by "and",
    "while", "which" or a dash, it is two sentences. Write both.
@@ -99,16 +100,26 @@ read alone, at speed, by someone who does not yet know the story.
 
 ### The order to write in
 
-Do not weave. Take the four things in order, in separate sentences:
+Do not weave. Take the three things in order, in separate sentences:
 
 1. **What happened.** The plainest possible statement of the fact. One sentence.
 2. **Why it matters, or the principle.** One or two sentences.
-3. **What the evidence does not establish.** Its own sentence, at the end.
+3. **What the evidence does not establish.** Its own sentence, at the end. It is
+   never skipped: a story he cannot lean on must not read as one he can.
 
 Where a note's `WEAK SPOTS` says the story is thin, that caveat gets its own short
 sentence and starts plainly: "The 87% comes with no turnout figure." Never bury a
 caveat in a clause halfway through a long sentence, where a skimming reader loses
 it.
+
+### The notes are the only source
+
+- Every figure, name, date and claim comes from the notes. Nothing from memory,
+  nothing from elsewhere.
+- Never soften what a note marked as weakly evidenced. The note reached a
+  judgment; carry it, and mark what is contested as contested.
+- A sentence a note marks `[background]` is context, not reporting, and reads as
+  such.
 
 ### A worked example
 
@@ -120,43 +131,27 @@ Too dense, which is the failure to avoid:
 > Constitutional Court ruled the amendments reset the clock on his prior terms,
 > freeing him to run for another seven years.
 
-That is 57 words and five facts in one sentence. The same content, readable:
+That is 53 words and five facts in one sentence. The same content, readable:
 
 > Kazakhstan votes today for a new single-chamber parliament. A March referendum,
-> passed with 87%, merged the two old chambers and widened Tokayev's power to
+> passed with 87%, merged the two old chambers. It also widened Tokayev's power to
 > appoint officials. Last month the Constitutional Court wiped his previous terms
 > off the clock. He can now run again for seven more years.
 
-Four sentences, none over 22 words, same facts, no dashes.
+Five sentences, the longest 12 words, same facts, no dashes.
 
 ### Three things that make a brief useless
 
 - **Long sentences.** This is the most common failure and the worst. A reader who
   has to restart a sentence has stopped skimming.
 - **Hedging a story into mush.** "Critics argue, while supporters contend" tells
-  him nothing. The note reached a judgment; carry it, and mark what is contested
-  as contested.
+  him nothing.
 - **Repeating the headline in the sentence below it.** The heading says what
   happened. The sentences say what it means.
 
 ### Counterpoints, same rules
 
-A counterpoint is short: what happened, why it counts, what it does not settle.
-Take those from its file and apply every sentence rule above. Never add to it,
-and never make it sound like more than it is.
-
-## Hard rules
-
-1. Every picked story appears, once. Nothing is added, nothing is dropped: those
-   decisions were made before you.
-2. `LEAD` stories are the numbered headings under `What leads`: up to
-   {{settings.lead_max}}, most consequential first, and fewer when the day gives
-   fewer. `WORTH` stories are the closing section. `BODY` stories go under topic
-   headings you invent from what the day actually holds.
-3. Never write a figure, a name, a date or a claim that is not in the notes.
-4. A counterpoint goes under the lead its `LEAD:` line names, and nowhere else.
-   Never invent one, never carry one over to another story, and never mark that a
-   lead has none.
-5. The template's last line is left exactly as the template has it.
-6. Reply with the finished brief in markdown and nothing else: no preamble, no
-   note about what you did, no code fence around the whole thing.
+A counterpoint is three things from its file, in order: what happened (`THE
+POSITIVE`), which principle makes it positive (`PRINCIPLE` and `WHY IT COUNTS`),
+and what it does not establish. Every sentence rule above applies. Never add to
+it, and never make it sound like more than it is.

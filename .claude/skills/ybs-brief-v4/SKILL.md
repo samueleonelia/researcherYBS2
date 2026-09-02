@@ -21,6 +21,8 @@ home; never copy it into a prompt or a reply.
 | what the show covers | `prompts/_beats.md` |
 | the sections code keeps without an agent | `prompts/_sections.md` |
 | how a story is read | `prompts/_lens.md` |
+| the shape of the brief | `templates/<slot>.md`, and nothing else |
+| how the brief's sentences are written | `prompts/write.md`, and nothing else |
 | what he is arguing about now | `shows/profile.json`, rebuilt by `/ybs-shows` |
 | how stories are judged, labelled and tagged | `prompts/_criteria.md` |
 | the shape of a news item, and what code checks in it | `prompts/_item-shape.md` |

@@ -86,3 +86,51 @@
 **Next**
 - Install on Yaron's Mac (plan: one setup script, terminal Claude Code, a
   Desktop launcher; see `~/.claude/plans/i-have-to-install-humming-beacon.md`).
+
+## 2026-09-05 — /setup and /update, install without a terminal
+
+**Status:** `main`, pushed.
+
+**Done**
+- `/setup` (`.claude/skills/setup/`): installs yt-dlp (official standalone
+  build) and Node (official tarball for the chip) into `~/.local`, adds that
+  folder to `~/.zshrc`, then prints three lists: the tools, the project's own
+  checks (agent files, sources, archive) and the tests. No password, nothing
+  system-wide, no file in this project touched. Written for bash 3.2, every
+  step checked before it runs, no step aborts the script.
+- `/update` (`.claude/skills/update/`): replaces the project from the published
+  zip. `runs/` and `shows/` are never touched; new show digests are added but
+  never overwrite; `sources.md` and the two `settings.md` are replaced with the
+  user's copy kept as `.backup` only when it actually differed.
+- Both Python scripts now prepend `~/.local/bin` and `~/.local/node/bin` to
+  their own PATH, so a run works before the Claude app has been restarted (the
+  app builds its PATH from `~/.zshrc` at launch). The `yt-dlp` missing-message
+  now says "run /setup" instead of naming Homebrew.
+- `README.md`: install, daily routine, the two editable files, troubleshooting.
+- `.gitignore`: `.claude/worktrees/`.
+
+**Decisions**
+- Zip, not git, for Yaron's copy. On a git folder the desktop app gives every
+  extra session its own worktree, and a brief written there would be hard to
+  find. Without git every session works in the same folder.
+- Desktop app, not the CLI: docs say a Local session runs on the files directly
+  and the app includes Claude Code. The `.claude/agents` loading is the one
+  thing the docs do not state outright; it is checked on the call.
+- No Homebrew anywhere: it needs an admin password and a piped installer cannot
+  ask for one. Both tools have official no-install downloads.
+
+**Tested**
+- Normal case on this Mac: every line ok, 4 known failures.
+- Clean sandbox home (`env -i`, bare system PATH): downloaded and installed both
+  tools, wrote the path line, correctly flagged the missing browser.
+- PATH fix: with a bare system PATH the shows script still finds yt-dlp.
+- `/update` against a local stand-in zip: a brief, a shows file and an edited
+  `sources.md` all survived; the new file arrived; `.backup` written.
+
+**Open**
+- The repo is still private, so the zip URL 404s. Making it public is the next
+  step, and the update path cannot be tested against the real URL until then.
+
+**Next**
+- Make the repo public, verify the zip URL, then the call (plan:
+  `~/.claude/plans/i-have-to-install-humming-beacon.md`).

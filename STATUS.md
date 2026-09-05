@@ -1,6 +1,6 @@
 # STATUS: researcherYBS2
 
-_Updated: 2026-09-05 · skill renamed to /ybs-brief_
+_Updated: 2026-09-05 · /setup and /update added_
 
 <!-- Rewrite this file in place. Never append. History belongs in DEVLOG.md. Keep under 60 lines. -->
 
@@ -20,6 +20,8 @@ _Updated: 2026-09-05 · skill renamed to /ybs-brief_
 | Show profile (`/ybs-shows`) | ✅ working | |
 | Test suite | ⚠️ partial | 4 failures predate this repo, see bugs |
 | Git remote | ✅ working | github.com/samueleonelia/researcherYBS2 (private) |
+| Install on another Mac (`/setup`) | ✅ working | tested in a clean sandbox home |
+| Update in place (`/update`) | ✅ working | keeps runs/ and shows/; needs a public repo |
 
 ## Next up
 1. On the next real run: compare triage verdicts against a past batch-3 run, watch for flips

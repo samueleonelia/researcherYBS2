@@ -134,3 +134,36 @@
 **Next**
 - Make the repo public, verify the zip URL, then the call (plan:
   `~/.claude/plans/i-have-to-install-humming-beacon.md`).
+
+## 2026-09-05 — preferences.md, standing instructions in his own words
+
+**Status:** `main`, pushed.
+
+**Done**
+- `preferences.md` at the project root: plain sentences, one per line, `#` lines
+  are his own notes. Ships once with guidance and examples, all commented out,
+  so a fresh copy behaves exactly as before.
+- Read by `preferences()` in `ybs_run.py` and injected as `{{PREFERENCES}}` into
+  `pick.md` and `write.md`, under a "What he has asked for" section that says
+  his instructions outrank the agent's taste but never the hard rules. Missing
+  file, empty file or all-comments file all render the same sentence: he has
+  asked for nothing in particular.
+- `/update` never overwrites it once he has one, and ships the empty one to
+  anybody who does not. Its closing line names it alongside runs/ and shows/.
+- `tests/test-prompts-v4.py` keeps a hardcoded list of fillable placeholders;
+  `PREFERENCES` added there. Same 4 known failures, no new ones.
+
+**Decisions**
+- One file, not a learning system. He writes what he wants, or tells Claude to
+  add a line. The automatic version, where the pipeline compares what the brief
+  offered against what he actually covered on the show, is deliberately not
+  built: today it would be a guess at what he wants to teach it.
+- Root, not `prompts/_preferences.md`. The root is where his files live
+  (`sources.md`), and `prompts/` is pipeline internals. The split is now: root =
+  his, everything else = the machine's.
+- Injected into pick and write only. Triage sees one article at a time with no
+  context to apply a preference against.
+
+**Next**
+- The call. After two weeks of real briefs, revisit whether his corrections
+  cluster into something worth automating.

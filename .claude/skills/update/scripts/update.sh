@@ -9,7 +9,10 @@
 ZIP="https://github.com/samueleonelia/researcherYBS2/archive/refs/heads/main.zip"
 
 # The user's own work. Never replaced, never read, never deleted.
+# preferences.md is his standing instructions to the brief: it ships once, empty,
+# and after that it is his. A push must never overwrite what he taught it.
 KEEP_DIRS="runs shows"
+KEEP_FILES="preferences.md"
 
 # The files the user is allowed to edit. The new version wins, but their copy
 # is kept beside it, so an edit is never silently lost.
@@ -65,6 +68,10 @@ main() {
     name=$(basename "$item")
     skip=0
     for k in $KEEP_DIRS; do [ "$name" = "$k" ] && skip=1; done
+    # ...unless he does not have it yet, in which case the empty one ships.
+    for k in $KEEP_FILES; do
+      [ "$name" = "$k" ] && [ -f "$root/$k" ] && skip=1
+    done
     [ "$skip" -eq 1 ] && continue
     cp -R "$item" "$root/"
   done
@@ -87,7 +94,7 @@ main() {
   rm -rf "$tmp"
 
   say ""
-  say "DONE. Your briefs in runs/ and your show archive in shows/ were not touched."
+  say "DONE. Your briefs, your show archive and your preferences.md were not touched."
   if [ -n "$backed_up" ]; then
     say ""
     say "These files had your own changes in them. The new version is now in place,"

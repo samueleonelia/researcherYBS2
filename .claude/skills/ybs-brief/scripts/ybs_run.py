@@ -333,6 +333,24 @@ def profile_text(profile: dict) -> str:
     return "\n".join(lines)
 
 
+def preferences() -> str:
+    """His own standing instructions, from preferences.md at the project root.
+
+    His file, not the pipeline's, so every failure mode here is silence: it may
+    be missing, it may be all comments, it may be empty. Any of those means he
+    has asked for nothing in particular, and the brief runs the way it always
+    has. Lines starting with # are his own notes and never reach a prompt.
+    """
+    path = project_root() / "preferences.md"
+    if not path.exists():
+        return "He has not written any standing instructions."
+    lines = [ln.strip() for ln in path.read_text(encoding="utf-8").splitlines()]
+    lines = [ln for ln in lines if ln and not ln.startswith("#")]
+    if not lines:
+        return "He has not written any standing instructions."
+    return "\n".join("- " + ln.lstrip("-* ").strip() for ln in lines)
+
+
 def namespace(shows_dir: Path = None, need_profile: bool = True) -> dict:
     """Everything a prompt or an agent file may ask for, apart from run data."""
     ns = {
@@ -347,6 +365,7 @@ def namespace(shows_dir: Path = None, need_profile: bool = True) -> dict:
         "AGENT_RULES_BROWSER": fragment("agent-rules", "browser agents"),
         "AGENT_RULES_JSON": fragment("agent-rules", "json agents"),
         "PRINCIPLES": fragment("principles"),
+        "PREFERENCES": preferences(),
     }
     for key, value in load_settings().items():
         ns[f"settings.{key}"] = str(value)

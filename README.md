@@ -34,10 +34,16 @@ ego lite has to be open while a brief runs.
 
 ## Changing what it does
 
-Two files are yours to edit:
+Three files are yours to edit:
 
+- `preferences.md` — what you want from the brief, in your own words
 - `sources.md` — which news sites are read
 - `.claude/skills/ybs-brief/settings.md` — how many stories reach the brief, and more
+
+`preferences.md` is the one you will use. Write plain sentences, one per line,
+like "never lead with a celebrity story" or "keep the leads shorter". Every brief
+follows them. You can also just tell Claude: "add to my preferences, ..." and it
+writes the line for you. `/update` never overwrites this file.
 
 `/update` may replace them with a newer version. When it does, it keeps your copy
 beside it ending in `.backup` and says so.

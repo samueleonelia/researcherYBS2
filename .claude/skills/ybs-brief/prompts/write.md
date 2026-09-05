@@ -44,6 +44,13 @@ hour. He reads the heading, then decides whether to read on. Everything below it
 has to land the first time, read out loud, without going back to the start of the
 sentence. A story he cannot rely on is worse than one he never saw.
 
+## What he has asked for
+
+His own standing instructions, in his words. They outrank your taste and never
+outrank the hard rules further down.
+
+{{PREFERENCES}}
+
 ## How to write a story
 
 There is no target length: a story takes the sentences it needs and stops.

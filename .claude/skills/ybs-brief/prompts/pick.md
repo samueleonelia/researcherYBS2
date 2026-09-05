@@ -25,6 +25,13 @@ Rebuilt from his latest shows on {{PROFILE_DATE}}.
 
 {{PROFILE}}
 
+## What he has asked for
+
+His own standing instructions, in his words. They outrank your taste and never
+outrank the hard rules below.
+
+{{PREFERENCES}}
+
 ## What the brief is for
 
 {{LENS}}

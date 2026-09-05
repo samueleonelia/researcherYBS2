@@ -35,6 +35,16 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+
+# The two outside tools (yt-dlp, npx) are installed by /setup into the user's own
+# ~/.local, which is on the PATH of a terminal but not always of an app started
+# from the Dock. Adding them here means a run works before the Claude app has
+# been restarted, which is the one step of the install a person can forget.
+import os
+for _d in (Path.home() / ".local" / "bin", Path.home() / ".local" / "node" / "bin"):
+    if _d.is_dir() and str(_d) not in os.environ.get("PATH", "").split(os.pathsep):
+        os.environ["PATH"] = f"{_d}{os.pathsep}{os.environ.get('PATH', '')}"
+
 TAGS = ("LEAD", "BODY", "WORTH")
 
 

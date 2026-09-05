@@ -20,3 +20,6 @@ shows/new/
 .env.*
 *.key
 credentials.json
+
+# Claude desktop app session copies
+.claude/worktrees/

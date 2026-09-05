@@ -31,6 +31,16 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from difflib import SequenceMatcher
 from pathlib import Path
 
+
+# The two outside tools (yt-dlp, npx) are installed by /setup into the user's own
+# ~/.local, which is on the PATH of a terminal but not always of an app started
+# from the Dock. Adding them here means a run works before the Claude app has
+# been restarted, which is the one step of the install a person can forget.
+import os
+for _d in (Path.home() / ".local" / "bin", Path.home() / ".local" / "node" / "bin"):
+    if _d.is_dir() and str(_d) not in os.environ.get("PATH", "").split(os.pathsep):
+        os.environ["PATH"] = f"{_d}{os.pathsep}{os.environ.get('PATH', '')}"
+
 VIDEO_ID = re.compile(r"(?:v=|youtu\.be/|/live/|/shorts/)([A-Za-z0-9_-]{11})")
 TIMESTAMP = re.compile(r"^\d{1,2}:\d{2}(:\d{2})?$")
 NOISE = re.compile(r"\[(Music|Applause|Laughter|Ììà]*)\]", re.I)
@@ -463,7 +473,7 @@ def cmd_start(args):
         "archived": len(shows),
         "usable_for_profile": len(k),
         "excluded": sum(1 for s in shows if s.get("excluded")),
-        "yt_dlp": have_ytdlp() or "NOT INSTALLED (brew install yt-dlp)",
+        "yt_dlp": have_ytdlp() or "NOT INSTALLED (run /setup)",
         "profile_built": prof.get("built_local_date", "never"),
         "profile_shows": len(prof.get("shows") or []),
     }, indent=2, ensure_ascii=False))
@@ -669,7 +679,7 @@ def cmd_fetch(args):
     version = have_ytdlp()
     if want_date and not version:
         die("yt-dlp is not installed, and the dates need it. "
-            "Install it with: brew install yt-dlp")
+            "Run /setup to install it.")
 
     (sd / "raw").mkdir(parents=True, exist_ok=True)
     pool = max(1, SETTINGS["agents_active_max"])

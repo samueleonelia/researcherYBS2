@@ -65,3 +65,24 @@
   past batch-3 run's for the same articles, watch for flips.
 - Consider adding `world news` / `u.s. news` to `_sections.md`.
 - Fix the 4 pre-existing test failures.
+
+## 2026-09-05 — skill renamed to /ybs-brief
+
+**Status:** `main`, pushed.
+
+**Done**
+- Renamed the skill folder `.claude/skills/ybs-brief-v4` -> `.claude/skills/ybs-brief`
+  and the name everywhere it is spoken: SKILL.md, agent templates and the
+  generated agent files, `ybs_run.py` docstrings, the tests, the permission
+  allow list in `.claude/settings.json`, the cross-reference in the shows
+  skill, STATUS.md. Older DEVLOG entries keep the old name (history).
+- Checked for side effects: no run folder references the name; the old
+  `researcherYBS` folder is separate and untouched; `~/.claude.json` only
+  logs the old path in a history list, harmless. Agent names stay `ybs4-*`
+  and test files stay `*-v4.py`: internal only, nothing user-facing.
+- `build --check` clean, preflight prints as before, tests: same 4 known
+  failures, shows suite all green.
+
+**Next**
+- Install on Yaron's Mac (plan: one setup script, terminal Claude Code, a
+  Desktop launcher; see `~/.claude/plans/i-have-to-install-humming-beacon.md`).

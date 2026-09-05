@@ -22,7 +22,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SKILL = ROOT / ".claude" / "skills" / "ybs-brief-v4"
+SKILL = ROOT / ".claude" / "skills" / "ybs-brief"
 PROMPTS = SKILL / "prompts"
 SCRIPT = SKILL / "scripts" / "ybs_run.py"
 FAILURES = []

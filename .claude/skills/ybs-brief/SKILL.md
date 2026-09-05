@@ -1,10 +1,10 @@
 ---
-name: ybs-brief-v4
-description: Produce a show-ready morning news brief for Yaron Brook from the sources in sources.md. Screens every source's front page in the ego browser with his logged-in sessions, groups the day's stories so one event is read once, reads each chosen article the way a person would, checks every figure against the page it came from, cuts the result to the picks the settings allow and writes the brief. Use when asked to run the morning brief, or when the user types /ybs-brief-v4. Does NOT send email, does NOT read X, does NOT read show transcripts, and never schedules itself.
+name: ybs-brief
+description: Produce a show-ready morning news brief for Yaron Brook from the sources in sources.md. Screens every source's front page in the ego browser with his logged-in sessions, groups the day's stories so one event is read once, reads each chosen article the way a person would, checks every figure against the page it came from, cuts the result to the picks the settings allow and writes the brief. Use when asked to run the morning brief, or when the user types /ybs-brief. Does NOT send email, does NOT read X, does NOT read show transcripts, and never schedules itself.
 argument-hint: "morning"
 ---
 
-# /ybs-brief-v4 — build one morning brief
+# /ybs-brief — build one morning brief
 
 You are the orchestrator. You run the steps below in order, launching subagents
 to do the work. You do not screen, read, judge or write anything yourself: every
@@ -94,9 +94,9 @@ Used by triage, read, figure check and counterpoints.
 
 ```bash
 ego-browser --version
-python3 .claude/skills/ybs-brief-v4/scripts/ybs_run.py settings
-python3 .claude/skills/ybs-brief-v4/scripts/ybs_run.py build --check
-python3 .claude/skills/ybs-brief-v4/scripts/ybs_run.py sources
+python3 .claude/skills/ybs-brief/scripts/ybs_run.py settings
+python3 .claude/skills/ybs-brief/scripts/ybs_run.py build --check
+python3 .claude/skills/ybs-brief/scripts/ybs_run.py sources
 ```
 
 If `sources` lists nothing, or a line has no link, stop and say which line.
@@ -106,7 +106,7 @@ If `build --check` reports a stale agent file, run `build` and say you did.
 ## Step 1 — start the run
 
 ```bash
-python3 .claude/skills/ybs-brief-v4/scripts/ybs_run.py start --slot morning
+python3 .claude/skills/ybs-brief/scripts/ybs_run.py start --slot morning
 ```
 
 It prints `run_dir`, the window, the sources and the profile's date. Every later
@@ -133,7 +133,7 @@ anywhere.
   a human to fix, and retrying just collects teaser pages.
 
 ```bash
-python3 .claude/skills/ybs-brief-v4/scripts/ybs_run.py screen-sync --run <run_dir>
+python3 .claude/skills/ybs-brief/scripts/ybs_run.py screen-sync --run <run_dir>
 ```
 
 This assigns ids, merges duplicate URLs and drops anything dated outside the
@@ -144,7 +144,7 @@ dates, and that is worth opening its screen file over.
 ## Step 3 — triage
 
 ```bash
-python3 .claude/skills/ybs-brief-v4/scripts/ybs_run.py triage-list --run <run_dir>
+python3 .claude/skills/ybs-brief/scripts/ybs_run.py triage-list --run <run_dir>
 ```
 
 Freezes the article list, then does two things.
@@ -165,7 +165,7 @@ one line per article.
 its batch; you write nothing.
 
 ```bash
-python3 .claude/skills/ybs-brief-v4/scripts/ybs_run.py triage-check --run <run_dir>
+python3 .claude/skills/ybs-brief/scripts/ybs_run.py triage-check --run <run_dir>
 ```
 
 Anything under `missing` or `failing` goes through the pool once more (delete a
@@ -202,7 +202,7 @@ prompt; write its JSON reply to `<run_dir>/items/plan.json` and log it with
 Then:
 
 ```bash
-python3 .claude/skills/ybs-brief-v4/scripts/ybs_run.py items-sync --run <run_dir>
+python3 .claude/skills/ybs-brief/scripts/ybs_run.py items-sync --run <run_dir>
 ```
 
 It rejects an article that is in two items or in none, a cluster with one
@@ -215,7 +215,7 @@ stop: the run has no plan, and a plan is never written by hand.
 ## Step 6 — read
 
 ```bash
-python3 .claude/skills/ybs-brief-v4/scripts/ybs_run.py read-list --run <run_dir>
+python3 .claude/skills/ybs-brief/scripts/ybs_run.py read-list --run <run_dir>
 ```
 
 **Run the rolling pool** with `ybs4-reader`. Each reader opens its article in its
@@ -230,7 +230,7 @@ When the pool drains, run `read-list` again: whatever it lists has no note. Send
 those through the pool once more. Anything still listed after that retry:
 
 ```bash
-python3 .claude/skills/ybs-brief-v4/scripts/ybs_run.py event --run <run_dir> --type read_failed --article <id> --detail "<what it replied>"
+python3 .claude/skills/ybs-brief/scripts/ybs_run.py event --run <run_dir> --type read_failed --article <id> --detail "<what it replied>"
 ```
 
 which retires it, so the next `read-list` no longer offers it.
@@ -251,7 +251,7 @@ Read <run_dir>/prompts/pick.md and follow it. Reply with the JSON only.
 Write its JSON to `<run_dir>/picks/picks.json`, then:
 
 ```bash
-python3 .claude/skills/ybs-brief-v4/scripts/ybs_run.py picks-sync --run <run_dir>
+python3 .claude/skills/ybs-brief/scripts/ybs_run.py picks-sync --run <run_dir>
 ```
 
 It enforces the LEAD and WORTH ceilings in `settings.md` and that every note is
@@ -269,7 +269,7 @@ the rolling pool** with `ybs4-checker`. Each checker reads the note and the save
 page and writes its own check file.
 
 ```bash
-python3 .claude/skills/ybs-brief-v4/scripts/ybs_run.py check-sync --run <run_dir> --pass 1
+python3 .claude/skills/ybs-brief/scripts/ybs_run.py check-sync --run <run_dir> --pass 1
 ```
 
 It reads the picks, so it must run after `picks-sync`. Anything under `redo` gets
@@ -325,8 +325,8 @@ markdown, and nothing else.
 Write the reply to `<run_dir>/brief.md`, then:
 
 ```bash
-python3 .claude/skills/ybs-brief-v4/scripts/ybs_run.py audit-line --run <run_dir> --append
-python3 .claude/skills/ybs-brief-v4/scripts/ybs_run.py close --run <run_dir>
+python3 .claude/skills/ybs-brief/scripts/ybs_run.py audit-line --run <run_dir> --append
+python3 .claude/skills/ybs-brief/scripts/ybs_run.py close --run <run_dir>
 ```
 
 `audit-line` replaces the placeholder the template ends with. Report the audit

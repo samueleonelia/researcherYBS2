@@ -30,7 +30,7 @@ every step names the agent that does it, and every agent writes its own files.
 `TOPIC-PROFILE.md` is generated. Never edit it by hand: `profile-sync` rewrites
 it from the JSON.
 
-The rolling pool works exactly as it does in `/ybs-brief-v4`: launch up to
+The rolling pool works exactly as it does in `/ybs-brief`: launch up to
 `agents_active_max`, and each time one returns launch exactly one more. Never
 poll; the completion notification is the signal.
 

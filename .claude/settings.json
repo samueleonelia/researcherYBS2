@@ -3,7 +3,7 @@
     "allow": [
       "Bash(ego-browser nodejs:*)",
       "Bash(ego-browser --version)",
-      "Bash(python3 .claude/skills/ybs-brief-v4/scripts/ybs_run.py:*)",
+      "Bash(python3 .claude/skills/ybs-brief/scripts/ybs_run.py:*)",
       "Bash(python3 .claude/skills/ybs-shows/scripts/ybs_shows.py:*)",
       "Bash(python3 tests/test-bookkeeping-v4.py)",
       "Bash(python3 tests/test-prompts-v4.py)",

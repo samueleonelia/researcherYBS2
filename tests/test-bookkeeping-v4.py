@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = ROOT / ".claude" / "skills" / "ybs-brief-v4" / "scripts" / "ybs_run.py"
+SCRIPT = ROOT / ".claude" / "skills" / "ybs-brief" / "scripts" / "ybs_run.py"
 FAILURES = []
 
 

@@ -1,10 +1,10 @@
 # STATUS: researcherYBS2
 
-_Updated: 2026-09-02 · commit e2dddb0_
+_Updated: 2026-09-05 · skill renamed to /ybs-brief_
 
 <!-- Rewrite this file in place. Never append. History belongs in DEVLOG.md. Keep under 60 lines. -->
 
-**What this is:** A Claude Code skill (`/ybs-brief-v4`) that builds a morning news brief for Yaron Brook from six sources, plus `/ybs-shows` which keeps his show profile current.
+**What this is:** A Claude Code skill (`/ybs-brief`) that builds a morning news brief for Yaron Brook from six sources, plus `/ybs-shows` which keeps his show profile current.
 
 **Right now:** The pipeline runs end to end. Write step has one template for the shape and one file for the sentence rules. Triage batch size raised 3 -> 10, not yet checked on a live run.
 

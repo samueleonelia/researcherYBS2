@@ -2,147 +2,135 @@
   "themes": {
     "trump administration": {
       "name": "The Trump administration",
-      "angle": "judged on results, not on which side he is on: not pro-market, not pro-free-speech, and foreign policy is the worst of it.",
+      "angle": "judged on results and on economic literacy, not on which team it is on",
       "misses": 0,
-      "last_seen": "2026-08-30"
-    },
-    "china": {
-      "name": "China",
-      "angle": "genuinely innovative and forward-looking, and simultaneously in real economic trouble",
-      "misses": 2,
-      "last_seen": "2026-08-24"
+      "last_seen": "2026-09-05"
     },
     "immigration": {
-      "name": "Free trade and immigration",
-      "angle": "unilateral free trade pays whoever adopts it, and skilled immigrants grow the pie rather than take a slice of it",
-      "misses": 1,
-      "last_seen": "2026-08-24"
+      "name": "Immigration, especially the high-skilled kind",
+      "angle": "immigrants founded the companies, so restricting legal immigration is self-harm, not protection",
+      "misses": 0,
+      "last_seen": "2026-09-05"
     },
     "free speech": {
-      "name": "Free speech and government power over media and speech",
-      "angle": "an FCC licence review or an FTC bias rule is censorship whichever party writes it",
-      "misses": 2,
-      "last_seen": "2026-08-24"
-    },
-    "tucker carlson the maga right": {
-      "name": "Trump and the MAGA right",
-      "angle": "judged on results and on principle, and by that test the right is as statist as the left",
-      "misses": 2,
-      "last_seen": "2026-08-24"
+      "name": "Free speech, cancellation and the sanction of evil",
+      "angle": "he is not against cancelling, only against cancelling for unjust or trivial reasons",
+      "misses": 0,
+      "last_seen": "2026-09-05"
     },
     "capitalism versus the mixed economy": {
       "name": "Capitalism versus the mixed economy",
-      "angle": "we have never had capitalism, only a mixed economy drifting toward statism, and the problems people blame on markets trace to specific government policies.",
+      "angle": "we have never had capitalism, so the problems people blame on markets are the government's",
       "misses": 0,
-      "last_seen": "2026-08-30"
-    },
-    "american power abroad": {
-      "name": "American power abroad",
-      "angle": "perceived weakness is what invites the next war, from Iran to Taiwan",
-      "misses": 2,
-      "last_seen": "2026-08-24"
+      "last_seen": "2026-09-05"
     },
     "technology and human progress": {
       "name": "Technology and AI as human progress",
       "angle": "presumptively good and worth defending out loud; the fear is unearned and deregulation, not permission, is the answer",
-      "misses": 1,
+      "misses": 2,
       "last_seen": "2026-08-24"
     },
     "israel antisemitism and the double standard": {
       "name": "Israel, antisemitism and the double standard",
-      "angle": "Israel is held to a standard Russia and Iran are not, and the loudest attacks on it now come from the populist right as much as the left.",
+      "angle": "criticism of Israel is measured against how Russia and Iran are treated for the same acts",
       "misses": 0,
-      "last_seen": "2026-08-30"
+      "last_seen": "2026-09-05"
     },
     "debt deficits the fed and inflation": {
       "name": "Debt, deficits, inflation and the Fed",
       "angle": "spending is the disease, price rises from supply shocks are not monetary inflation, and stagnation is the likeliest ending",
-      "misses": 1,
-      "last_seen": "2026-08-24"
-    },
-    "tribalism and the collapse of reason": {
-      "name": "Tribalism and the collapse of reason",
-      "angle": "woke never died, it changed target, and the same anti-truth loyalty now runs the right too",
-      "misses": 2,
-      "last_seen": "2026-08-24"
-    },
-    "objectivist ethics altruism against self interest": {
-      "name": "Objectivist ethics: altruism against self-interest",
-      "angle": "the moral premise, not ignorance, is what keeps people reaching for socialism",
-      "misses": 2,
-      "last_seen": "2026-08-24"
-    },
-    "personal responsibility against corporate liability": {
-      "name": "Personal responsibility against corporate liability",
-      "angle": "force and fraud are the only grounds for blame; parents, not platforms, raise children",
       "misses": 2,
       "last_seen": "2026-08-24"
     },
     "defending capitalism against its critics": {
       "name": "Defending capitalism against its critics",
       "angle": "the critics never define the word, they leave the entrepreneur out of the picture, and Marx's exploitation story still sits under nearly all of it",
-      "misses": 1,
+      "misses": 2,
       "last_seen": "2026-08-24"
     },
     "tribalism and the crisis of reason on both left and right": {
       "name": "Tribalism and the crisis of reason on both left and right",
       "angle": "woke never left, it changed targets; the vice is caring about loyalty rather than truth, and the right has it too",
-      "misses": 1,
+      "misses": 2,
       "last_seen": "2026-08-24"
     },
     "the human achievement roundup": {
       "name": "The human achievement roundup",
       "angle": "rockets, mRNA vaccines, drones and falling battery prices as the standing evidence that free people and markets deliver",
-      "misses": 1,
+      "misses": 2,
       "last_seen": "2026-08-24"
     },
     "individual and parental responsibility versus corporate liability": {
-      "name": "Individual responsibility",
-      "angle": "companies are liable for force and fraud, not for what people choose to overuse; parents, not platforms or the state, raise children.",
+      "name": "Individual and parental responsibility instead of corporate liability",
+      "angle": "a product is only blameworthy when it uses force or fraud, never when people choose to overuse it",
       "misses": 0,
-      "last_seen": "2026-08-30"
+      "last_seen": "2026-09-05"
     },
     "ideas drive history": {
       "name": "Ideas drive history",
       "angle": "Marx is the unacknowledged foundation of almost all talk about capitalism, and bad philosophy travels from journals to podcasts to policy.",
-      "misses": 0,
+      "misses": 1,
       "last_seen": "2026-08-30"
     },
     "art and aesthetics": {
       "name": "Art and aesthetics",
       "angle": "judge a work on its own terms and by whether reason is the source of the hero's power, not by fidelity or casting rows",
-      "misses": 1,
+      "misses": 2,
       "last_seen": "2026-08-24"
     },
     "technology and human achievement": {
-      "name": "Technology and human achievement",
-      "angle": "innovation is presumptively good and opposition to it is unearned fear; he ends most shows celebrating what people built this week.",
+      "name": "Human achievement and technology, AI above all",
+      "angle": "presumptively good, worth awe, and opposition to it is fear that has not earned itself",
       "misses": 0,
-      "last_seen": "2026-08-30"
+      "last_seen": "2026-09-05"
     },
     "spending entitlements and the fiscal arithmetic": {
       "name": "Spending, entitlements and the fiscal arithmetic",
       "angle": "the deficit is a spending problem, taxes cannot close it, and the gerontocracy transfers wealth from the young because old people vote.",
-      "misses": 0,
+      "misses": 1,
       "last_seen": "2026-08-30"
     },
     "free trade": {
       "name": "Free trade",
       "angle": "a tariff is a tax paid at home, and unilateral free trade benefits whoever adopts it no matter what the other side does.",
-      "misses": 0,
+      "misses": 1,
       "last_seen": "2026-08-30"
     },
     "nobody is defending capitalism": {
       "name": "Nobody is defending capitalism",
       "angle": "the DSA left and the Vance/Tucker right are both statist, so the moral case for markets goes unmade on every platform that matters.",
-      "misses": 0,
+      "misses": 1,
       "last_seen": "2026-08-30"
     },
     "art culture and objectivism": {
       "name": "Art, culture and Objectivism",
       "angle": "he judges a work by whether reason and human agency drive it, and notes how completely Rand is left out of serious treatments of capitalism.",
-      "misses": 0,
+      "misses": 1,
       "last_seen": "2026-08-30"
+    },
+    "government intervention as cronyism and central planning": {
+      "name": "Government intervention as cronyism and central planning",
+      "angle": "tariffs, subsidies, equity stakes and liability threats serve pressure groups, never a principle",
+      "misses": 0,
+      "last_seen": "2026-09-05"
+    },
+    "tribalism and indifference to truth on left and right": {
+      "name": "Tribalism and indifference to truth on left and right",
+      "angle": "woke never went away, it changed target, and the same anti-truth epistemology now runs the right",
+      "misses": 0,
+      "last_seen": "2026-09-05"
+    },
+    "altruism versus rational self interest": {
+      "name": "Altruism versus rational self-interest",
+      "angle": "the moral premise a culture accepts is what finally explains its foreign policy and its politics",
+      "misses": 0,
+      "last_seen": "2026-09-05"
+    },
+    "islamic totalitarianism and the refusal to name the enemy": {
+      "name": "Islamic totalitarianism and the refusal to name the enemy",
+      "angle": "twenty-five years of not naming it is why 1979, 9/11, Gaza and the current war are one story",
+      "misses": 0,
+      "last_seen": "2026-09-05"
     }
   }
 }

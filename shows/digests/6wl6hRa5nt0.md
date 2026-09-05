@@ -1,0 +1,29 @@
+# Economy; Meta; Galliano; Clancy; Piacenti; Volkswagen; Falkland; Achievement | Yaron Brook Show
+
+## Topics
+
+- Economy: jobs report, Fed, interest rates, mortgages, diesel prices — largest segment — August jobs beat expectations and the labor market keeps proving resilient despite tariffs, deficits and war, which he credits to producers and markets, not government; he argues the Fed should not cut rates given strong hiring, mocks Trump's demand for cuts as economically illiterate and politically motivated, and says diesel/mortgage costs are rising because of the war's disruption of Gulf refining and because Washington won't address the deficit.
+- Meta $12-18B settlement with state AGs over child social-media harm — he calls the underlying product design normal business practice (like store design or loyalty points), is skeptical fraud was proven, and objects strongly to regulation-by-settlement: attorneys general dictating usage limits to a private company outside Congress is worse "unlimited government" than regulation itself, and it strips parents of authority over their own kids.
+- John Galliano Met retrospective cancellation — he opposes the cancellation despite calling Galliano's 2011 antisemitic drunken remarks genuinely awful, arguing that after apology, treatment, sobriety and years of rebuilding, permanent unforgivability is a bad cultural standard, while acknowledging donors had every right to object.
+- Lindsay Clancy mistrial (killed her three children, insanity defense) — he's skeptical of the "not criminally responsible" defense given the apparent premeditation (three children killed in sequence), worries about a culture that too readily excuses clearly harmful acts as psychosis, but declines to fully condemn the jury since he didn't hear all testimony.
+- Times Square knife killing of Erin Pianetti and the celebratory reaction — he's outraged that some (citing filmmaker Lexi Alexander) celebrated her death because she worked at Bank of America, which had rated Israeli banks unfavorably; he calls this a monstrous evasion that treats individuals as interchangeable with institutions and likens it to the glorification of Luigi Mangione.
+- Volkswagen's ~100,000 job cuts and European/German auto decline — he says this was predictable and self-inflicted: labor codetermination, state ownership stakes, and high German energy costs (from shutting down nuclear) made VW and European carmakers uncompetitive against Chinese manufacturers; the fix is deregulation and letting failing firms shrink or fail, not subsidies or tariffs.
+- Milei and the Falkland Islands — he's disappointed that Milei, a self-styled defender of liberty, is reviving Argentina's claim and threatening private companies (British/Israeli) developing offshore oil there, seeing it as a nationalist pivot to distract from slipping popularity; he reviews the islands' history and concludes sovereignty should follow the residents' own 2013 referendum choice (99.8% to stay British), not historical grievance.
+- Achievement segment: Waymo's ride growth and Nissan's warehouse robots — cited approvingly as capitalism/AI improving physical services and productivity, with the standard claim that automation reassigns rather than net-destroys jobs absent government interference.
+- Q&A: rising antisemitism/racism among young people, altruism's history among intellectuals, MAGA base economics, personal/lifestyle questions — he traces resurgent right-wing racism to a backlash against left-wing identity politics; identifies the Enlightenment/Founding and ancient Greece as periods relatively free of altruism as a political organizing principle; says Trump's base tolerates his self-enrichment because they get the "value" of a strongman who talks/acts as they wish.
+
+## Running threads
+
+- War's effect on oil/gas: continues tracking the Strait of Hormuz disruption, noting ~70% of prewar oil flow resumed but refined product (diesel) shipping still depressed, driving diesel toward $5.85/gallon.
+- Fed/interest-rate framework: repeats his recurring position that there is no "correct" interest rate and central-rate-setting is central planning that can't work, and that Trump pressuring the Fed is another instance of separation of state and economics being violated.
+- Deficit-and-long-rates argument: reiterates that only a credible plan to cut spending/deficits (not Fed action) would lower long-term borrowing costs like mortgage rates.
+- Left-to-right contagion of identity politics: continues a point he says he's made since 2015-16 that woke racial politics on the left would normalize a mirror-image racism on the right, now visible in incidents like antisemitic chants at a kickboxing event.
+- Anti-corporate/anti-Israel violence glorification: links the Pianetti murder celebration to the earlier Luigi Mangione/Brian Thompson case as part of an ongoing pattern of treating executives and employees as legitimate political targets.
+
+## Moves
+
+- Judges economic outcomes by asking whether markets or government caused them, crediting resilience to private producers and blaming distortions on policy/regulation.
+- Applies a "separation of state and economics" standard to criticize any presidential or regulatory intervention into prices, wages, or business design.
+- Treats regulation negotiated by threat of lawsuit (rather than open legislative debate) as categorically worse than the regulation itself.
+- Evaluates historical/territorial disputes by the standing choice of the people currently living there rather than by conquest history or ethnic-national claims.
+- Applies an individualist standard against collectivizing blame or credit onto identity groups or corporate institutions (antisemitism, celebrating a banker's murder, blaming current VW workers for 1937 origins).

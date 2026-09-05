@@ -1,6 +1,36 @@
 {
   "shows": [
     {
+      "id": "6wl6hRa5nt0",
+      "title": "Economy; Meta; Galliano; Clancy; Piacenti; Volkswagen; Falkland; Achievement | Yaron Brook Show",
+      "url": "https://www.youtube.com/watch?v=6wl6hRa5nt0",
+      "date": "2026-09-05",
+      "file": "transcripts/6wl6hRa5nt0.md",
+      "words": 11721,
+      "excluded": false,
+      "digest": "digests/6wl6hRa5nt0.md"
+    },
+    {
+      "id": "e3TlpsJo4K4",
+      "title": "Hegseth; Iran; Russia; JDVance; Debt; Oil; Golden Shares; Founders; Achievement | Yaron Brook Show",
+      "url": "https://www.youtube.com/watch?v=e3TlpsJo4K4",
+      "date": "2026-09-04",
+      "file": "transcripts/e3TlpsJo4K4.md",
+      "words": 19750,
+      "excluded": false,
+      "digest": "digests/e3TlpsJo4K4.md"
+    },
+    {
+      "id": "FuMxHBFkwH8",
+      "title": "9/11—25 Years Later: Objectivism, Islamic Totalitarianism, and America’s Crisis of Ideas",
+      "url": "https://www.youtube.com/watch?v=FuMxHBFkwH8",
+      "date": "2026-09-03",
+      "file": "transcripts/FuMxHBFkwH8.md",
+      "words": 22323,
+      "excluded": false,
+      "digest": "digests/FuMxHBFkwH8.md"
+    },
+    {
       "id": "rzNFI4uKqcY",
       "title": "Moscow; Iran; Canada; Data Centers; Bessent; Amargi ; Sit Awareness; Achievement | Yaron Brook Show",
       "url": "https://www.youtube.com/watch?v=rzNFI4uKqcY",
@@ -291,6 +321,16 @@
       "digest": ""
     },
     {
+      "id": "HgG_a5U8Efk",
+      "title": "Answering Capitalism’s Critics #3: Hasan Piker — “Technofeudalism” | Yaron Brook Show",
+      "url": "https://www.youtube.com/watch?v=HgG_a5U8Efk",
+      "date": "",
+      "file": "",
+      "words": 0,
+      "excluded": false,
+      "digest": ""
+    },
+    {
       "id": "Fbkfj7SU3TI",
       "title": "AMA & Hangout with Contributors (Aug 2026) | Yaron Brook Show",
       "url": "https://www.youtube.com/watch?v=Fbkfj7SU3TI",
@@ -314,6 +354,16 @@
       "id": "CReo-p--qJ8",
       "title": "Patrick Deneen & The Post Liberal Right | Yaron & Nikos Dialogues",
       "url": "https://www.youtube.com/watch?v=CReo-p--qJ8",
+      "date": "",
+      "file": "",
+      "words": 0,
+      "excluded": true,
+      "digest": ""
+    },
+    {
+      "id": "5Z_8i4wmdNM",
+      "title": "Mike Mentzer -- Body Builder & Ayn Rand; Movie Reviews | Yaron & Nikos Dialogues",
+      "url": "https://www.youtube.com/watch?v=5Z_8i4wmdNM",
       "date": "",
       "file": "",
       "words": 0,

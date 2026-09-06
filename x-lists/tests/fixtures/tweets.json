@@ -421,6 +421,44 @@
       "reposts": 88,
       "likes": 410,
       "views": 33000
+    },
+    {
+      "id": "1000000000000000023",
+      "url": "https://x.com/staleaccount/status/1000000000000000023",
+      "list": "B",
+      "author": "@staleaccount",
+      "reposted_by": "",
+      "posted_at": "2026-09-06T08:00:00Z",
+      "seen_at": "2026-09-06T12:00:00Z",
+      "text": "This is the exact bug case, a tweet posted well outside the window that racked up huge numbers after the window closed and must still be dropped by rule three.",
+      "card_title": "",
+      "quoted_text": "",
+      "is_reply": false,
+      "has_link": false,
+      "promoted": false,
+      "replies": 900,
+      "reposts": 5000,
+      "likes": 40000,
+      "views": 2000000
+    },
+    {
+      "id": "1000000000000000024",
+      "url": "https://x.com/quietrepost/status/1000000000000000024",
+      "list": "B",
+      "author": "@quietrepost",
+      "reposted_by": "@freshvoice",
+      "posted_at": "2026-09-05T09:00:00Z",
+      "seen_at": "2026-09-06T12:00:00Z",
+      "text": "A repost of something said a full day earlier that never caught on and still has not caught on since then either.",
+      "card_title": "",
+      "quoted_text": "",
+      "is_reply": false,
+      "has_link": false,
+      "promoted": false,
+      "replies": 2,
+      "reposts": 3,
+      "likes": 10,
+      "views": 500
     }
   ]
 }

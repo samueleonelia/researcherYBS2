@@ -20,15 +20,18 @@ in order:
 `links.md` lists every survivor (nothing that failed a rule) as a
 permalink, marked POST or REPOST -- the file the read stage consumes.
 
-Window rule (see plans/interfaces.md, "The window boundary — orchestrator
-ruling"): a repost sits in the timeline at repost time, but its own
-timestamp is the original's, so a repost never counts toward the run below
-and never breaks it either. Walk the timeline (the order tweets appear in
-tweets.json). The boundary is the position of the FIRST tweet in the first
-run of x_stop_after_old consecutive non-repost tweets whose own posted_at is
-older than x_window_hours before scraped_at. Every tweet above that line is
-in the window -- reposts included, and an isolated old non-repost included.
-Every tweet from that line down is out.
+Rule 3, "outside the window", is a PER-TWEET check (see `outside_window`
+below), not the scrape's own run-of-`stop_after_old` tolerance: a repost's
+`posted_at` holds the ORIGINAL's time, so rule 3 never fires on a repost
+(it rides the timeline at repost time -- the design's own worked case: 8
+reposts with older-than-window originals, "correctly kept"). A non-repost
+is outside the window whenever its own posted_at is older than
+x_window_hours before scraped_at, full stop -- including a non-repost that
+was scraped only because it was an isolated old item the scrape's
+stop-after-`x_stop_after_old` tolerance let through. That tolerance is a
+SCRAPE-time concern (see x_scrape.py / design section 1); it must not also
+excuse a stray old tweet from the FILTER's own window rule, or a tweet
+outside the window with strong engagement would survive filtering entirely.
 
 Python 3, standard library only.
 """
@@ -97,43 +100,42 @@ def clears_engagement_floor(t: dict, scraped_at: datetime, reposts_rate,
     )
 
 
-def window_boundary(tweets: list, cutoff: datetime, stop_after_old: int):
-    """Index of the first tweet in the first run of `stop_after_old`
-    consecutive non-repost tweets whose own posted_at is older than the
-    cutoff. None if the timeline never reaches such a run.
+def outside_window(t: dict, cutoff: datetime) -> bool:
+    """Rule 3: is this ONE tweet outside the window, on its own terms.
 
-    A repost's own timestamp is the original's, not a timeline position, so
-    a repost is skipped entirely here: it neither extends a run of old
-    non-reposts nor breaks one.
+    Reading, stated explicitly (the design does not spell this out in so
+    many words, but its own rule points here): a repost rides the timeline
+    at repost time, and `posted_at` on a repost record holds the
+    ORIGINAL's time, which says nothing about when the repost itself
+    entered the window. So rule 3 never fires on a repost -- its
+    `reposted_by` alone means it belongs, regardless of how old its
+    original is. This is required by the design's own worked case (8
+    reposts with older-than-window originals, "correctly kept").
+
+    For a non-repost, rule 3 is a plain per-tweet check: its own posted_at
+    must be no older than `cutoff`. This does NOT reuse `window_boundary`'s
+    run-of-`stop_after_old` tolerance -- that tolerance exists so the SCRAPE
+    doesn't stop early on a single stray old item, not so the FILTER lets a
+    stray old item through. A tweet scraped only because it was isolated
+    (not part of a 3-old-in-a-row run) is still, individually, outside the
+    window, and rule 3 must catch it here even though the scrape's own
+    stop condition tolerated it.
     """
-    run_start = None
-    run_len = 0
-    for i, t in enumerate(tweets):
-        if t.get("reposted_by"):
-            continue
-        if parse_iso(t["posted_at"]) < cutoff:
-            if run_len == 0:
-                run_start = i
-            run_len += 1
-            if run_len >= stop_after_old:
-                return run_start
-        else:
-            run_len = 0
-            run_start = None
-    return None
+    if t.get("reposted_by"):
+        return False
+    return parse_iso(t["posted_at"]) < cutoff
 
 
 def filter_tweets(data: dict, settings: dict):
-    (min_words, window_hours, stop_after_old, reposts_rate, likes_rate,
+    (min_words, window_hours, reposts_rate, likes_rate,
      views_rate) = require(
-        settings, "x_min_own_words", "x_window_hours", "x_stop_after_old",
+        settings, "x_min_own_words", "x_window_hours",
         "x_reposts_per_hour", "x_likes_per_hour", "x_views_per_hour",
     )
     tweets = data.get("tweets") or []
 
     scraped_at = parse_iso(data["scraped_at"])
     cutoff = scraped_at - timedelta(hours=window_hours)
-    boundary = window_boundary(tweets, cutoff, stop_after_old)
 
     kept, dropped = [], []
     for i, t in enumerate(tweets):
@@ -142,7 +144,7 @@ def filter_tweets(data: dict, settings: dict):
             rule = 1
         elif t.get("is_reply"):
             rule = 2
-        elif boundary is not None and i >= boundary:
+        elif outside_window(t, cutoff):
             rule = 3
         elif t.get("has_link"):
             rule = 4

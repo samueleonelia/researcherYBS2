@@ -53,10 +53,37 @@ tests depend on:
     dropped by rule 6. Together with ...021 this pins down that the
     comparison is >=, not >.
 
-  With the extended fixture, expected_filter() now gives: kept =
-  {1,2,6,9,10,11,12,17,18,19,21} (11), dropped = {3:2, 4:4, 5:4, 7:1,
-  8:5, 16:2, 20:6, 22:6, 13:3, 14:3, 15:3} (11) -- confirmed against
-  x_filter.py's real output, which matches exactly.
+  With that 22-record fixture (against the live settings.md, x_window_hours=2),
+  expected_filter() gives: kept = {1,2,6,9,10,11,12,13,14,15,17,18,19,21}
+  (14), dropped = {3:2, 4:4, 5:4, 7:1, 8:5, 16:2, 20:6, 22:6} (8) --
+  confirmed against x_filter.py's real output, which matches exactly. Note
+  ids ...013-...015 are all *inside* the 2h window at this scraped_at (they
+  sit past 10:00, the cutoff), so none of the 22 original records ever
+  exercised rule 3 -- the fixture had no case that told a correctly firing
+  rule 3 apart from a rule 3 that never fires at all.
+
+  Two more records, ids ...023-...024, were added on 2026-09-06 to close
+  that hole, after a verifier caught the filter attributing an
+  out-of-window tweet to rule 6 instead of rule 3 on a real run
+  (runs/2026-09-06-1214, tweet 2096442845708042345 -- posted 8.61h before
+  scraped_at, correctly outside the 2h window, but the filter's rule 3 used
+  the scrape's own run-of-x_stop_after_old boundary tolerance instead of
+  checking the tweet on its own terms, so it fell through to rule 6, which
+  happened to also drop it -- and would not have if its engagement had been
+  strong):
+  - ...023: an isolated old non-repost (posted 4h before scraped_at, no
+    run of 3 old non-reposts around it) with engagement far above every
+    rule-6 threshold at that age. It must be dropped by rule 3 -- if rule 3
+    is ever narrowed back to the run-of-x_stop_after_old check, this record
+    clears rule 6 instead and is wrongly KEPT.
+  - ...024: a repost whose original is ~27h old, engagement far below the
+    age-scaled floor at that age. Rule 3 must never fire on a repost (its
+    posted_at is the original's, not its own timeline position), so it
+    reaches rule 6 and is dropped there -- proving repost-immunity from
+    rule 3 is not a free pass past every other rule.
+
+  With ...023-...024 included, expected_filter() gives: kept unchanged
+  (14), dropped = {..., 23:3, 24:6} (10).
 """
 
 import copy
@@ -248,6 +275,18 @@ class TestCheck3Kept(unittest.TestCase):
         ok, reason = x_checks.check3_kept(self.doc, kept_doc, self.settings)
         self.assertTrue(ok, reason)
 
+    def test_promoted_tweet_is_dropped_by_rule_1(self):
+        # id ...007 (fixture): promoted=true, and would otherwise clear
+        # every later rule easily. Named explicitly so this is a real
+        # assertion on rule 1 firing, not just an incidental match inside
+        # the whole-set comparisons above -- rule 1 has never fired on a
+        # real scrape in this project (see RUNLOG.md), so this fixture
+        # record is what stands between "never fires because it's dead"
+        # and "never fires because no real tweet has been promoted yet".
+        exp_kept, exp_dropped = x_checks.expected_filter(self.doc, self.settings)
+        self.assertNotIn("1000000000000000007", exp_kept)
+        self.assertEqual(exp_dropped.get("1000000000000000007"), 1)
+
     def test_link_with_commentary_is_dropped_by_rule_4(self):
         # id ...005: a link with plenty of its own words. Used to survive
         # under the old rule (link + fewer than x_min_own_words words);
@@ -314,6 +353,50 @@ class TestCheck3Kept(unittest.TestCase):
         exp_kept, exp_dropped = x_checks.expected_filter(self.doc, self.settings)
         self.assertNotIn("1000000000000000022", exp_kept)
         self.assertEqual(exp_dropped.get("1000000000000000022"), 6)
+
+    def test_isolated_old_tweet_with_strong_engagement_is_dropped_by_rule_3(self):
+        # id ...023: posted 4h before scraped_at (window is 2h), isolated
+        # (not part of any run of x_stop_after_old old non-reposts), with
+        # engagement far above every per-hour threshold at that age
+        # (reposts=5000, likes=40000, views=2000000 vs needing >=40/>=400/
+        # >=80000). This is the real production bug (verifier's FAIL on
+        # runs/2026-09-06-1214, tweet 2096442845708042345): a tweet that
+        # would clear rule 6 easily must still never reach rule 6, because
+        # it is outside the window on its own posted_at. If rule 3 is ever
+        # reduced back to the scrape's run-of-x_stop_after_old boundary
+        # tolerance, this isolated tweet slips through rule 3 and is
+        # wrongly KEPT via rule 6 instead -- exactly the hole the verifier
+        # caught.
+        exp_kept, exp_dropped = x_checks.expected_filter(self.doc, self.settings)
+        self.assertNotIn("1000000000000000023", exp_kept)
+        self.assertEqual(exp_dropped.get("1000000000000000023"), 3)
+
+    def test_old_repost_is_never_caught_by_rule_3(self):
+        # id ...024: reposted_by set, original posted_at ~27h before
+        # scraped_at -- far outside the 2h window by its own timestamp.
+        # Rule 3 must never fire on a repost (the design's "a repost rides
+        # the timeline at repost time" -- posted_at holds the ORIGINAL's
+        # time, not the repost's own timeline position). It still must not
+        # be kept for free: its engagement (reposts=3, likes=10, views=500)
+        # falls far short of the age-scaled floor at 27h old
+        # (needs reposts>=270, likes>=2700, views>=540000), so it is
+        # dropped by rule 6, not rule 3 -- proving repost-immunity from
+        # rule 3 is not a blanket keep.
+        exp_kept, exp_dropped = x_checks.expected_filter(self.doc, self.settings)
+        self.assertNotIn("1000000000000000024", exp_kept)
+        self.assertEqual(exp_dropped.get("1000000000000000024"), 6)
+
+    def test_old_repost_with_strong_original_is_kept_id_2(self):
+        # id ...002 (one of the original fixture records): reposted_by
+        # set, original posted 2026-09-05T08:15 (~27.75h before
+        # scraped_at). Rule 3 does not touch it (it's a repost); its
+        # engagement (reposts=640, likes=2900) clears the age-scaled floor
+        # at that age (needs reposts>=277.5, likes>=2775), so it is kept.
+        # This is the design's own worked case -- "8 reposts whose
+        # originals are older than the window... correctly kept".
+        exp_kept, exp_dropped = x_checks.expected_filter(self.doc, self.settings)
+        self.assertIn("1000000000000000002", exp_kept)
+        self.assertNotIn("1000000000000000002", exp_dropped)
 
     def test_dropped_rule_7_is_rejected(self):
         # rule must be 1..6; anything outside that range is an invalid

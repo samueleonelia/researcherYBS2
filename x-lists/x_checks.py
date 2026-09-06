@@ -55,6 +55,12 @@ def window_boundary(tweets: list, cutoff, stop_after_old: int):
 
     Returns the boundary as an index into the FULL `tweets` list (reposts
     included) -- the position of the run's first member.
+
+    This is the SCRAPE-STOP heuristic (design section 1): it decides where
+    scrolling should have stopped, and on purpose tolerates a lone old
+    non-repost that never joins a run of `stop_after_old` -- used below
+    only by check2, to validate tweets.json's own scrape boundary. Filter
+    rule 3 is a different, per-tweet question -- see `outside_window`.
     """
     run_start_idx = None
     run_len = 0
@@ -168,6 +174,26 @@ def clears_engagement_floor(t: dict, scraped_at, reposts_rate, likes_rate,
     )
 
 
+def outside_window(t: dict, cutoff) -> bool:
+    """Rule 3, re-derived independently of x_filter.py's own copy of this
+    same logic (this file must never import x_filter -- two independent
+    implementations is the point).
+
+    Reading: a repost's `posted_at` holds the ORIGINAL's time, not the
+    repost's own timeline position, so rule 3 never fires on a repost --
+    that is what the design means by "a repost rides the timeline at
+    repost time" and its own worked case (8 reposts with
+    older-than-window originals, "correctly kept") requires. A non-repost
+    is outside the window exactly when its own posted_at is older than
+    `cutoff`, individually -- NOT via `window_boundary`'s
+    run-of-`stop_after_old` tolerance, which is a scrape-stop heuristic
+    (see window_boundary's own docstring) and would wrongly let an
+    isolated old non-repost through the filter."""
+    if t.get("reposted_by"):
+        return False
+    return parse_iso(t["posted_at"]) < cutoff
+
+
 def expected_filter(tweets_doc: dict, settings: dict):
     """Recompute the six filter rules independently of x_filter.py, per
     the design's fixed order (plans/x-lists-design.md section 2, as amended
@@ -179,10 +205,13 @@ def expected_filter(tweets_doc: dict, settings: dict):
     also amended 2026-09-06, is an age-scaled engagement floor: a tweet
     clears it the moment reposts, likes or views (any one) reaches its own
     per-hour rate times the tweet's age in hours at scraped_at -- not the
-    old absolute floor of reposts < x_min_reposts AND likes < x_min_likes."""
+    old absolute floor of reposts < x_min_reposts AND likes < x_min_likes.
+
+    Rule 3 is a per-tweet check (`outside_window`), independent of the
+    scrape's own run-of-`stop_after_old` tolerance -- see that function's
+    docstring."""
     tweets = tweets_doc.get("tweets") or []
     window_hours = settings["x_window_hours"]
-    stop_after_old = settings["x_stop_after_old"]
     min_words = settings["x_min_own_words"]
     reposts_rate = settings["x_reposts_per_hour"]
     likes_rate = settings["x_likes_per_hour"]
@@ -190,7 +219,6 @@ def expected_filter(tweets_doc: dict, settings: dict):
 
     scraped_at = parse_iso(tweets_doc["scraped_at"])
     cutoff = scraped_at - timedelta(hours=window_hours)
-    boundary = window_boundary(tweets, cutoff, stop_after_old)
 
     kept_ids, dropped = set(), {}
     for i, t in enumerate(tweets):
@@ -199,7 +227,7 @@ def expected_filter(tweets_doc: dict, settings: dict):
             rule = 1
         elif t.get("is_reply"):
             rule = 2
-        elif boundary is not None and i >= boundary:
+        elif outside_window(t, cutoff):
             rule = 3
         elif t.get("has_link"):
             rule = 4
@@ -221,7 +249,7 @@ def check3_kept(tweets_doc: dict, kept_doc: dict, settings: dict):
     """kept.json holds only tweets that survive the six filter rules, in
     order, and nothing else was dropped -- checked against an independent
     recomputation of the rules, not against x_filter.py's own code."""
-    for key in ("x_window_hours", "x_stop_after_old", "x_min_own_words",
+    for key in ("x_window_hours", "x_min_own_words",
                 "x_reposts_per_hour", "x_likes_per_hour", "x_views_per_hour"):
         if key not in settings:
             return False, f"settings.md has no {key}"

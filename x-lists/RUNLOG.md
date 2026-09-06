@@ -2,7 +2,7 @@
 
 One line per attempt. Newest at the bottom. Read GOAL.md first.
 
-Attempts used this session: 9 / 25
+Attempts used this session: 10 / 25
 
 | # | date | step | what changed | check result | next |
 |---|---|---|---|---|---|
@@ -15,4 +15,5 @@ Attempts used this session: 9 / 25
 | 6 | 2026-09-06 | 6 | build x_run.py + x_settings.py + tests/ (sonnet/medium), against the contract. | running | verify check 7 |
 | 7 | 2026-09-06 | 2 | verifier for check 3 (haiku/low), read-only, told to build a case that discriminates the two window wordings. | FAIL: x_stop_after_old never loaded or used; cuts at the first old non-repost, not at a run of x_stop_after_old. Discriminating input proved it. | orchestrator ruled the boundary in plans/interfaces.md; fresh builder, attempt 9 |
 | 8 | 2026-09-06 | 4 | verifier for check 5 (haiku/low), read-only, with 4 named probes: unknown id, n=1 rank, zero-minute velocity, hard-coded settings. | PASS. Probes: unknown id silently skipped (acceptable only while check 4 is enforced in tests); zero-minute velocity floored, no blowup; no hard-coded settings. Probe b did NOT exercise a true n=1 run - it ranked inside 7 subjects - so the single-subject case is still untested. | commit x_score.py; retest n=1 at integration |
-| 9 | 2026-09-06 | 2 | fresh builder for x_filter.py (sonnet/medium), given the verifier FAIL reason as-is plus the boundary ruling. | running | re-verify check 3 |
+| 9 | 2026-09-06 | 2 | fresh builder for x_filter.py (sonnet/medium), given the verifier FAIL reason as-is plus the boundary ruling. Implemented the run-of-N boundary; reposts neither extend nor break the run. Fixture unchanged at 8 kept / 7 dropped. Builder correctly flagged that the verifier FAIL text's own "expected" line contradicted the ruling, and followed the ruling. | rebuilt, awaiting verdict | verifier 10 |
+| 10 | 2026-09-06 | 2 | re-verifier for check 3 (haiku/low), given the orchestrator ruling as the named authority so it cannot re-fail on the same ambiguity, plus 4 required cases. | PASS on all 4 cases: isolated old tweet kept, repost neither breaks nor extends the run, short run drops nothing, run at position 0 drops everything. Rules applied first-match-wins, order preserved, settings read at run time. | commit x_filter.py |

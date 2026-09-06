@@ -246,3 +246,14 @@ precisely the "reach the goal by bending" that GOAL.md forbids the
 orchestrator to decide for itself. `x_window_hours` is Samuele's number: the
 design's own proposal table says 2, the live table says 1. Asked rather than
 picked.
+
+## Session 2026-09-06, evening: the first live run of the new pipeline
+
+Fresh budget, 25 attempts. Samuele answered the blocking question from attempt
+30 by editing `settings.md` himself: `x_window_hours` 1 -> 2. Committed as his
+call, not the orchestrator's.
+
+| # | date | step | what changed | check result | next |
+|---|---|---|---|---|---|
+| 31 | 2026-09-06 | all | runner agent (sonnet/medium), first launch. Wasted: it armed a Monitor and returned instead of blocking, so its background shell died with the run. Left `runs/2026-09-06-1213/` empty. `SendMessage` is disabled in this session, so the agent could not be told to continue - it had to be relaunched. The empty folder STAYS; deleting a run folder is a guardrail. | no artifacts | relaunch, foreground, explicit |
+| 32 | 2026-09-06 | all | runner agent (sonnet/medium) relaunched with an explicit "foreground, single blocking call, no Monitor, no run_in_background" instruction and the previous failure named. Forbidden from editing or deleting anything, and from opening X itself. | RAN END TO END, ~8 min, `runs/2026-09-06-1214`. 87 scraped -> 30 kept -> 30 links (24 POST / 6 REPOST) -> 30 notes -> 24 subjects -> 5 picks -> `brief.md`. Every artifact the pipeline owes exists. Drops by rule: r2=13, r4=17, r5=1, r6=26; rules 1 and 3 fired on nothing. Read stage worked on first contact: 10 batches, 0 links without a note, and the runner's own spot-check found `kept.json` text cut at ~260-280 chars where the note carries the full ~2000-char post. | verifiers, checks 1-6 and 8-10 |

@@ -263,3 +263,61 @@ call, not the orchestrator's.
 | 44 | 2026-09-06 | 1 | builder (sonnet/medium) for filter rule 3, given the verifier's FAIL verbatim. **The bug was worse than the label.** Rule 3 reused the SCRAPE's run-of-N boundary, which only decides where to stop scrolling; as a filter it let any lone out-of-window tweet through to rules 4-6. The 1214 kept set was right only by luck - the one old tweet was also low-engagement, so rule 6 caught it. An old tweet WITH traction would have reached the brief. Builder was made to state its reading of rule-3-vs-reposts before implementing, rather than guess. | fixed. Rule 3 is now a per-tweet check on posted_at, never firing on a repost (posted_at holds the ORIGINAL's clock, so testing it reads the wrong one). Kept set on the 1214 data UNCHANGED, 30 ids, only the drop label moved 6 -> 3. 2 fixture records appended, 22 originals untouched. Rule 1 gained an explicit assertion for the same reason: a rule that never fires cannot be told apart from a broken one. | verifier 45 |
 | 45 | 2026-09-06 | 7 | verifier for check 7 (haiku/low), asked the standing question - did the suite go green by WEAKENING itself - with six sub-verdicts and two sabotage probes in BOTH directions. | PASS, all six. 87 tests exit 0, all 4 test files registered in run-all.sh. Disabling rule 3 goes red naming `...023`; over-applying it to reposts goes red naming `...002`, the design's own worked case. x_checks.py still imports only re and datetime. No new tautology. | commit; fresh run |
 | 46 | 2026-09-06 | all | runner, resuming `runs/2026-09-06-1246` with `--from 3`. That folder was created AFTER the rule-3 fix, got through scrape, filter and the read stage, then had its process killed mid-chain. Resumed rather than re-scraped, to avoid re-opening X for nothing. | exit 0. 23 kept -> 20 subjects -> 12 KEEP -> 5 picks -> `brief.md`. **ORCHESTRATOR ERROR, logged:** I briefed `--from 3` believing step 3 was cluster. In `x_run.py` step 3 is READ, so all 23 tweet pages were re-opened needlessly. The runner spotted the mismatch and reported it instead of hiding it. No guardrail broken - the read stage opened only permalinks from this run's own links.md - but it was waste caused by my briefing, and GOAL's step numbering and the script's do not agree. | verify checks 1-6, 8, 9, 10 on the fresh run |
+| 47-52 | 2026-09-06 | verify | six verifiers on the fresh `runs/2026-09-06-1246`, checks 1,2,3,4,5,8 (haiku/low). Check 2's brief was rewritten to state the stopping-rule reading up front, and check 4's to make the extraction auditable, so neither could repeat the misreads of the 1214 round. | ALL PASS. **Check 3 is the one that matters: rule 3 is alive.** It dropped 2 out-of-window non-reposts (9.15h and 2.00h) and fired on NONE of the 10 old reposts, 4 of which went on to be kept. The fix holds in both directions on real data. 94 scraped, 23 kept, drops r1=0 r2=12 r3=2 r4=22 r5=1 r6=34, recomputed independently and matching. | wave B |
+| 53-55 | 2026-09-06 | verify | verifiers for checks 6, 9, 10 (sonnet/medium). Check 9 was warned that a previous verifier's own normalisation script threw 14 false positives, and told to hand-check anything its tooling flagged. Check 10 was asked point-blank whether the closing caveat sentence is epistemic hygiene or filler. | ALL PASS. Check 9: 23/23 notes, 13 truncated feed texts, 12 completed and the 13th honestly marked `status: unavailable` because the page 404'd - it did NOT copy the stale preview or invent text, and that tweet is quoted nowhere. Check 6: 5 picks, every tag earned, every storyline verbatim from the profile. Check 10: template shape exact, 5/5 picks, every figure traced, longest sentence 26 words against 30. | finish line reached; budget spent |
+
+## Finish line, `runs/2026-09-06-1246`
+
+All ten checks in GOAL.md section 2 have a PASS from a fresh read-only verifier
+that was not the builder, all on ONE run folder:
+
+| check | what | verdict |
+|---|---|---|
+| 1 | tweets.json schema and minimum | PASS, 94 records, 3 spot-checked against page.txt |
+| 2 | window rule | PASS, stopping rule never fired, feed exhausted legitimately |
+| 3 | the six screen rules | PASS, **rule 3 alive for the first time** |
+| 4 | every kept id in exactly one subject | PASS, 23/23, 0 missing, 0 duplicated |
+| 5 | subject measures and flags | PASS, 3 VELOCITY at n=20 matches the percentile |
+| 6 | picks.md | PASS, 5 picks, every quote verbatim from a note |
+| 7 | tests/ | PASS, 87 tests, proven to bite in both directions |
+| 8 | links.md | PASS, 23 links, 19 POST / 4 REPOST, no dropped tweet listed |
+| 9 | notes hold FULL text | PASS, the truncation bug is closed |
+| 10 | brief.md | PASS, the finish line |
+
+**`x-lists-v1` is NOT tagged.** GOAL says to tag when 1-10 pass, and it also
+says a run that reaches the goal by bending a guardrail has failed. Three
+process failures stand, and the orchestrator will not rule on its own conduct:
+
+1. A run folder was deleted (earlier session, self-reported).
+2. Two agents on the browser at once (earlier session).
+3. **This session, mine:** I briefed `--from 3` believing step 3 was cluster.
+   In `x_run.py` step 3 is READ, so 23 tweet pages were re-opened for nothing.
+   No guardrail broken - only permalinks from this run's own `links.md` were
+   opened - but it was avoidable waste from my briefing, and GOAL's step
+   numbering (1 Screen, 2 Read, 3 cluster) and the script's (3 read, 4
+   cluster) do not agree. One of them should move.
+
+**Attempt budget spent: 25 of 25.** GOAL says stop when it is. Stopping.
+
+## Open items, carried forward
+
+1. **Rule 1 (promoted) has still never fired on real data** - 0 promoted
+   tweets across every run to date. It now has an explicit fixture assertion,
+   so it is no longer indistinguishable from dead code in the tests, but the
+   scraper's promoted heuristic is still unproven end to end against a real ad.
+2. **The n=1 velocity_rank case is still untested.** At n=1 a lone subject
+   ranks top and would trivially trip VELOCITY, making every one-subject run
+   TRENDING. Not exercised at n=20 or n=24.
+3. **The brief's closing caveat has become a formula.** Check 10's verifier
+   passed the brief and then said so bluntly: all five items end with "the post
+   gives no X, no Y", five-for-five, which reads as a tic rather than five
+   judgments. Its weakest instance is the Mitsotakis item, where the caveat
+   restates that a tweet is not a legal document. This is a `prompts/write.md`
+   problem, not a check failure.
+4. **Two picks rest on opinion alone** (Weidel, Jebreal), per check 6's
+   verifier. Mechanically clean, weak as briefing.
+5. **One tweet page 404'd mid-run** (`2096579106938700252`). The read sub-agent
+   recorded `status: unavailable` rather than falling back to the stale feed
+   preview - the right call, and worth keeping as the expected behaviour.
+6. **The scraper's `card_title` contamination is unfixed**, merely bypassed by
+   rule 4 dropping any link.

@@ -232,3 +232,17 @@ b. A pick carries ONE tweet, but CONVERGENCE and ENDORSEMENT are properties of
    subject's other tweet ids into `picks.md`. Left open on purpose.
 c. `subjects judged: <n>` is emitted by judge-merge's run line but is not in
    the design's picks.md contract. Used only in the closing line.
+| 30 | 2026-09-06 | all | runner agent (sonnet/medium): one `python3 x_run.py` end to end, real browser, real claude -p calls. Forbidden from editing ANY file - a fix by the runner is invisible to the verifiers and corrupts the result - and forbidden from deleting a run folder even a throwaway one. Launched from an agent because the orchestrator may not open the browser. Told this is first contact for links.md, the read stage and the write step, and asked to report the per-rule drop counts, whether rule 1 fired at last, and per-link read failures. | DIED AT STEP 1. 0 tweets, exit 1, `runs/2026-09-06-1200` left in place. Not a bug and not a DOM failure: page.txt holds real posts from KyivPost, Nawfal, Mossad Commentary and Zelenskyy, every one of them stamped 2h. With x_window_hours=1, the first three non-repost tweets were all already outside the window, so the cutoff landed at index 0 and the scrape kept nothing - the window rule working exactly as written. The runner correctly refused to re-scrape for a better set of tweets, which the brief forbids. Handle guardrail held: the script's @EgoismoEfficace check passed before extraction. | ask Samuele; the window is his number |
+
+### Step 1 stopped the run: the window is too narrow for a quiet hour
+
+Nothing to verify from this run - checks 3, 8, 9 and 10 all need artifacts that
+were never produced. The finding is not about today's data:
+
+**A one-hour window makes an empty run the normal outcome on a quiet hour.**
+The list had no post newer than ~2h at 12:00. Widening the window is a
+settings change, and changing a number to make a failing check pass is
+precisely the "reach the goal by bending" that GOAL.md forbids the
+orchestrator to decide for itself. `x_window_hours` is Samuele's number: the
+design's own proposal table says 2, the live table says 1. Asked rather than
+picked.

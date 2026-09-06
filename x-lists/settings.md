@@ -11,7 +11,7 @@ only two subjects deserve it. Nothing here fills a slot to reach a number.
 
 | Setting | Value | What it means |
 |---|---|---|
-| x_window_hours | 1 | how far back the scrape goes, by timeline position |
+| x_window_hours | 2 | how far back the scrape goes, by timeline position |
 | x_stop_after_old | 3 | non-repost tweets in a row older than the window before the scrape stops |
 | x_min_own_words | 6 | words a tweet must have to survive the filter |
 | x_reposts_per_hour | 10 | reposts per hour of age a tweet needs to pass the screen; OR-ed with the other two |

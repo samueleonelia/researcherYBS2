@@ -70,8 +70,14 @@ Drop, in this order:
 3. outside window (see rule above)
 4. has_link = true — **any** link, however much commentary rides with it
 5. text under `x_min_own_words` and no quoted_text (reactions, emoji)
-6. below the engagement floor: reposts < `x_min_reposts` AND likes < `x_min_likes`
-   (either one alone clears it)
+6. below the engagement floor, which RISES WITH AGE. A tweet clears if any
+   one of these holds, where `age_h` is its age in hours at `scraped_at`:
+
+   ```
+   reposts >= x_reposts_per_hour * age_h
+   likes   >= x_likes_per_hour   * age_h
+   views   >= x_views_per_hour   * age_h
+   ```
 
 Nothing else is dropped here. Relevance is not decided here.
 
@@ -79,9 +85,40 @@ Rule 4 changed on 2026-09-06. It used to keep a link that carried real
 commentary. Samuele's call: a link post sends the reader off X, and the
 pipeline cannot follow it, so it is not a story this pipeline can carry.
 
-Rule 6 is new on the same date. Engagement is now a floor at the feed pass,
-not only an input to velocity later. The two numbers are OR-ed so a post can
-qualify on either reposts or likes.
+Rule 6 is new on the same date, and was corrected the same afternoon.
+
+It began as an absolute floor, 10 reposts OR 100 likes at any age. Samuele
+killed that after watching the Esh-Tech tweet: at scrape it was 5 minutes old
+with 1 repost and 2 likes, so the floor dropped it - and it went on to 20
+reposts. Reposts and likes are LAGGING indicators; at five minutes they
+measure a tweet's age more than its merit. Worse, an absolute floor
+systematically prefers OLDER tweets, which fights the one-hour window's whole
+purpose: the GB News tweet cleared the floor with 33 reposts while running the
+slowest of the five picks at 66 views per minute.
+
+So the threshold now rises with age, as a rate. The longer a post has been
+out, the more it must have earned. Checked against the 0954 run:
+
+| pick | age | reposts | needs | verdict | old floor |
+|---|---|---|---|---|---|
+| Esh-Tech | 5 min | 1 | 0.9 | clears | dropped |
+| Kyiv | 6 min | 13 | 1.0 | clears | cleared |
+| GB News | 2.5 h | 33 | 24.6 | clears | cleared |
+| Florida | 17.3 h | 623 | 172.8 | clears | cleared |
+| Merz | 10 min | 0 | 1.7 | drops | dropped |
+
+Esh-Tech survives, Merz still dies - 0 reposts and 1 like at ten minutes is
+absence of traction, not youth. Across all 49 scraped, 19 clear the age-scaled
+gate against 21 under the absolute floor.
+
+Two consequences to keep in view. A tweet seconds old needs almost nothing, so
+the gate is effectively off at the very top of the window and velocity plus the
+judge carry the weight there. And `x_views_per_hour` is the loosest of the
+three, since views run orders of magnitude above the others; it is set high on
+purpose and should be watched.
+
+**NOT YET IMPLEMENTED.** `x_filter.py` still holds the absolute floor. This is
+the spec for the next session.
 
 The filter also writes `links.md`: every survivor as a permalink, marked
 POST or REPOST, and nothing that failed a rule. That file is what the read

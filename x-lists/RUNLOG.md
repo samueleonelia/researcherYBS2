@@ -115,5 +115,61 @@ Not check failures. Recorded so they are not lost between sessions.
    four engagement metrics at 0, out of 54. Both plausible; a growing share
    would mean a parsing gap.
 
-| 19 | 2026-09-06 | 2 | builder for x_filter.py (sonnet/medium): rule 4 becomes any-link, new rule 6 engagement floor, plus links.md marking POST or REPOST. Given the orchestrator's expected numbers so it cannot quietly fit itself to a wrong answer. | running | verify checks 3 and 8 |
-| 20 | 2026-09-06 | 2b | builder for the read stage (opus/high): prompts/read.md, the dispatcher in x_run.py, and rewiring cluster and judge to read notes/ instead of the truncated feed text. Told to decide serial vs parallel browser access rather than guess, and NOT to drive the real browser while other agents work. | running | verify check 9 |
+| 19 | 2026-09-06 | 2 | builder for x_filter.py (sonnet/medium): rule 4 becomes any-link, new rule 6 engagement floor, plus links.md marking POST or REPOST. Given the orchestrator's expected numbers so it cannot quietly fit itself to a wrong answer. | built; matched the expected numbers exactly (14 survivors, 7/15/13 by rule, 7 POST / 7 REPOST). Fixture now 7 kept, was 8, rule 4 catching a link-with-commentary. Builder flagged that tests/ still encodes the OLD rule 4, so check 7 has likely regressed. | verifier 21; then fix the tests |
+| 20 | 2026-09-06 | 2b | builder for the read stage (opus/high): prompts/read.md, the dispatcher in x_run.py, and rewiring cluster and judge to read notes/ instead of the truncated feed text. Told to decide serial vs parallel browser access rather than guess, and NOT to drive the real browser while other agents work. | built. Chose SERIAL, citing GOAL's own rule and breach #1 in this log, and reasoning that ego-browser task spaces isolate an agent from the USER, not from another agent. Steps renumbered 1-6. Cluster and judge now take full_text from notes/ and fall back to feed text when no note exists. 45 existing tests still pass; 8 mocked plumbing tests written in scratch. Never opened the browser. | verify check 9 on a live run, next session || 21 | 2026-09-06 | 2 | verifier for checks 3 AND 8 in one pass (haiku/low). DEVIATION, logged: GOAL says one verifier per check; the budget is nearly spent, so the two new-filter checks were merged into one agent that must judge each separately. | FAIL on both, but against STALE artifacts: it judged runs/2026-09-06-0954, whose kept.json predates the rule change and which has no links.md. Orchestrator briefing error, not a code fault. Its own independent recomputation of the NEW rules matched exactly (14 kept; 7/15/13), and it confirmed settings are not hard-coded and rule order holds. | checks 3 and 8 stay UNVERIFIED until a fresh run |
+
+| 22 | 2026-09-06 | 6 | builder for x_checks.py + tests (sonnet/medium) after check 7 regressed on the rule change. Fixture extended 15 -> 19 records; originals untouched. Reported 29 tests in test_checks.py, exit 0. Also caught the orchestrator's own transient settings edit mid-run and refused to adapt to it. | rebuilt | verifier 23 |
+| 23 | 2026-09-06 | 6 | re-verifier for check 7 (haiku/low), told the real question was whether the suite went green by WEAKENING itself: prove it can still fail. | PASS. 56 tests, exit 0. x_checks.py imports only re and datetime - still independent of x_filter.py. Original 15 fixture records bit-for-bit unchanged. check 8 has real failure cases. Broke rule 6 in a scratch copy and the suite went RED naming the escaped id, so the suite bites. | commit and stop |
+
+## Handoff, end of session 2026-09-06
+
+**Attempts: 22 of 25 used.** Stopped short deliberately, on Samuele's call, so
+the live run of the new pipeline starts a fresh session with a full budget.
+
+### State
+
+Verified and committed, on branch `x-lists`, nothing outside `x-lists/` touched:
+
+- Checks 1, 2, 4, 5, 6 PASS on the real 0954 run. Check 7 regressed on the
+  rule change and is GREEN again: 56 tests, exit 0, and independently proven
+  able to fail.
+- The pipeline ran end to end once, under the OLD rules, and produced a brief.
+
+Changed after Samuele read that brief, and NOT yet proven on a live run:
+
+- Filter rule 4 is now "any link". Rule 6, an engagement floor, is new.
+  Verified only by independent recomputation, not against a fresh artifact.
+- `links.md` is written by the filter. Never produced by a real run yet.
+- The read stage (`prompts/read.md` + dispatcher) is built and its plumbing
+  is tested with a mocked `claude -p`. **It has never opened a tweet page.**
+
+### The two bugs that started the redesign
+
+1. `text` fell back to `card_title`, so a bare link share read as commentary.
+   Now moot: rule 4 drops any link. The scraper bug itself is NOT fixed.
+2. Tweet text is the feed's collapsed preview, cut at ~280 chars. 15 of 49 in
+   the 0954 run; three of five picks quoted truncated text. The read stage is
+   the fix and is unproven.
+
+### First jobs next session
+
+1. **Run the new pipeline live.** It is the only way to verify checks 8 and 9,
+   and the first real test of the read stage against X. Expect first-contact
+   browser trouble; budget for it.
+2. **Implement the age-scaled engagement floor** (design rule 6, worked
+   numbers included). Change `x_filter.py`, `x_checks.py`, `tests/` and
+   `settings.md` TOGETHER - settings already carries the three new values in a
+   "Not yet in use" section, and the two old ones must not be deleted until
+   the code moves.
+3. Then re-verify 3, 7, 8, 9 on that run.
+
+### Still open
+
+- Filter rule 1 (promoted) has still never fired on real data.
+- Three settings loaders: `x_settings.py`, plus copies inside `x_filter.py`
+  and `x_score.py`.
+- The n=1 velocity_rank case is still untested.
+- The scraper's `card_title` contamination is unfixed, merely bypassed.
+- No `x-lists-v1` tag. Two guardrail breaches stand unreviewed (a run folder
+  deleted; two agents on the browser at once). Samuele's call, not the
+  orchestrator's.

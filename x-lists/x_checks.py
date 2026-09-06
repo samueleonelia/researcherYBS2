@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""x_checks.py - the five mechanical, JSON-only checks from GOAL.md section 2.
+"""x_checks.py - the mechanical, JSON-only checks from GOAL.md section 2,
+plus check 8 for the links.md artifact.
 
 Each `check_N` function takes already-loaded JSON (plus settings where a
 number is needed) and returns `(ok: bool, reason: str)`. Nothing here opens
@@ -152,13 +153,21 @@ def word_count(text):
 
 
 def expected_filter(tweets_doc: dict, settings: dict):
-    """Recompute the five filter rules independently of x_filter.py, per
-    the design's fixed order and the window ruling above. Returns
-    (kept_ids: set, dropped: {id: rule})."""
+    """Recompute the six filter rules independently of x_filter.py, per
+    the design's fixed order (plans/x-lists-design.md section 2, as amended
+    2026-09-06) and the window ruling above. Returns
+    (kept_ids: set, dropped: {id: rule}).
+
+    Rule 4 (has_link) no longer looks at word count at all -- any link at
+    all drops the tweet, however much commentary rides with it. Rule 6 is
+    new: an engagement floor, reposts < x_min_reposts AND likes <
+    x_min_likes (either number alone clears it)."""
     tweets = tweets_doc.get("tweets") or []
     window_hours = settings["x_window_hours"]
     stop_after_old = settings["x_stop_after_old"]
     min_words = settings["x_min_own_words"]
+    min_reposts = settings["x_min_reposts"]
+    min_likes = settings["x_min_likes"]
 
     scraped_at = parse_iso(tweets_doc["scraped_at"])
     cutoff = scraped_at - timedelta(hours=window_hours)
@@ -173,10 +182,12 @@ def expected_filter(tweets_doc: dict, settings: dict):
             rule = 2
         elif boundary is not None and i >= boundary:
             rule = 3
-        elif t.get("has_link") and words < min_words:
+        elif t.get("has_link"):
             rule = 4
         elif words < min_words and not t.get("quoted_text"):
             rule = 5
+        elif t.get("reposts", 0) < min_reposts and t.get("likes", 0) < min_likes:
+            rule = 6
         else:
             rule = None
         if rule is None:
@@ -187,10 +198,11 @@ def expected_filter(tweets_doc: dict, settings: dict):
 
 
 def check3_kept(tweets_doc: dict, kept_doc: dict, settings: dict):
-    """kept.json holds only tweets that survive the five filter rules, in
+    """kept.json holds only tweets that survive the six filter rules, in
     order, and nothing else was dropped -- checked against an independent
     recomputation of the rules, not against x_filter.py's own code."""
-    for key in ("x_window_hours", "x_stop_after_old", "x_min_own_words"):
+    for key in ("x_window_hours", "x_stop_after_old", "x_min_own_words",
+                "x_min_reposts", "x_min_likes"):
         if key not in settings:
             return False, f"settings.md has no {key}"
 
@@ -206,7 +218,7 @@ def check3_kept(tweets_doc: dict, kept_doc: dict, settings: dict):
     for d in kept_doc["dropped"]:
         if "id" not in d or "rule" not in d:
             return False, f"a dropped entry is missing id or rule: {d}"
-        if d["rule"] not in (1, 2, 3, 4, 5):
+        if d["rule"] not in (1, 2, 3, 4, 5, 6):
             return False, f"dropped id {d['id']} has an invalid rule: {d['rule']}"
         if d["id"] in dropped_by_id:
             return False, f"id {d['id']} appears twice in dropped"
@@ -223,7 +235,7 @@ def check3_kept(tweets_doc: dict, kept_doc: dict, settings: dict):
     exp_kept, exp_dropped = expected_filter(tweets_doc, settings)
     if kept_ids != exp_kept:
         return False, (
-            f"kept set does not match the five rules: "
+            f"kept set does not match the six rules: "
             f"wrongly kept={kept_ids - exp_kept}, wrongly dropped={exp_kept - kept_ids}"
         )
     for tid, rule in dropped_by_id.items():
@@ -236,7 +248,7 @@ def check3_kept(tweets_doc: dict, kept_doc: dict, settings: dict):
     if order_in_kept != order_in_tweets:
         return False, "kept tweets are not in timeline order"
 
-    return True, f"{len(kept_ids)} kept, {len(dropped_by_id)} dropped, matches the five rules"
+    return True, f"{len(kept_ids)} kept, {len(dropped_by_id)} dropped, matches the six rules"
 
 
 # ---------------------------------------------------------------- check 4
@@ -296,3 +308,74 @@ def check5_subject_fields(subjects_doc: dict, settings: dict = None):
             return False, f"subject '{subj['subject']}' cross_list is not a bool"
 
     return True, f"all {len(subjects)} subjects carry every score field"
+
+
+# ---------------------------------------------------------------- check 8
+
+URL_RE = re.compile(r"^https?://\S+$")
+
+
+def parse_links_md(text: str):
+    """Parse links.md into a list of {"kind": "POST"|"REPOST", "url": str}
+    entries. Format written by x_filter.write_links_md: a "## POST" or
+    "## REPOST" heading, some "- key: value" lines, then the bare
+    permalink on its own line, one entry per survivor. Independent of
+    x_filter.py's own code -- this just reads the markdown shape."""
+    entries = []
+    kind = None
+    for raw in (text or "").splitlines():
+        line = raw.strip()
+        if line == "## POST":
+            kind = "POST"
+        elif line == "## REPOST":
+            kind = "REPOST"
+        elif URL_RE.match(line):
+            if kind is None:
+                raise ValueError(f"a url appears before any ## POST/REPOST heading: {line}")
+            entries.append({"kind": kind, "url": line})
+    return entries
+
+
+def check8_links(kept_doc: dict, links_md_text: str):
+    """links.md lists every surviving (kept) tweet as a permalink, marked
+    POST or REPOST (REPOST exactly when reposted_by is non-empty), and
+    nothing that failed a rule. The set of urls in it must equal exactly
+    the set of kept tweets' urls."""
+    kept = kept_doc.get("kept") or []
+    if not kept:
+        return False, "kept.json has no 'kept' tweets to check links.md against"
+
+    expected_by_url = {}
+    for t in kept:
+        if "url" not in t or "id" not in t:
+            return False, f"a kept tweet is missing id or url: {t}"
+        expected_kind = "REPOST" if t.get("reposted_by") else "POST"
+        if t["url"] in expected_by_url:
+            return False, f"two kept tweets share url {t['url']!r}"
+        expected_by_url[t["url"]] = expected_kind
+
+    try:
+        entries = parse_links_md(links_md_text)
+    except ValueError as e:
+        return False, str(e)
+
+    seen_urls = set()
+    for e in entries:
+        url = e["url"]
+        if url in seen_urls:
+            return False, f"url {url!r} appears twice in links.md"
+        seen_urls.add(url)
+        if url not in expected_by_url:
+            return False, f"links.md has a url not in kept.json: {url!r}"
+        if e["kind"] != expected_by_url[url]:
+            return False, (
+                f"url {url!r} marked {e['kind']} in links.md, "
+                f"expected {expected_by_url[url]} from reposted_by"
+            )
+
+    expected_urls = set(expected_by_url)
+    if seen_urls != expected_urls:
+        missing = expected_urls - seen_urls
+        return False, f"links.md is missing kept url(s): {missing}"
+
+    return True, f"links.md lists exactly the {len(expected_urls)} kept urls, correctly marked"

@@ -14,8 +14,8 @@ only two subjects deserve it. Nothing here fills a slot to reach a number.
 | x_window_hours | 1 | how far back the scrape goes, by timeline position |
 | x_stop_after_old | 3 | non-repost tweets in a row older than the window before the scrape stops |
 | x_min_own_words | 6 | words a tweet must have to survive the filter |
-| x_min_reposts | 10 | reposts a tweet needs to clear the engagement floor; OR-ed with x_min_likes |
-| x_min_likes | 100 | likes a tweet needs to clear the engagement floor; OR-ed with x_min_reposts |
+| x_min_reposts | 10 | reposts clearing the engagement floor; OR-ed with x_min_likes. IN USE today |
+| x_min_likes | 100 | likes clearing the engagement floor; OR-ed with x_min_reposts. IN USE today |
 | x_read_batch | 5 | tweet links one read sub-agent takes, opened one at a time |
 | x_convergence_authors | 3 | distinct list members on one subject; at or above flags CONVERGENCE |
 | x_endorsement_min | 3 | list-member reposts plus quotes of one tweet; at or above flags ENDORSEMENT |
@@ -25,6 +25,21 @@ only two subjects deserve it. Nothing here fills a slot to reach a number.
 | x_tweets_min | 20 | tweets a scrape must return for the run to count as a pass |
 | x_cluster_chunk | 60 | kept tweets one cluster agent may take; a longer list is cut into parts and merged |
 | x_agents_active_max | 8 | agents working at the same time in a pooled step |
+
+## Not yet in use
+
+The engagement floor is being replaced by one that rises with a tweet's age,
+because an absolute floor drops fresh tweets that are taking off and favours
+older ones. The reasoning and the worked numbers are in
+`plans/x-lists-design.md`, rule 6. These three replace `x_min_reposts` and
+`x_min_likes` when `x_filter.py`, `x_checks.py` and `tests/` are changed
+together. **Nothing reads them yet. Do not delete the two above until they do.**
+
+| Setting | Value | What it means |
+|---|---|---|
+| x_reposts_per_hour | 10 | reposts per hour of age a tweet needs; OR-ed with the other two |
+| x_likes_per_hour | 100 | likes per hour of age a tweet needs; OR-ed with the other two |
+| x_views_per_hour | 20000 | views per hour of age a tweet needs; OR-ed with the other two |
 
 ## Fixed
 
@@ -57,6 +72,7 @@ Run time (agents that run on real tweets):
 | Step | Model | Effort | Agents per run |
 |---|---|---|---|
 | cluster | opus | high | 1-2, one per chunk of `x_cluster_chunk` |
+| read | sonnet | medium | one per batch of `x_read_batch` links, run SERIALLY - the browser takes one agent at a time |
 | judge | opus | high | one per subject, up to `x_agents_active_max` at once |
 | verify, checks 1-5 | haiku | low | one per check; mechanical, from the JSON alone |
 | verify, check 6 | sonnet | medium | one; needs to read the picks |

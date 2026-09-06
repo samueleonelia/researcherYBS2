@@ -2,14 +2,19 @@
 """x_filter.py - step 2 of the X pipeline: filter (script).
 
 Reads DIR/tweets.json, drops tweets in the design's fixed order, writes
-DIR/kept.json. Every input tweet ends up in exactly one of `kept` or
-`dropped`; `dropped` records the first rule (1..5) that applies, in order:
+DIR/kept.json and DIR/links.md. Every input tweet ends up in exactly one of
+`kept` or `dropped`; `dropped` records the first rule (1..6) that applies,
+in order:
 
     1. promoted
     2. is_reply
     3. outside the window
-    4. has_link and fewer than x_min_own_words words
+    4. has_link
     5. fewer than x_min_own_words words and no quoted_text
+    6. reposts < x_min_reposts AND likes < x_min_likes
+
+`links.md` lists every survivor (nothing that failed a rule) as a
+permalink, marked POST or REPOST -- the file the read stage consumes.
 
 Window rule (see plans/interfaces.md, "The window boundary — orchestrator
 ruling"): a repost sits in the timeline at repost time, but its own
@@ -88,7 +93,8 @@ def load_settings(path: Path) -> dict:
         if key in out:
             die(f"settings.md names {key} twice")
         out[key] = int(raw) if re.fullmatch(r"\d+", raw) else raw
-    for needed in ("x_min_own_words", "x_window_hours", "x_stop_after_old"):
+    for needed in ("x_min_own_words", "x_window_hours", "x_stop_after_old",
+                   "x_min_reposts", "x_min_likes"):
         if needed not in out:
             die(f"settings.md's Numbers table has no {needed}")
     return out
@@ -130,6 +136,8 @@ def filter_tweets(data: dict, settings: dict):
     min_words = settings["x_min_own_words"]
     window_hours = settings["x_window_hours"]
     stop_after_old = settings["x_stop_after_old"]
+    min_reposts = settings["x_min_reposts"]
+    min_likes = settings["x_min_likes"]
     tweets = data.get("tweets") or []
 
     scraped_at = parse_iso(data["scraped_at"])
@@ -145,10 +153,12 @@ def filter_tweets(data: dict, settings: dict):
             rule = 2
         elif boundary is not None and i >= boundary:
             rule = 3
-        elif t.get("has_link") and words < min_words:
+        elif t.get("has_link"):
             rule = 4
         elif words < min_words and not t.get("quoted_text"):
             rule = 5
+        elif t.get("reposts", 0) < min_reposts and t.get("likes", 0) < min_likes:
+            rule = 6
         else:
             rule = None
 
@@ -158,6 +168,24 @@ def filter_tweets(data: dict, settings: dict):
             dropped.append({"id": t["id"], "rule": rule})
 
     return kept, dropped
+
+
+def write_links_md(path: Path, run_name: str, kept: list):
+    """Write DIR/links.md: every survivor, permalink plus POST/REPOST, and
+    nothing that failed a rule. Plain markdown, one entry per tweet, the
+    bare url on its own line so a dispatcher can pull it back out with a
+    regex.
+    """
+    lines = [f"# links: {run_name}", "", f"survivors: {len(kept)}", ""]
+    for t in kept:
+        kind = "REPOST" if t.get("reposted_by") else "POST"
+        lines.append(f"## {kind}")
+        lines.append(f"- author: {t.get('author', '')}")
+        if kind == "REPOST":
+            lines.append(f"- reposted_by: {t.get('reposted_by', '')}")
+        lines.append(t.get("url", ""))
+        lines.append("")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 # ---------------------------------------------------------------- main
@@ -189,6 +217,7 @@ def main():
         "dropped": dropped,
     }
     write_json(run_dir / "kept.json", out)
+    write_links_md(run_dir / "links.md", run_dir.name, kept)
 
     by_rule = {}
     for d in dropped:

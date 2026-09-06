@@ -17,6 +17,13 @@ judgment to fake) and do NOT drive a browser. They cover:
   - cluster's coverage check catches a missing or duplicated id
   - the judge merge step fills judge-merge.md's placeholders and calls
     `claude` at the configured model (mocked)
+  - the read step (step 3) now runs its batches POOLED, up to
+    x_agents_active_max at once, each batch its own ego task space -- not
+    serially, which was the pre-2026-09-06 rule
+  - the write step (step 7) fills every one of prompts/write.md's twelve
+    placeholders correctly, and resolves each pick's permalink to its
+    notes/<id>.md file, failing loudly (never silently dropping the pick)
+    when a note is missing
 """
 
 import json
@@ -242,6 +249,293 @@ class TestJudgeMerge(unittest.TestCase):
                     mock_die.side_effect = SystemExit(1)
                     with self.assertRaises(SystemExit):
                         x_run.merge_judge_verdicts(run_dir, ["{}"], settings, "opus")
+
+
+class TestReadStageConcurrency(unittest.TestCase):
+    """Job 1: the read stage is pooled, not serial. This test would FAIL if
+    the read stage silently went back to running its batches one at a time
+    (max_workers pinned to 1) -- it asserts the pool is opened with the
+    settings value, not a hard-coded 1."""
+
+    def _make_links_md(self, n):
+        lines = ["## POST"]
+        for i in range(n):
+            lines.append(f"- author: @acct{i}")
+            lines.append(f"https://x.com/acct{i}/status/{1000 + i}")
+        return "\n".join(lines) + "\n"
+
+    def test_batches_cover_every_link_exactly_once_at_the_settings_batch_size(self):
+        settings = {"x_read_batch": 3, "x_agents_active_max": 8, "read_model": "sonnet"}
+        with tempfile.TemporaryDirectory() as td:
+            run_dir = Path(td)
+            (run_dir / "links.md").write_text(self._make_links_md(10), encoding="utf-8")
+
+            seen_ids = []
+
+            def fake_run_pool(jobs, max_workers):
+                self.assertEqual(max_workers, settings["x_agents_active_max"],
+                                  "read stage did not pool at x_agents_active_max")
+                return [job() for job in jobs]
+
+            def fake_call_claude(prompt_text, model, cwd, timeout=1800):
+                ids = re.findall(r"^id:\s*(\d+)\s*$", prompt_text, re.M)
+                seen_ids.extend(ids)
+                notes_dir = run_dir / "notes"
+                for tid in ids:
+                    (notes_dir / f"{tid}.md").write_text(
+                        "# " + tid + "\n\n- id: " + tid + "\n- status: ok\n\n"
+                        "## full_text\n\nhello\n\n## quoted\n\n(none)\n\n## media\n\n(none)\n",
+                        encoding="utf-8",
+                    )
+                return "wrote notes"
+
+            with mock.patch.object(x_run, "run_pool", side_effect=fake_run_pool), \
+                    mock.patch.object(x_run, "call_claude", side_effect=fake_call_claude):
+                x_run.step_read(run_dir, settings)
+
+            expected_ids = [str(1000 + i) for i in range(10)]
+            self.assertEqual(sorted(seen_ids), sorted(expected_ids))
+            self.assertEqual(len(seen_ids), len(set(seen_ids)), "a link was read by more than one batch")
+
+    def test_pool_opened_with_agents_active_max_not_hardcoded_serial(self):
+        """The specific regression this guards: a read step that reverts to
+        READ_MAX_WORKERS = 1 (the old 'browser is the one serial thing'
+        rule) fails this test, because it asserts the pool call's
+        max_workers came from settings, and a fixed max_workers of 1 with
+        x_agents_active_max set to 8 in settings does not match."""
+        settings = {"x_read_batch": 3, "x_agents_active_max": 8, "read_model": "sonnet"}
+        with tempfile.TemporaryDirectory() as td:
+            run_dir = Path(td)
+            (run_dir / "links.md").write_text(self._make_links_md(9), encoding="utf-8")
+
+            captured = {}
+
+            def fake_run_pool(jobs, max_workers):
+                captured["max_workers"] = max_workers
+                captured["n_jobs"] = len(jobs)
+                return [job() for job in jobs]
+
+            def fake_call_claude(prompt_text, model, cwd, timeout=1800):
+                ids = re.findall(r"^id:\s*(\d+)\s*$", prompt_text, re.M)
+                notes_dir = run_dir / "notes"
+                for tid in ids:
+                    (notes_dir / f"{tid}.md").write_text(
+                        "# " + tid + "\n\n- id: " + tid + "\n- status: ok\n\n"
+                        "## full_text\n\nhello\n\n## quoted\n\n(none)\n\n## media\n\n(none)\n",
+                        encoding="utf-8",
+                    )
+                return "wrote notes"
+
+            with mock.patch.object(x_run, "run_pool", side_effect=fake_run_pool), \
+                    mock.patch.object(x_run, "call_claude", side_effect=fake_call_claude):
+                x_run.step_read(run_dir, settings)
+
+            self.assertEqual(captured["n_jobs"], 3)  # ceil(9/3)
+            self.assertNotEqual(captured["max_workers"], 1,
+                                 "read stage ran its batches serially -- the old rule is back")
+            self.assertEqual(captured["max_workers"], 8)
+
+    def test_each_batch_gets_its_own_ego_task_space(self):
+        """GOAL.md: 'each opens its own ego task space... never two agents
+        in one task space.' Each batch's filled prompt must carry a
+        distinct TASK_SPACE value."""
+        settings = {"x_read_batch": 2, "x_agents_active_max": 8, "read_model": "sonnet"}
+        with tempfile.TemporaryDirectory() as td:
+            run_dir = Path(td)
+            (run_dir / "links.md").write_text(self._make_links_md(6), encoding="utf-8")
+
+            task_spaces = []
+
+            def fake_call_claude(prompt_text, model, cwd, timeout=1800):
+                m = re.search(r"Browser task space to use:\s*(.+)", prompt_text)
+                self.assertIsNotNone(m)
+                task_spaces.append(m.group(1).strip())
+                ids = re.findall(r"^id:\s*(\d+)\s*$", prompt_text, re.M)
+                notes_dir = run_dir / "notes"
+                for tid in ids:
+                    (notes_dir / f"{tid}.md").write_text(
+                        "# " + tid + "\n\n- id: " + tid + "\n- status: ok\n\n"
+                        "## full_text\n\nhello\n\n## quoted\n\n(none)\n\n## media\n\n(none)\n",
+                        encoding="utf-8",
+                    )
+                return "wrote notes"
+
+            with mock.patch.object(x_run, "call_claude", side_effect=fake_call_claude):
+                x_run.step_read(run_dir, settings)
+
+            self.assertEqual(len(task_spaces), 3)  # ceil(6/2)
+            self.assertEqual(len(set(task_spaces)), len(task_spaces), "two batches shared one task space")
+
+
+class TestWriteStepNoteResolution(unittest.TestCase):
+    """Job 2's interface gap: picks.md carries a permalink, notes are filed
+    by id. build_notes_block must resolve one to the other, and must fail
+    loudly -- never silently drop the pick -- when the note is missing."""
+
+    def test_resolves_permalink_to_note_by_id(self):
+        with tempfile.TemporaryDirectory() as td:
+            run_dir = Path(td)
+            (run_dir / "notes").mkdir()
+            (run_dir / "notes" / "111.md").write_text(
+                "# 111\n\n- id: 111\n\n## full_text\n\nhello world\n", encoding="utf-8")
+            (run_dir / "notes" / "999999.md").write_text(
+                "# 999999\n\n- id: 999999\n\n## full_text\n\nNOT PICKED\n", encoding="utf-8")
+            picks = [{"title": "A", "handle": "@a",
+                      "url": "https://x.com/a/status/111", "id": "111"}]
+            block = x_run.build_notes_block(run_dir, picks)
+            self.assertIn("111", block)
+            self.assertIn("hello world", block)
+            self.assertNotIn("NOT PICKED", block, "a note for an unpicked tweet leaked into {{NOTES}}")
+
+    def test_missing_note_fails_loudly_and_does_not_drop_the_pick(self):
+        """This test FAILS if a missing note is silently skipped instead of
+        dying: it asserts the run stops (SystemExit) and that the die
+        message names both the pick's title and its expected note id."""
+        with tempfile.TemporaryDirectory() as td:
+            run_dir = Path(td)
+            (run_dir / "notes").mkdir()
+            (run_dir / "notes" / "111.md").write_text(
+                "# 111\n\n- id: 111\n\n## full_text\n\nhello\n", encoding="utf-8")
+            picks = [
+                {"title": "Has a note", "handle": "@a",
+                 "url": "https://x.com/a/status/111", "id": "111"},
+                {"title": "Missing its note", "handle": "@b",
+                 "url": "https://x.com/b/status/222", "id": "222"},
+            ]
+            with mock.patch.object(x_run, "die") as mock_die:
+                mock_die.side_effect = SystemExit(1)
+                with self.assertRaises(SystemExit):
+                    x_run.build_notes_block(run_dir, picks)
+                msg = mock_die.call_args[0][0]
+                self.assertIn("Missing its note", msg)
+                self.assertIn("222", msg)
+                # and it must not have silently returned a block missing just
+                # that one pick -- the call under test raised before returning.
+
+    def test_parse_picks_md_dies_on_a_pick_with_no_permalink(self):
+        with tempfile.TemporaryDirectory() as td:
+            run_dir = Path(td)
+            picks_path = run_dir / "picks.md"
+            picks_path.write_text(
+                "# X list picks\n\nRun: x · subjects judged: 1 · kept: 1 · cut by the ceiling: 0\n\n"
+                "## 1. No permalink here\n\n- **Tag:** TRENDING\n- **Storyline:** s\n",
+                encoding="utf-8",
+            )
+            with mock.patch.object(x_run, "die") as mock_die:
+                mock_die.side_effect = SystemExit(1)
+                with self.assertRaises(SystemExit):
+                    x_run.parse_picks_md(picks_path)
+                self.assertIn("No permalink here", mock_die.call_args[0][0])
+
+
+class TestFormatRunDatetime(unittest.TestCase):
+    def test_formats_the_run_name_into_the_fixed_shape(self):
+        self.assertEqual(
+            x_run.format_run_datetime("2026-09-06-0954"),
+            "6 September 2026 at 09:54 UTC",
+        )
+
+    def test_tolerates_a_collision_suffix(self):
+        self.assertEqual(
+            x_run.format_run_datetime("2026-09-06-0954-2"),
+            "6 September 2026 at 09:54 UTC",
+        )
+
+
+class TestStepWrite(unittest.TestCase):
+    """Job 2: step_write fills every one of prompts/write.md's twelve
+    placeholders. This mocks `claude -p` the way TestJudgeMerge does."""
+
+    def _seed_run_dir(self, run_dir: Path):
+        (run_dir / "notes").mkdir()
+        (run_dir / "notes" / "111.md").write_text(
+            "# 111\n\n- id: 111\n- status: ok\n\n## full_text\n\nhello world\n\n"
+            "## quoted\n\n(none)\n\n## media\n\n(none)\n",
+            encoding="utf-8",
+        )
+        picks_md = (
+            "# X list picks\n\n"
+            "Run: 2026-09-06-0954 · subjects judged: 1 · kept: 1 · cut by the ceiling: 0\n\n"
+            "## 1. Something happened\n\n"
+            "- **Tag:** TRENDING\n- **Flags:** VELOCITY\n"
+            "- **Storyline:** A very particular test storyline\n"
+            "- **Why:** because the test says so\n"
+            "- **The tweet that states it best:**\n"
+            "  - @acct — https://x.com/acct/status/111\n"
+            "  > hello world\n"
+        )
+        (run_dir / "picks.md").write_text(picks_md, encoding="utf-8")
+        (run_dir / "subjects.json").write_text(
+            json.dumps({"subjects": [{"tweet_ids": ["111"]}]}), encoding="utf-8")
+
+    def test_fills_every_placeholder_and_writes_brief(self):
+        prompt_path = ROOT / "prompts" / "write.md"
+        if not prompt_path.exists():
+            self.skipTest("prompts/write.md not built yet")
+        template_path = ROOT / "templates" / "x-brief.md"
+        if not template_path.exists():
+            self.skipTest("templates/x-brief.md not built yet")
+
+        settings = load_settings(SETTINGS_PATH)
+        with tempfile.TemporaryDirectory() as td:
+            run_dir = Path(td) / "2026-09-06-0954"
+            run_dir.mkdir()
+            self._seed_run_dir(run_dir)
+
+            captured = {}
+
+            def fake_call_claude(prompt_text, model, cwd, timeout=1800):
+                captured["prompt"] = prompt_text
+                captured["model"] = model
+                (run_dir / "brief.md").write_text("# What the list is moving on\n", encoding="utf-8")
+                return "wrote 1 item, 1 TRENDING, 0 CURIOUS"
+
+            with mock.patch.object(x_run, "call_claude", side_effect=fake_call_claude):
+                x_run.step_write(run_dir, settings, ROOT.parent)
+
+            self.assertTrue((run_dir / "brief.md").exists())
+            prompt = captured["prompt"]
+            self.assertNotIn("{{", prompt, "an unfilled placeholder leaked into the write prompt")
+            self.assertEqual(captured["model"], settings["write_model"])
+
+            # every one of the twelve placeholders' values, present in the prompt
+            self.assertIn(str(run_dir), prompt)                                    # RUN_DIR
+            self.assertIn("2026-09-06-0954", prompt)                               # RUN_NAME
+            self.assertIn(str(settings["x_window_hours"]), prompt)                 # WINDOW_HOURS
+            self.assertIn("6 September 2026 at 09:54 UTC", prompt)                 # RUN_DATETIME
+            self.assertIn(str(settings["x_words_per_sentence_max"]), prompt)       # WORDS_PER_SENTENCE_MAX
+            self.assertIn(str(run_dir / "brief.md"), prompt)                       # OUTPUT_PATH
+            self.assertIn("A very particular test storyline", prompt)              # PICKS
+            self.assertIn("hello world", prompt)                                   # NOTES (from notes/111.md)
+            self.assertIn("# X brief", prompt)                                     # TEMPLATE (its own title)
+
+    def test_dies_when_a_pick_has_no_matching_note(self):
+        prompt_path = ROOT / "prompts" / "write.md"
+        if not prompt_path.exists():
+            self.skipTest("prompts/write.md not built yet")
+        settings = load_settings(SETTINGS_PATH)
+        with tempfile.TemporaryDirectory() as td:
+            run_dir = Path(td) / "2026-09-06-0954"
+            run_dir.mkdir()
+            (run_dir / "notes").mkdir()
+            # no notes/111.md written -- the pick below has no matching note
+            picks_md = (
+                "# X list picks\n\nRun: x · subjects judged: 1 · kept: 1 · cut by the ceiling: 0\n\n"
+                "## 1. Something happened\n\n- **Tag:** TRENDING\n- **Flags:** VELOCITY\n"
+                "- **Storyline:** s\n- **Why:** because\n"
+                "- **The tweet that states it best:**\n  - @acct — https://x.com/acct/status/111\n  > hi\n"
+            )
+            (run_dir / "picks.md").write_text(picks_md, encoding="utf-8")
+            (run_dir / "subjects.json").write_text(
+                json.dumps({"subjects": [{"tweet_ids": ["111"]}]}), encoding="utf-8")
+
+            with mock.patch.object(x_run, "die") as mock_die, \
+                    mock.patch.object(x_run, "call_claude") as mock_call:
+                mock_die.side_effect = SystemExit(1)
+                with self.assertRaises(SystemExit):
+                    x_run.step_write(run_dir, settings, ROOT.parent)
+                mock_call.assert_not_called()
+                self.assertIn("111", mock_die.call_args[0][0])
 
 
 class TestNoHardcodedSettings(unittest.TestCase):

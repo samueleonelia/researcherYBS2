@@ -152,6 +152,22 @@ def word_count(text):
     return len((text or "").split())
 
 
+def clears_engagement_floor(t: dict, scraped_at, reposts_rate, likes_rate,
+                             views_rate) -> bool:
+    """Rule 6, amended 2026-09-06: the floor RISES WITH AGE. A tweet
+    clears it the moment any ONE of reposts, likes or views reaches its
+    own per-hour rate times the tweet's age in hours at `scraped_at`. Kept
+    independent of x_filter.py's own copy on purpose -- this file must
+    never import x_filter."""
+    posted_at = parse_iso(t["posted_at"])
+    age_h = max((scraped_at - posted_at).total_seconds() / 3600.0, 0.0)
+    return (
+        t.get("reposts", 0) >= reposts_rate * age_h
+        or t.get("likes", 0) >= likes_rate * age_h
+        or t.get("views", 0) >= views_rate * age_h
+    )
+
+
 def expected_filter(tweets_doc: dict, settings: dict):
     """Recompute the six filter rules independently of x_filter.py, per
     the design's fixed order (plans/x-lists-design.md section 2, as amended
@@ -159,15 +175,18 @@ def expected_filter(tweets_doc: dict, settings: dict):
     (kept_ids: set, dropped: {id: rule}).
 
     Rule 4 (has_link) no longer looks at word count at all -- any link at
-    all drops the tweet, however much commentary rides with it. Rule 6 is
-    new: an engagement floor, reposts < x_min_reposts AND likes <
-    x_min_likes (either number alone clears it)."""
+    all drops the tweet, however much commentary rides with it. Rule 6,
+    also amended 2026-09-06, is an age-scaled engagement floor: a tweet
+    clears it the moment reposts, likes or views (any one) reaches its own
+    per-hour rate times the tweet's age in hours at scraped_at -- not the
+    old absolute floor of reposts < x_min_reposts AND likes < x_min_likes."""
     tweets = tweets_doc.get("tweets") or []
     window_hours = settings["x_window_hours"]
     stop_after_old = settings["x_stop_after_old"]
     min_words = settings["x_min_own_words"]
-    min_reposts = settings["x_min_reposts"]
-    min_likes = settings["x_min_likes"]
+    reposts_rate = settings["x_reposts_per_hour"]
+    likes_rate = settings["x_likes_per_hour"]
+    views_rate = settings["x_views_per_hour"]
 
     scraped_at = parse_iso(tweets_doc["scraped_at"])
     cutoff = scraped_at - timedelta(hours=window_hours)
@@ -186,7 +205,8 @@ def expected_filter(tweets_doc: dict, settings: dict):
             rule = 4
         elif words < min_words and not t.get("quoted_text"):
             rule = 5
-        elif t.get("reposts", 0) < min_reposts and t.get("likes", 0) < min_likes:
+        elif not clears_engagement_floor(t, scraped_at, reposts_rate,
+                                          likes_rate, views_rate):
             rule = 6
         else:
             rule = None
@@ -202,7 +222,7 @@ def check3_kept(tweets_doc: dict, kept_doc: dict, settings: dict):
     order, and nothing else was dropped -- checked against an independent
     recomputation of the rules, not against x_filter.py's own code."""
     for key in ("x_window_hours", "x_stop_after_old", "x_min_own_words",
-                "x_min_reposts", "x_min_likes"):
+                "x_reposts_per_hour", "x_likes_per_hour", "x_views_per_hour"):
         if key not in settings:
             return False, f"settings.md has no {key}"
 
@@ -379,3 +399,220 @@ def check8_links(kept_doc: dict, links_md_text: str):
         return False, f"links.md is missing kept url(s): {missing}"
 
     return True, f"links.md lists exactly the {len(expected_urls)} kept urls, correctly marked"
+
+
+# ---------------------------------------------------------------- check 10
+#
+# Check 10, in full, needs a human reader: "follows templates/x-brief.md",
+# "the story in Yaron's lens", "obeys preferences.md". Those go to a sonnet
+# verifier. What follows is the part a script can decide from the two files
+# alone, independent of x_run.py and x_filter.py (this module imports
+# neither, on purpose -- it re-parses picks.md and brief.md itself, the same
+# way check3/check8 above re-derive the filter and links.md rather than
+# trusting the code that produced them):
+#
+#   - brief.md exists and is non-empty
+#   - item count equals the pick count, and no permalink appears that is not
+#     in picks.md, and none is missing
+#   - every TRENDING item precedes every CURIOUS item, and (going a little
+#     further, since it costs nothing extra to check) each item actually
+#     carries the permalink of a pick tagged with its own section's tag
+#   - every sentence is at or under x_words_per_sentence_max words
+#   - every pick's storyline line appears in the brief
+#
+# Left to the human/sonnet verifier, deliberately not faked here:
+#   - "follows templates/x-brief.md" beyond the mechanical shape above (the
+#     exact heading punctuation, bullet order/labels, the closing-line
+#     wording) -- matching prose shape is a reading judgment, not a
+#     re-derivable fact.
+#   - "the story in Yaron's lens" -- a judgment about the writing itself.
+#   - "every figure and quote in it appears in that pick's note" -- checking
+#     this for real means reading the item's prose and the note's full_text
+#     and deciding what counts as "the same figure" or "the same quote"
+#     (rounding, paraphrase, a number spelled out vs digits). A script that
+#     tried to automate this would either reject good prose that restates a
+#     figure in different words, or pass bad prose by only checking for a
+#     bare digit's presence somewhere in the note -- neither is the check.
+#     This needs a reader.
+#   - "obeys preferences.md" -- preferences are prose instructions, not a
+#     table of rules a script can enumerate and test for.
+
+PICKS_HEADING_RE = re.compile(r"^##\s+\d+\.\s*(.+?)\s*$", re.M)
+PICKS_TWEET_LINE_RE = re.compile(r"^\s*-\s*(@\S+)\s*—\s*(https?://\S+)\s*$", re.M)
+PICKS_TAG_RE = re.compile(r"^-\s*\*\*Tag:\*\*\s*(\S+)", re.M)
+PICKS_STORYLINE_RE = re.compile(r"^-\s*\*\*Storyline:\*\*\s*(.+?)\s*$", re.M)
+
+BRIEF_SECTION_RE = re.compile(r"^##\s+(TRENDING|CURIOUS)\s*$", re.M)
+BRIEF_ITEM_HEADING_RE = re.compile(r"^###\s+(\d+)\.\s*(.+?)\s*$", re.M)
+BRIEF_SOURCE_RE = re.compile(r"^-\s*\*\*Source:\*\*\s*\[[^\]]*\]\((https?://\S+)\)\s*$", re.M)
+
+
+def parse_picks_for_brief(picks_md_text: str):
+    """picks.md into a list of {title, tag, storyline, url} dicts, one per
+    pick, in file order. Kept deliberately independent of x_run.py's own
+    parse_picks_md -- a bug in one must not hide the same bug in the other."""
+    headings = list(PICKS_HEADING_RE.finditer(picks_md_text))
+    picks = []
+    for i, m in enumerate(headings):
+        end = headings[i + 1].start() if i + 1 < len(headings) else len(picks_md_text)
+        block = picks_md_text[m.start():end]
+        tag_m = PICKS_TAG_RE.search(block)
+        story_m = PICKS_STORYLINE_RE.search(block)
+        url_m = PICKS_TWEET_LINE_RE.search(block)
+        if not (tag_m and story_m and url_m):
+            raise ValueError(f"pick '{m.group(1).strip()}' in picks.md is missing Tag, Storyline or its tweet line")
+        picks.append({
+            "title": m.group(1).strip(),
+            "tag": tag_m.group(1).strip(),
+            "storyline": story_m.group(1).strip(),
+            "url": url_m.group(2).strip(),
+        })
+    return picks
+
+
+def parse_brief_items(brief_md_text: str):
+    """brief.md into a list of {number, section, url} dicts, one per ###
+    item, in document order, tagged with the ## section (TRENDING/CURIOUS)
+    it falls under."""
+    sections = list(BRIEF_SECTION_RE.finditer(brief_md_text))
+    headings = list(BRIEF_ITEM_HEADING_RE.finditer(brief_md_text))
+    items = []
+    for i, m in enumerate(headings):
+        end = headings[i + 1].start() if i + 1 < len(headings) else len(brief_md_text)
+        block = brief_md_text[m.start():end]
+
+        section = None
+        for sm in sections:
+            if sm.start() < m.start():
+                section = sm.group(1)
+            else:
+                break
+
+        source_m = BRIEF_SOURCE_RE.search(block)
+        items.append({
+            "number": int(m.group(1)),
+            "heading": m.group(2).strip(),
+            "section": section,
+            "url": source_m.group(1).strip() if source_m else None,
+            "block": block,
+        })
+    return items
+
+
+SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
+
+
+def extract_prose_sentences(brief_md_text: str):
+    """The sentences check 10's sentence-length ceiling applies to.
+
+    Decision (documented so a verifier can re-derive it independently):
+    the ceiling applies to written prose -- item headings, story paragraphs,
+    and the closing line -- not to the `**Run:**` metadata line, the `##`
+    section headers, the `---` rule, or the three bullets (`Storyline`,
+    `Flags`, `Source`): those are labels and copied values, not composed
+    sentences, and `Source` is a markdown link whose brackets and
+    parentheses are not sentence punctuation.
+
+    A "sentence" is text ending in `.`, `!` or `?` followed by whitespace or
+    the end of the text. A "word" is a whitespace-separated token (so a
+    hyphenated word or a number with a decimal point count as one word,
+    matching how a person would count it reading aloud). An item heading's
+    leading `### <n>.` numbering is stripped first so the item number itself
+    is never mistaken for a sentence end.
+    """
+    lines = brief_md_text.splitlines()
+    prose = []
+    for raw in lines:
+        s = raw.strip()
+        if not s:
+            continue
+        if s.startswith("**Run:**"):
+            continue
+        if s.startswith("## "):
+            continue
+        if s.startswith("- **"):
+            continue
+        if s == "---":
+            continue
+        if s.startswith("### "):
+            s = re.sub(r"^###\s*\d+\.\s*", "", s)
+        if s.startswith("# "):
+            continue
+        prose.append(s)
+    text = " ".join(prose)
+    if not text.strip():
+        return []
+    return [s.strip() for s in SENTENCE_SPLIT_RE.split(text) if s.strip()]
+
+
+def check10_mechanical(picks_md_text: str, brief_md_text: str, settings: dict):
+    """The mechanical slice of check 10 -- see the block comment above this
+    section for exactly what is and is not covered here."""
+    if "x_words_per_sentence_max" not in settings:
+        return False, "settings.md has no x_words_per_sentence_max"
+    max_words = settings["x_words_per_sentence_max"]
+
+    if not (brief_md_text or "").strip():
+        return False, "brief.md does not exist or is empty"
+
+    try:
+        picks = parse_picks_for_brief(picks_md_text)
+    except ValueError as e:
+        return False, f"picks.md could not be parsed: {e}"
+
+    try:
+        items = parse_brief_items(brief_md_text)
+    except Exception as e:  # noqa: BLE001 - surface as a check failure, not a crash
+        return False, f"brief.md could not be parsed: {e}"
+
+    # item count vs pick count, and permalink set equality
+    if len(items) != len(picks):
+        return False, f"brief.md has {len(items)} item(s), picks.md has {len(picks)} pick(s)"
+
+    pick_urls = [p["url"] for p in picks]
+    item_urls = [it["url"] for it in items]
+    if None in item_urls:
+        bad = [it["number"] for it in items if it["url"] is None]
+        return False, f"item(s) {bad} have no parseable Source permalink"
+    if set(item_urls) != set(pick_urls):
+        missing = set(pick_urls) - set(item_urls)
+        extra = set(item_urls) - set(pick_urls)
+        return False, f"brief permalinks do not match picks.md (missing={missing}, extra={extra})"
+    if len(set(item_urls)) != len(item_urls):
+        return False, "a permalink appears in more than one brief item"
+
+    # TRENDING before CURIOUS, and each item's permalink actually belongs to
+    # a pick tagged with that item's own section
+    seen_curious = False
+    for it in items:
+        if it["section"] is None:
+            return False, f"item {it['number']} does not fall under a ## TRENDING or ## CURIOUS heading"
+        if it["section"] == "CURIOUS":
+            seen_curious = True
+        elif seen_curious:
+            return False, f"item {it['number']} is TRENDING but appears after a CURIOUS item"
+
+    url_to_tag = {p["url"]: p["tag"] for p in picks}
+    for it in items:
+        expected_tag = url_to_tag.get(it["url"])
+        if expected_tag and expected_tag != it["section"]:
+            return False, (
+                f"item {it['number']} is under {it['section']} but its pick "
+                f"'{expected_tag}' -- {it['url']}"
+            )
+
+    # sentence length ceiling
+    for sentence in extract_prose_sentences(brief_md_text):
+        n = word_count(sentence)
+        if n > max_words:
+            return False, f"a sentence has {n} words (max {max_words}): {sentence[:120]!r}"
+
+    # every pick's storyline line appears in the brief, character for character
+    missing_storylines = [p["title"] for p in picks if p["storyline"] not in brief_md_text]
+    if missing_storylines:
+        return False, f"pick(s) missing their storyline in brief.md: {missing_storylines}"
+
+    return True, (
+        f"{len(items)} item(s) match {len(picks)} pick(s); TRENDING precedes CURIOUS; "
+        f"every sentence <= {max_words} words; every storyline present"
+    )

@@ -11,7 +11,11 @@ in order:
     3. outside the window
     4. has_link
     5. fewer than x_min_own_words words and no quoted_text
-    6. reposts < x_min_reposts AND likes < x_min_likes
+    6. below the age-scaled engagement floor: a tweet clears rule 6 the
+       moment any ONE of reposts, likes or views reaches its own rate
+       (x_reposts_per_hour, x_likes_per_hour, x_views_per_hour) times the
+       tweet's age in hours at scraped_at; nothing clears it if all three
+       fall short
 
 `links.md` lists every survivor (nothing that failed a rule) as a
 permalink, marked POST or REPOST -- the file the read stage consumes.
@@ -31,10 +35,11 @@ Python 3, standard library only.
 
 import argparse
 import json
-import re
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+from x_settings import load_settings, require
 
 
 def die(msg: str, code: int = 2):
@@ -70,40 +75,26 @@ def parse_iso(s: str) -> datetime:
     return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
 
 
-# ---------------------------------------------------------------- settings
-
-def load_settings(path: Path) -> dict:
-    """Read the `## Numbers` table of settings.md. Digits become ints."""
-    if not path.exists():
-        die(f"no settings file at {path}")
-    out, section = {}, ""
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if line.startswith("## "):
-            section = line[3:].strip().lower()
-            continue
-        if not line.startswith("|") or section != "numbers":
-            continue
-        cells = [c.strip() for c in line.strip("|").split("|")]
-        if len(cells) < 2:
-            continue
-        key, raw = cells[0], cells[1]
-        if key.lower() == "setting" or set(key) <= set("-: "):
-            continue
-        if key in out:
-            die(f"settings.md names {key} twice")
-        out[key] = int(raw) if re.fullmatch(r"\d+", raw) else raw
-    for needed in ("x_min_own_words", "x_window_hours", "x_stop_after_old",
-                   "x_min_reposts", "x_min_likes"):
-        if needed not in out:
-            die(f"settings.md's Numbers table has no {needed}")
-    return out
-
-
 # ---------------------------------------------------------------- filter
 
 def word_count(text: str) -> int:
     return len((text or "").split())
+
+
+def clears_engagement_floor(t: dict, scraped_at: datetime, reposts_rate,
+                             likes_rate, views_rate) -> bool:
+    """Rule 6: the floor RISES WITH AGE. A tweet clears it the moment any
+    one of reposts, likes or views reaches its own per-hour rate times the
+    tweet's age in hours at `scraped_at`. A tweet with age_h == 0 needs
+    literally nothing -- the design's own intent ("a very fresh tweet
+    needs almost nothing")."""
+    posted_at = parse_iso(t["posted_at"])
+    age_h = max((scraped_at - posted_at).total_seconds() / 3600.0, 0.0)
+    return (
+        t.get("reposts", 0) >= reposts_rate * age_h
+        or t.get("likes", 0) >= likes_rate * age_h
+        or t.get("views", 0) >= views_rate * age_h
+    )
 
 
 def window_boundary(tweets: list, cutoff: datetime, stop_after_old: int):
@@ -133,11 +124,11 @@ def window_boundary(tweets: list, cutoff: datetime, stop_after_old: int):
 
 
 def filter_tweets(data: dict, settings: dict):
-    min_words = settings["x_min_own_words"]
-    window_hours = settings["x_window_hours"]
-    stop_after_old = settings["x_stop_after_old"]
-    min_reposts = settings["x_min_reposts"]
-    min_likes = settings["x_min_likes"]
+    (min_words, window_hours, stop_after_old, reposts_rate, likes_rate,
+     views_rate) = require(
+        settings, "x_min_own_words", "x_window_hours", "x_stop_after_old",
+        "x_reposts_per_hour", "x_likes_per_hour", "x_views_per_hour",
+    )
     tweets = data.get("tweets") or []
 
     scraped_at = parse_iso(data["scraped_at"])
@@ -157,7 +148,8 @@ def filter_tweets(data: dict, settings: dict):
             rule = 4
         elif words < min_words and not t.get("quoted_text"):
             rule = 5
-        elif t.get("reposts", 0) < min_reposts and t.get("likes", 0) < min_likes:
+        elif not clears_engagement_floor(t, scraped_at, reposts_rate,
+                                          likes_rate, views_rate):
             rule = 6
         else:
             rule = None

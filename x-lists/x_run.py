@@ -15,11 +15,21 @@ drives, in order:
     5. x_score.py          (script)  ->  subjects.json, enriched
     6. judge agent(s)      (claude -p, prompts/judge.md, one per subject)
                                      ->  picks.md
+    7. write agent         (claude -p, prompts/write.md + templates/x-brief.md)
+                                     ->  brief.md
 
 Step 3 is new on 2026-09-06. The list feed only shows a collapsed preview of
 a tweet, so cluster and judge used to work from text cut off at ~280
 characters. The read step opens every surviving tweet on its own page and
-writes its full text to notes/, and steps 4 and 6 prefer that text.
+writes its full text to notes/, and steps 4 and 6 prefer that text. Step 3
+also runs one sub-agent per batch of `x_read_batch` links at a time (up to
+`x_agents_active_max` at once, each in its own ego task space) since
+2026-09-06 -- it used to run its batches serially on the old "the browser is
+the one serial thing" rule, which Samuele replaced.
+
+Step 7 is also new on 2026-09-06: it takes picks.md and the picked tweets'
+notes and writes the finished, show-ready brief.md -- the last step before
+the checks in x_checks.py.
 
 Every number this script obeys comes from settings.md at run time --
 nothing here is hard-coded. If a step's script does not exist yet, the
@@ -33,7 +43,7 @@ plumbing against the fixture:
     --run-dir DIR     use this folder instead of creating a fresh one
                        (e.g. one seeded with the fixture as tweets.json)
     --settings PATH   defaults to x-lists/settings.md
-    --from STEP       start at this step (1-6), skipping earlier ones
+    --from STEP       start at this step (1-7), skipping earlier ones
                        because their output is already in --run-dir
     --only STEP       run just this one step
 
@@ -60,15 +70,19 @@ STEP_NAMES = {
     4: "cluster",
     5: "score",
     6: "judge",
+    7: "write",
 }
 
-# The browser is a serial resource. GOAL.md section 3: "The browser is the one
-# serial thing: never two agents on it at once." RUNLOG breach #1 records what
-# happened when two agents drove it anyway. ego-browser task spaces isolate
-# *tabs*, not the single browser process the CLI drives, so the read step runs
-# its batches one after another regardless of x_agents_active_max. This is not
-# a settings number; it is the project's standing rule about the browser.
-READ_MAX_WORKERS = 1
+# The old rule here read "the browser is the one serial thing: never two
+# agents on it at once" and forced the read step to run its batches one
+# after another. Samuele replaced that rule on 2026-09-06 (GOAL.md, quoted
+# in x-lists/GOAL.md): many read sub-agents now run at the same time, each
+# in its own ego task space; the constraint that survives is *inside* one
+# sub-agent -- it opens one link at a time, finishes its note, then opens
+# the next of its own batch. Never two tabs in one task space. So the read
+# step is now pooled exactly like cluster and judge: up to
+# `x_agents_active_max` batches in flight at once, read from settings.md at
+# run time, never hard-coded here.
 
 
 def die(msg: str, code: int = 1):
@@ -369,19 +383,27 @@ def step_read(run_dir: Path, settings: dict):
 
     batch_size = settings["x_read_batch"]
     model = settings.get("read_model", "sonnet")
+    max_workers = settings.get("x_agents_active_max", 1)
     batches = list(chunked(links, batch_size))
     template = load_prompt_template("read.md", 3, "read")
-    task_space = f"x-lists read {run_dir.name}"
 
     def make_job(i, batch):
         def job():
+            # One ego task space per batch, per GOAL.md's 2026-09-06 rule:
+            # many read sub-agents run at the same time, each in its own
+            # task space, working only in it. Never two batches sharing one
+            # space -- that would be two agents in one task space, which is
+            # the thing that must never happen.
+            task_space = f"x-lists read {run_dir.name} batch {i + 1}"
             values = {
                 "RUN_DIR": str(run_dir),
                 "NOTES_DIR": str(notes_dir),
                 "TASK_SPACE": task_space,
                 "BATCH_NOTE": (
                     f"This is batch {i + 1} of {len(batches)}. Other batches hold "
-                    f"other tweets; you read only the ones listed below."
+                    f"other tweets, read by other sub-agents at the same time in "
+                    f"their own task spaces; you read only the ones listed below, "
+                    f"one at a time, in your own task space."
                 ),
                 "LINKS": "\n\n".join(link_block(l) for l in batch),
                 "ALLOWED_URLS": "\n".join(l["url"] for l in batch),
@@ -392,9 +414,10 @@ def step_read(run_dir: Path, settings: dict):
 
     print(
         f"-- step 3 (read): {len(links)} link(s) in {len(batches)} batch(es) of "
-        f"{batch_size}, model={model}, serial (the browser is not shareable)"
+        f"{batch_size}, model={model}, up to {max_workers} at once, each batch "
+        f"in its own ego task space"
     )
-    run_pool([make_job(i, b) for i, b in enumerate(batches)], READ_MAX_WORKERS)
+    run_pool([make_job(i, b) for i, b in enumerate(batches)], max_workers)
 
     validate_notes(links, notes_dir)
 
@@ -647,10 +670,134 @@ def merge_judge_verdicts(run_dir: Path, verdict_texts: list, settings: dict, mod
         die("step 6 (judge) finished but picks.md was not written")
 
 
+# ---- step 7: write ----
+
+# One pick's block in picks.md is a level-2 heading "## <n>. <title>" (written
+# by judge-merge.md, see prompts/judge-merge.md's Output section) followed by
+# its Tag/Flags/Storyline/Why lines and a nested bullet with the best tweet's
+# handle, an em dash, and its permalink, then a `>` quote line. We only need
+# the heading, the permalink (to resolve the id) and the storyline text.
+PICK_HEADING_RE = re.compile(r"^##\s+\d+\.\s*(.+?)\s*$", re.M)
+PICK_TWEET_LINE_RE = re.compile(r"^\s*-\s*(@\S+)\s*—\s*(https?://\S+)\s*$", re.M)
+
+
+def parse_picks_md(path: Path) -> list:
+    """picks.md into a list of {title, handle, url, id} dicts, one per pick,
+    in file order. Dies naming the pick if it carries no permalink line --
+    the write step cannot resolve a note without one."""
+    if not path.exists():
+        die(
+            "step 7 (write) cannot run: picks.md is missing at "
+            f"{path}. It is written by step 6 (judge)."
+        )
+    text = path.read_text(encoding="utf-8")
+    headings = list(PICK_HEADING_RE.finditer(text))
+    picks = []
+    for i, m in enumerate(headings):
+        end = headings[i + 1].start() if i + 1 < len(headings) else len(text)
+        block = text[m.start():end]
+        title = m.group(1).strip()
+        tweet_m = PICK_TWEET_LINE_RE.search(block)
+        if not tweet_m:
+            die(f"step 7 (write) cannot run: pick '{title}' in picks.md has no tweet permalink line")
+        url = tweet_m.group(2)
+        id_m = STATUS_URL_RE.search(url)
+        if not id_m:
+            die(f"step 7 (write) cannot run: pick '{title}' has an unrecognised permalink: {url!r}")
+        picks.append({
+            "title": title,
+            "handle": tweet_m.group(1),
+            "url": url,
+            "id": id_m.group(2),
+        })
+    return picks
+
+
+def build_notes_block(run_dir: Path, picks: list) -> str:
+    """{{NOTES}}: the full text of each PICKED tweet's notes/<id>.md, one
+    block per tweet, headed by its id. The id is resolved from the pick's
+    permalink (the last path segment), per the interface gap the write step
+    has to close: picks.md carries the permalink, notes are filed by id.
+
+    Fails loudly, naming the pick and the missing id, when a pick has no
+    matching note file -- never hands the writing agent a pick with no note,
+    and never silently drops the pick (the finish-line check needs every
+    figure in the brief to trace to that pick's note, which is impossible
+    without one)."""
+    notes_dir = run_dir / "notes"
+    missing = []
+    blocks = []
+    for p in picks:
+        note_path = notes_dir / f"{p['id']}.md"
+        if not note_path.exists():
+            missing.append(f"'{p['title']}' (permalink {p['url']}, expected note id {p['id']})")
+            continue
+        blocks.append(f"### {p['id']}\n\n" + note_path.read_text(encoding="utf-8").strip())
+    if missing:
+        die(
+            "step 7 (write) cannot run: the following pick(s) have no note file "
+            f"in {notes_dir}: " + "; ".join(missing)
+        )
+    return "\n\n".join(blocks) if blocks else "(no picks, no notes)"
+
+
+def format_run_datetime(run_name: str) -> str:
+    """The run folder's name (e.g. `2026-09-06-0954`, or with a `-2`/`-final`
+    collision suffix `new_run_dir` may add) into `{{RUN_DATETIME}}`'s fixed
+    shape: `6 September 2026 at 09:54 UTC`. The write prompt does no date
+    maths itself, so this is the chain's job."""
+    m = re.match(r"^(\d{4})-(\d{2})-(\d{2})-(\d{2})(\d{2})", run_name)
+    if not m:
+        die(f"step 7 (write) cannot run: run folder name {run_name!r} is not YYYY-MM-DD-HHMM")
+    year, month, day, hour, minute = m.groups()
+    dt = datetime(int(year), int(month), int(day))
+    return f"{dt.day} {dt.strftime('%B')} {dt.year} at {hour}:{minute} UTC"
+
+
+def step_write(run_dir: Path, settings: dict, root: Path):
+    picks = parse_picks_md(run_dir / "picks.md")
+    picks_text = (run_dir / "picks.md").read_text(encoding="utf-8")
+    notes_block = build_notes_block(run_dir, picks)
+
+    subjects_doc = load_json(run_dir / "subjects.json")
+    subjects_judged = len(subjects_doc.get("subjects") or [])
+
+    template_path = HERE / "templates" / "x-brief.md"
+    if not template_path.exists():
+        die(f"step 7 (write) cannot run: templates/x-brief.md does not exist yet at {template_path}")
+    template_text = template_path.read_text(encoding="utf-8")
+
+    prompt_template = load_prompt_template("write.md", 7, "write")
+    _, _, preferences_text, lens_text = find_lens_and_profile(root)
+
+    output_path = run_dir / "brief.md"
+    model = settings.get("write_model", "opus")
+    values = {
+        "RUN_DIR": str(run_dir),
+        "RUN_NAME": run_dir.name,
+        "WINDOW_HOURS": str(settings["x_window_hours"]),
+        "RUN_DATETIME": format_run_datetime(run_dir.name),
+        "SUBJECTS_JUDGED": str(subjects_judged),
+        "WORDS_PER_SENTENCE_MAX": str(settings["x_words_per_sentence_max"]),
+        "OUTPUT_PATH": str(output_path),
+        "PICKS": picks_text,
+        "NOTES": notes_block,
+        "TEMPLATE": template_text,
+        "LENS": lens_text,
+        "PREFERENCES": preferences_text,
+    }
+    prompt = fill_template(prompt_template, values)
+    print(f"-- step 7 (write): {len(picks)} pick(s), model={model}")
+    call_claude(prompt, model, HERE)
+
+    if not output_path.exists():
+        die("step 7 (write) finished but brief.md was not written")
+
+
 # ---------------------------------------------------------------- chain
 
 def run_chain(run_dir: Path, settings_path: Path, settings: dict, start: int, only: int, root: Path):
-    steps = [only] if only else list(range(start, 7))
+    steps = [only] if only else list(range(start, 8))
     for step in steps:
         if step == 1:
             run_script_step(1, "x_scrape.py", run_dir, settings_path)
@@ -664,6 +811,8 @@ def run_chain(run_dir: Path, settings_path: Path, settings: dict, start: int, on
             run_script_step(5, "x_score.py", run_dir, settings_path)
         elif step == 6:
             step_judge(run_dir, settings, root)
+        elif step == 7:
+            step_write(run_dir, settings, root)
         else:
             die(f"no such step: {step}")
 
@@ -674,9 +823,9 @@ def main():
                      help="use this folder instead of creating a fresh one")
     ap.add_argument("--settings", default=None,
                      help="path to settings.md (default: x-lists/settings.md)")
-    ap.add_argument("--from", dest="from_step", type=int, default=1, choices=range(1, 7),
+    ap.add_argument("--from", dest="from_step", type=int, default=1, choices=range(1, 8),
                      help="start at this step, skipping earlier ones")
-    ap.add_argument("--only", type=int, default=0, choices=range(0, 7),
+    ap.add_argument("--only", type=int, default=0, choices=range(0, 8),
                      help="run just this one step (0 = off)")
     args = ap.parse_args()
 

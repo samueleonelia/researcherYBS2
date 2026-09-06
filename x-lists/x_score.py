@@ -16,6 +16,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from x_settings import load_settings
+
 FLAG_NAMES = ("CONVERGENCE", "ENDORSEMENT", "VELOCITY")
 
 
@@ -51,38 +53,6 @@ def parse_iso(s: str):
     if d.tzinfo is None:
         d = d.replace(tzinfo=timezone.utc)
     return d
-
-
-def load_settings(path: Path) -> dict:
-    """Read settings.md's `## Numbers` table: `| key | value | meaning |`.
-    Digits become ints; a trailing `%` is stripped before the int conversion;
-    anything else is kept as the text as written. Same shape as ybs_run.py's
-    load_settings, trimmed to what this script needs (no Models section)."""
-    if not path.exists():
-        die(f"no settings file at {path}")
-    out, section = {}, ""
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if line.startswith("## "):
-            section = line[3:].strip().lower()
-            continue
-        if not line.startswith("|"):
-            continue
-        cells = [c.strip() for c in line.strip("|").split("|")]
-        if len(cells) < 2:
-            continue
-        key, raw = cells[0], cells[1]
-        if key.lower() in ("setting", "step") or set(key) <= set("-: "):
-            continue
-        if section != "numbers":
-            continue
-        val = raw
-        if val.endswith("%"):
-            val = val[:-1].strip()
-        if val.lstrip("-").isdigit():
-            val = int(val)
-        out[key] = val
-    return out
 
 
 def need(settings: dict, key: str):

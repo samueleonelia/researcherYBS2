@@ -26,21 +26,37 @@ the reply-with-link rule-order case (none of the original 15 exercised
 rule 6 under the amended rules):
   - ...016: is_reply=true AND has_link=true -- must be dropped by rule 2
     (reply), not rule 4 (link), proving rule order.
-  - ...017: has_link=false, words>=6, reposts=15 (>= x_min_reposts=10),
-    likes=5 (< x_min_likes=100) -- clears the engagement floor on reposts
-    alone, so it is kept.
-  - ...018: reposts=2 (< 10), likes=150 (>= x_min_likes=100) -- clears the
-    floor on likes alone, so it is kept.
-  - ...019: reposts=3, likes=20 -- clears neither, dropped by rule 6.
-  All four are inserted before the existing old-tweet run (between
-  ...012 and ...013) so they stay inside the window and don't disturb the
-  run of 3 old non-reposts that rule 3's tests depend on. No existing
-  record's content changed.
+  - ...017, ...018, ...019: all posted only minutes before scraped_at
+    (see below -- once rule 6 itself became age-scaled, all three clear
+    it, since a very fresh tweet needs almost nothing).
+
+Rule 6 changed again the same day, from an absolute floor
+(x_min_reposts OR x_min_likes, at any age) to an age-scaled rate: a
+tweet clears it the moment reposts, likes or views (any one) reaches its
+own per-hour rate (x_reposts_per_hour / x_likes_per_hour /
+x_views_per_hour) times the tweet's age in hours at scraped_at. Three
+more records, ids ...020-...022, were added to give the new rule cases
+the original fixture couldn't: something old enough to actually fail it,
+and the >= boundary at exactly-equal. All three sit right after ...001
+(before ...002), a spot with a fresh non-repost on both sides, so an old
+one among them can never join the run of 3 old non-reposts that rule 3's
+tests depend on:
+  - ...020: posted 90 min before scraped_at (age_h=1.5) -- an isolated
+    old non-repost, so still inside the window. reposts=12, likes=50,
+    views=1000; needs reposts>=15, likes>=150, views>=30000 -- clears
+    none, dropped by rule 6. Under the retired absolute floor
+    (reposts>=10) this record would have been KEPT: if rule 6 ever
+    reverts to that floor, this test fails.
+  - ...021: posted 30 min before scraped_at (age_h=0.5, needs
+    reposts>=5.0). reposts=5 exactly -- the >= boundary clearing case.
+  - ...022: same age, reposts=4 -- one short of the same 5.0 line,
+    dropped by rule 6. Together with ...021 this pins down that the
+    comparison is >=, not >.
 
   With the extended fixture, expected_filter() now gives: kept =
-  {1,2,6,9,10,11,12,17,18} (9), dropped = {3:2, 4:4, 5:4, 7:1, 8:5, 16:2,
-  19:6, 13:3, 14:3, 15:3} (10) -- confirmed against x_filter.py's real
-  output, which matches exactly.
+  {1,2,6,9,10,11,12,17,18,19,21} (11), dropped = {3:2, 4:4, 5:4, 7:1,
+  8:5, 16:2, 20:6, 22:6, 13:3, 14:3, 15:3} (11) -- confirmed against
+  x_filter.py's real output, which matches exactly.
 """
 
 import copy
@@ -71,11 +87,12 @@ class TestCheck1Schema(unittest.TestCase):
         self.doc = load_fixture()
 
     def _lenient_settings(self):
-        # The fixture has 15 tweets, chosen for field/rule coverage, not to
-        # meet the real x_tweets_min (20) -- a real scrape must clear that
-        # bar (and did: a live run produced 47). Schema-completeness tests
-        # here use a settings copy with the minimum lowered so they test
-        # field-presence, not the fixture's tweet count.
+        # The fixture is chosen for field/rule coverage, not to sit on
+        # either side of the real x_tweets_min (20) -- a real scrape must
+        # clear that bar regardless (and did: a live run produced 47).
+        # Schema-completeness tests here use a settings copy with the
+        # minimum lowered so they test field-presence, not the fixture's
+        # tweet count.
         settings = dict(self.settings)
         settings["x_tweets_min"] = 1
         return settings
@@ -84,12 +101,34 @@ class TestCheck1Schema(unittest.TestCase):
         ok, reason = x_checks.check1_schema(self.doc, self._lenient_settings())
         self.assertTrue(ok, reason)
 
-    def test_fixture_is_below_the_real_x_tweets_min(self):
-        # Documents a real, deliberate fact about the fixture rather than
-        # hiding it: it is a coverage fixture, not a pass/fail sample.
-        ok, reason = x_checks.check1_schema(self.doc, self.settings)
+    def _tweets_of_count(self, n):
+        # Build a tweet list of exactly n records out of the fixture's own
+        # records (cycling through them if n exceeds the fixture's real
+        # length), so the count tested is fixed and chosen by the test --
+        # not incidentally whatever the shared fixture happens to hold.
+        from itertools import cycle, islice
+        return copy.deepcopy(list(islice(cycle(self.doc["tweets"]), n)))
+
+    def test_below_x_tweets_min_is_rejected_and_named(self):
+        # A document with one fewer tweet than x_tweets_min must be
+        # rejected, and the reason must name x_tweets_min -- this is the
+        # real behaviour check1_schema exists to enforce.
+        minimum = self.settings["x_tweets_min"]
+        doc = copy.deepcopy(self.doc)
+        doc["tweets"] = self._tweets_of_count(minimum - 1)
+        ok, reason = x_checks.check1_schema(doc, self.settings)
         self.assertFalse(ok)
         self.assertIn("x_tweets_min", reason)
+
+    def test_at_x_tweets_min_is_not_rejected_for_count(self):
+        # A document with exactly x_tweets_min tweets clears the minimum
+        # (check1_schema's boundary is `len(tweets) < minimum`, so equal
+        # passes) and must not be rejected on the count.
+        minimum = self.settings["x_tweets_min"]
+        doc = copy.deepcopy(self.doc)
+        doc["tweets"] = self._tweets_of_count(minimum)
+        ok, reason = x_checks.check1_schema(doc, self.settings)
+        self.assertTrue(ok, reason)
 
     def test_missing_field_fails(self):
         doc = copy.deepcopy(self.doc)
@@ -225,22 +264,56 @@ class TestCheck3Kept(unittest.TestCase):
         self.assertEqual(exp_dropped.get("1000000000000000016"), 2)
 
     def test_engagement_floor_cleared_by_reposts_alone(self):
-        # id ...017: reposts=15 (>= x_min_reposts), likes=5 (< x_min_likes).
+        # id ...017: posted 3 min before scraped_at, reposts=15 -- needs
+        # only reposts>=0.5 at that age, clears easily.
         exp_kept, exp_dropped = x_checks.expected_filter(self.doc, self.settings)
         self.assertIn("1000000000000000017", exp_kept)
         self.assertNotIn("1000000000000000017", exp_dropped)
 
     def test_engagement_floor_cleared_by_likes_alone(self):
-        # id ...018: reposts=2 (< x_min_reposts), likes=150 (>= x_min_likes).
+        # id ...018: posted 4 min before scraped_at, likes=150 -- needs
+        # only likes>=6.67 at that age, clears easily.
         exp_kept, exp_dropped = x_checks.expected_filter(self.doc, self.settings)
         self.assertIn("1000000000000000018", exp_kept)
         self.assertNotIn("1000000000000000018", exp_dropped)
 
-    def test_engagement_floor_fails_both(self):
-        # id ...019: reposts=3, likes=20 -- clears neither number.
+    def test_very_fresh_tweet_clears_on_almost_nothing(self):
+        # id ...019: posted 5 min before scraped_at, reposts=3, likes=20.
+        # Under the retired absolute floor (reposts>=10 OR likes>=100)
+        # this record would have been dropped; under the age-scaled rule
+        # it needs only reposts>=0.83 or likes>=8.3 at that age, so it
+        # clears -- exactly the design's "a very fresh tweet needs almost
+        # nothing" intent.
         exp_kept, exp_dropped = x_checks.expected_filter(self.doc, self.settings)
-        self.assertNotIn("1000000000000000019", exp_kept)
-        self.assertEqual(exp_dropped.get("1000000000000000019"), 6)
+        self.assertIn("1000000000000000019", exp_kept)
+        self.assertNotIn("1000000000000000019", exp_dropped)
+
+    def test_engagement_floor_scales_with_age_not_absolute(self):
+        # id ...020: posted 90 min before scraped_at, reposts=12, likes=50,
+        # views=1000. Under the retired absolute floor (reposts>=10) this
+        # would have been KEPT; the age-scaled rule needs reposts>=15,
+        # likes>=150, views>=30000 at that age, and it clears none of them
+        # -- dropped by rule 6. If rule 6 ever reverts to an absolute
+        # floor, this test fails.
+        exp_kept, exp_dropped = x_checks.expected_filter(self.doc, self.settings)
+        self.assertNotIn("1000000000000000020", exp_kept)
+        self.assertEqual(exp_dropped.get("1000000000000000020"), 6)
+
+    def test_engagement_floor_boundary_exactly_equal_clears(self):
+        # id ...021: posted 30 min before scraped_at (age_h=0.5), needs
+        # reposts>=5.0 at x_reposts_per_hour=10; reposts=5 exactly. The
+        # rule is >=, so an exact match clears it.
+        exp_kept, exp_dropped = x_checks.expected_filter(self.doc, self.settings)
+        self.assertIn("1000000000000000021", exp_kept)
+        self.assertNotIn("1000000000000000021", exp_dropped)
+
+    def test_engagement_floor_boundary_one_below_drops(self):
+        # id ...022: same age as ...021 (needs reposts>=5.0), reposts=4 --
+        # one short of the line, so it is dropped by rule 6. Paired with
+        # ...021 this pins the comparison down as >=, not >.
+        exp_kept, exp_dropped = x_checks.expected_filter(self.doc, self.settings)
+        self.assertNotIn("1000000000000000022", exp_kept)
+        self.assertEqual(exp_dropped.get("1000000000000000022"), 6)
 
     def test_dropped_rule_7_is_rejected(self):
         # rule must be 1..6; anything outside that range is an invalid

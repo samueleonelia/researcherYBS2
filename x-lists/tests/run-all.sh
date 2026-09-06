@@ -8,6 +8,7 @@ tests=(
   tests/test_settings.py
   tests/test_checks.py
   tests/test_chain.py
+  tests/test_check10.py
 )
 
 failed=0

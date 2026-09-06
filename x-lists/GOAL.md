@@ -23,9 +23,12 @@ Never:
 - Open any X URL other than these two kinds:
   1. **https://x.com/i/lists/2091834809903407159**, by the scraper only.
   2. **A tweet permalink that this run's `links.md` lists**, by a read
-     sub-agent only, one at a time. This is the one exception to the
-     single-URL rule (Samuele, 2026-09-06): the feed shows a collapsed
-     preview, so a surviving tweet is read on its own page.
+     sub-agent only. Many read sub-agents run at the same time, each in its
+     own ego task space; but **each one opens one link at a time**, finishes
+     its note, then opens the next of its `x_read_batch`. Never two tabs,
+     never two tweets open at once inside one sub-agent. This is the one
+     exception to the single-URL rule (Samuele, 2026-09-06): the feed shows
+     a collapsed preview, so a surviving tweet is read on its own page.
   Still forbidden for everyone: profiles, search, any other list, the quoted
   tweet's page, the author's timeline, and any link inside a tweet. A URL
   that is not in this run's `links.md` is off limits. If a step seems to

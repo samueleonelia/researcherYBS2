@@ -68,7 +68,9 @@ Drop, in this order:
 1. promoted
 2. is_reply = true
 3. outside window (see rule above)
-4. has_link = true — **any** link, however much commentary rides with it
+4. has_link = true — **any** link that leaves X (anything not on x.com or
+   t.co resolving to x.com), however much commentary rides with it. A quote
+   tweet is not a link; it stays.
 5. text under `x_min_own_words` and no quoted_text (reactions, emoji)
 6. below the engagement floor, which RISES WITH AGE. A tweet clears if any
    one of these holds, where `age_h` is its age in hours at `scraped_at`:
@@ -117,8 +119,11 @@ judge carry the weight there. And `x_views_per_hour` is the loosest of the
 three, since views run orders of magnitude above the others; it is set high on
 purpose and should be watched.
 
-**NOT YET IMPLEMENTED.** `x_filter.py` still holds the absolute floor. This is
-the spec for the next session.
+This is the screen Samuele asked for on 2026-09-06: engagement (views OR
+likes OR reposts) divided by time since publication, against the three
+`x_*_per_hour` settings. `x_filter.py` still holds the absolute floor; the
+next session moves it, together with `x_checks.py`, `tests/` and the two
+retired settings.
 
 The filter also writes `links.md`: every survivor as a permalink, marked
 POST or REPOST, and nothing that failed a rule. That file is what the read
@@ -132,9 +137,12 @@ The feed shows a collapsed preview: 15 of 49 tweets in the 0954 run were cut
 mid-sentence at ~280 characters, and three of the five picks quoted truncated
 text. The fix is to read each surviving tweet on its own page.
 
-A dispatcher splits `links.md` into batches of `x_read_batch` links and runs
-one sub-agent per batch, up to `x_agents_active_max` at once. Each sub-agent
-opens its links **one at a time** and writes `notes/<id>.md` per tweet:
+A dispatcher agent splits `links.md` into batches of `x_read_batch` links
+(3) and launches one **fresh-context** sub-agent per batch, up to
+`x_agents_active_max` at once. Each sub-agent opens its three links **one after
+the other, in the order given**, and writes `notes/<id>.md` per tweet. It is
+the only kind of agent allowed to open a tweet permalink, and only the ones on
+its own batch:
 
 | field | from |
 |---|---|

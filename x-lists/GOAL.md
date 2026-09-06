@@ -20,14 +20,16 @@ Never:
 - Operate on any X account other than **@EgoismoEfficace**. Before anything
   else, check the logged-in handle on the page; if it is not @EgoismoEfficace,
   or nobody is logged in, stop and say so. Never switch accounts.
-- Open any X URL other than **https://x.com/i/lists/2091834809903407159**
-  and the **tweet permalinks that scrape captured from it**. Samuele lifted
-  the single-URL rule on 2026-09-06, narrowly: the read stage may open a
-  tweet's own page to read it in full, because the feed shows only a
-  collapsed preview. Still forbidden: profiles, search, any other list, the
-  quoted tweet's page, the author's timeline, and any link inside a tweet.
-  A URL that did not come out of this run's own `tweets.json` is off limits.
-  If a step seems to need one, stop and ask.
+- Open any X URL other than these two kinds:
+  1. **https://x.com/i/lists/2091834809903407159**, by the scraper only.
+  2. **A tweet permalink that this run's `links.md` lists**, by a read
+     sub-agent only, one at a time. This is the one exception to the
+     single-URL rule (Samuele, 2026-09-06): the feed shows a collapsed
+     preview, so a surviving tweet is read on its own page.
+  Still forbidden for everyone: profiles, search, any other list, the quoted
+  tweet's page, the author's timeline, and any link inside a tweet. A URL
+  that is not in this run's `links.md` is off limits. If a step seems to
+  need one, stop and ask.
 - Post, reply, like, repost, follow, or DM on X. Reading only.
 - Log in, enter a password, or touch account settings. The ego browser already
   holds the session; if it is logged out, stop and say so.
@@ -64,8 +66,11 @@ It passes when, in a fresh run folder `x-lists/runs/<date>-<time>/`, all of this
 2. Every tweet in `tweets.json` was scraped inside the window rule from the
    design (reposts included, cut at the first `x_stop_after_old` non-repost
    tweets older than `x_window_hours`).
-3. `kept.json` exists and holds only tweets that survive the five filter rules,
-   in order, and nothing else was dropped.
+3. `kept.json` exists and holds only tweets that survive the six screen
+   rules, in order, and nothing else was dropped. In particular: no kept
+   tweet carries a link that leaves X, and every kept tweet clears the
+   per-hour engagement gate (views OR likes OR reposts, divided by hours
+   since it was posted, against the three `x_*_per_hour` settings).
 4. `subjects.json` exists; every kept tweet id appears in exactly one subject.
 5. Every subject carries `authors`, `lists`, `endorsements`, `velocity`,
    `velocity_rank`, `cross_list` and its flags, computed as the design says.
@@ -74,12 +79,12 @@ It passes when, in a fresh run folder `x-lists/runs/<date>-<time>/`, all of this
    it touches.
 7. The tests in `x-lists/tests/` pass. (The root `tests/` are not touched and
    not run; nothing here changes them.)
-
 8. `links.md` exists, listing every surviving tweet as a permalink, each
-   marked POST or REPOST, and nothing that failed a filter rule.
+   marked POST or REPOST, and nothing that failed a screen rule.
 9. Every link in `links.md` has a note in `notes/`, written from the tweet's
-   own page, holding the tweet's FULL text rather than the feed's collapsed
-   preview.
+   own page by a read sub-agent, holding the tweet's FULL text rather than
+   the feed's collapsed preview. Every quote in `picks.md` matches a note,
+   not the feed text.
 
 Checks 1-5 and 8 are mechanical: a script can verify them from the files
 alone. Checks 6, 7 and 9 are the ones that need a reader.
@@ -99,8 +104,13 @@ alone. Checks 6, 7 and 9 are the ones that need a reader.
   and run-chain scripts need only the *shape* of `tweets.json`, so they build
   against `tests/fixtures/tweets.json` while the scraper is still being
   built. Run time: cluster splits into chunks of `x_cluster_chunk` tweets and
-  merges, judge runs one agent per subject, verifiers run one per check. The
-  browser is the one serial thing: never two agents on it at once.
+  merges, read runs one sub-agent per batch of `x_read_batch` links, judge
+  runs one agent per subject, verifiers run one per check. Browser agents
+  run at the same time the way the main brief does: each opens its **own ego
+  task space**, works only in it, and closes it. What must never happen is
+  two agents in one task space, or two agents doing the same job (two
+  scrapers on the list, two readers on one tweet). The scrape is always a
+  single agent.
 - **Builder and verifier are always different agents.** After each step, one
   fresh read-only verifier per check, given only the check text and the run
   folder. It returns PASS or FAIL and one reason. It never sees the code,
@@ -117,7 +127,7 @@ alone. Checks 6, 7 and 9 are the ones that need a reader.
   number, agent and model, what changed, what the check said, what is next.
 - **Commit after every PASS**, on a branch (`x-lists`), staging only paths
   under `x-lists/`, message saying what and why. Never commit on a FAIL. Tag
-  `x-lists-v1` when checks 1-7 all pass.
+  `x-lists-v1` when checks 1-9 all pass.
 - **Verify between steps, never skip.** A step that "probably works" is FAIL.
 - **Root cause, not retry.** A builder that fails the same way twice gets
   the verifier's reason and the failing output; it does not get a third
@@ -136,12 +146,11 @@ In this order. Each one has its check from section 2.
 
 | # | Build | Check |
 |---|---|---|
-| 1 | `x_scrape.py`: confirm the handle, open the list in the ego browser, scroll, write `tweets.json` | 1, 2 |
-| 2 | `x_filter.py`: apply the six rules, write `kept.json` and `links.md` | 3, 8 |
-| 2b | `prompts/read.md` + a dispatcher: sub-agents of `x_read_batch` links each, one tweet page at a time, write `notes/<id>.md` | 9 |
-| 3 | `prompts/cluster.md` + agent launch: text in, subjects out, write `subjects.json` | 4 |
+| 1 | **Screen.** One agent runs `x_scrape.py` (confirm the handle, open the list, scroll, write `tweets.json`) then `x_filter.py` (the six rules, the per-hour engagement gate among them; write `kept.json` and `links.md`). Scripts count; the agent only runs them and reports. | 1, 2, 3, 8 |
+| 2 | **Read.** A dispatcher agent cuts `links.md` into batches of `x_read_batch` (3) and launches one fresh sub-agent per batch, up to `x_agents_active_max` at once. Each sub-agent opens its 3 tweet pages one after the other, in the order given, and writes `notes/<id>.md` for each. It reads and records; it does not judge. | 9 |
+| 3 | `prompts/cluster.md` + agent launch: notes in, subjects out, write `subjects.json` | 4 |
 | 4 | `x_score.py`: measures and flags per subject | 5 |
-| 5 | `prompts/judge.md` + agent launch: profile, lens, preferences in (read from the root); `picks.md` out | 6 |
+| 5 | `prompts/judge.md` + agent launch: notes, profile, lens, preferences in (read from the root); `picks.md` out, quoting notes | 6 |
 | 6 | `x_run.py` chaining 1-5, reading `settings.md`; `tests/` | 7 |
 
 Step 0, before any of them: the orchestrator writes `tests/fixtures/tweets.json`

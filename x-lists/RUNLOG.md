@@ -173,3 +173,25 @@ Changed after Samuele read that brief, and NOT yet proven on a live run:
 - No `x-lists-v1` tag. Two guardrail breaches stand unreviewed (a run folder
   deleted; two agents on the browser at once). Samuele's call, not the
   orchestrator's.
+
+## Contract change, 2026-09-06 (Samuele, after reading the 0954 picks)
+
+Five changes, written into GOAL.md, settings.md and the design. Nothing in
+code moved yet; the next session builds to them.
+
+1. Rule 4: drop any tweet with a link that leaves X. Quote tweets stay.
+2. Step 1 is one **screen** agent that runs the scrape and filter scripts and
+   writes `links.md`. Scripts still count; the agent only runs and reports.
+3. Step 2 is a **dispatcher** agent launching read sub-agents. Only read
+   sub-agents may open a tweet permalink, and only the ones in their batch.
+4. `x_read_batch` 5 -> 3: each sub-agent starts fresh and reads its 3 tweets
+   one after the other. Sub-agents run in parallel, one ego task space each;
+   the "browser is serial" rule is replaced by "never two agents in one task
+   space or on one job". `x_run.py` still says serial; a builder changes it.
+5. The screen gate is engagement per hour: views OR likes OR reposts, divided
+   by hours since posted, against `x_*_per_hour`. The absolute floor
+   (`x_min_reposts`, `x_min_likes`) is retired in settings.md; `x_filter.py`,
+   `x_checks.py` and `tests/` still read it and must move together.
+
+First job next session: implement 4 and 5 in code, then a live run, then
+verify 3, 7, 8, 9 on it.

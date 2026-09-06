@@ -229,6 +229,20 @@ The live table is `x-lists/settings.md`. This one is the proposal it started fro
 
 Ceilings, not floors, like everything in settings.md.
 
+## 6. Write (agent)
+
+Input: `picks.md`, the notes of the picked tweets, `preferences.md`, the lens.
+Output: `brief.md`, in the shape of `templates/x-brief.md`.
+
+One item per pick, TRENDING first, then CURIOUS. Each item: a headline
+sentence, the story in his lens (what happened, why the list is moving on it,
+which storyline it touches), the tweet permalink with author, and the flags in
+one word each. Nothing that is not in the pick's note. Same sentence-length
+ceiling and writing rules as the morning brief; the template says where things
+go, the write prompt says how they are said.
+
+The brief is the finish line. The picks are how it gets made.
+
 ## Later
 
 - Save per-author velocity every run. After a week, "above normal for this

@@ -24,6 +24,7 @@ only two subjects deserve it. Nothing here fills a slot to reach a number.
 | x_curious_percentile | 50 | velocity rank a subject with no flag needs to be kept as CURIOUS |
 | x_picks_max | 5 | subjects that may reach the brief |
 | x_tweets_min | 20 | tweets a scrape must return for the run to count as a pass |
+| x_words_per_sentence_max | 30 | words in one sentence of the brief, same ceiling as the morning brief |
 | x_cluster_chunk | 60 | kept tweets one cluster agent may take; a longer list is cut into parts and merged |
 | x_agents_active_max | 8 | agents working at the same time in a pooled step |
 
@@ -56,7 +57,7 @@ Build time (agents that write the pipeline):
 | orchestrator (main session) | opus | medium | launches, reads verdicts, commits; does no work itself |
 | build scrape | sonnet | high | the browser is the hard part; needs care, not judgment |
 | build filter, score, run-chain | sonnet | medium | mechanical rules from a table |
-| build cluster prompt, judge prompt | opus | high | the prompt *is* the judgment |
+| build cluster prompt, judge prompt, write prompt and template | opus | high | the prompt *is* the judgment |
 | build tests | sonnet | medium | one per script |
 
 Run time (agents that run on real tweets):
@@ -66,6 +67,8 @@ Run time (agents that run on real tweets):
 | cluster | opus | high | 1-2, one per chunk of `x_cluster_chunk` |
 | read | sonnet | medium | one per batch of `x_read_batch` links, up to `x_agents_active_max` at once, each in its own ego task space |
 | judge | opus | high | one per subject, up to `x_agents_active_max` at once |
+| write | opus | high | 1; it writes what Yaron reads |
+| verify, check 10 | sonnet | medium | one; reads the brief against the picks and the notes |
 | verify, checks 1-5 | haiku | low | one per check; mechanical, from the JSON alone |
 | verify, check 6 | sonnet | medium | one; needs to read the picks |
 | verify, check 7 | haiku | low | one; runs the tests, reports pass or fail |

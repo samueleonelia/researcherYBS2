@@ -56,7 +56,7 @@ Stop and ask when:
 ## 2. Goal
 
 One command, run from `x-lists/`, that reads the one X list from the
-design and writes the picks the brief could use:
+design and writes a short, show-ready brief of what the list is moving on:
 
 ```
 python3 x_run.py
@@ -88,9 +88,17 @@ It passes when, in a fresh run folder `x-lists/runs/<date>-<time>/`, all of this
    own page by a read sub-agent, holding the tweet's FULL text rather than
    the feed's collapsed preview. Every quote in `picks.md` matches a note,
    not the feed text.
+10. `brief.md` exists, follows `templates/x-brief.md`, and carries every pick
+    from `picks.md` and nothing else: one item per pick, in the template's
+    order (TRENDING before CURIOUS), each with the story in Yaron's lens, the
+    tweet permalink, and the storyline. Every figure and quote in it appears
+    in that pick's note. It obeys `preferences.md` and the sentence-length
+    ceiling in `settings.md`.
 
 Checks 1-5 and 8 are mechanical: a script can verify them from the files
-alone. Checks 6, 7 and 9 are the ones that need a reader.
+alone. Checks 6, 7, 9 and 10 are the ones that need a reader. Check 10 is
+the finish line: the brief is what Yaron reads, everything before it is how
+it gets made.
 
 ## 3. How to work
 
@@ -130,7 +138,7 @@ alone. Checks 6, 7 and 9 are the ones that need a reader.
   number, agent and model, what changed, what the check said, what is next.
 - **Commit after every PASS**, on a branch (`x-lists`), staging only paths
   under `x-lists/`, message saying what and why. Never commit on a FAIL. Tag
-  `x-lists-v1` when checks 1-9 all pass.
+  `x-lists-v1` when checks 1-10 all pass.
 - **Verify between steps, never skip.** A step that "probably works" is FAIL.
 - **Root cause, not retry.** A builder that fails the same way twice gets
   the verifier's reason and the failing output; it does not get a third
@@ -154,7 +162,8 @@ In this order. Each one has its check from section 2.
 | 3 | `prompts/cluster.md` + agent launch: notes in, subjects out, write `subjects.json` | 4 |
 | 4 | `x_score.py`: measures and flags per subject | 5 |
 | 5 | `prompts/judge.md` + agent launch: notes, profile, lens, preferences in (read from the root); `picks.md` out, quoting notes | 6 |
-| 6 | `x_run.py` chaining 1-5, reading `settings.md`; `tests/` | 7 |
+| 6 | **Write.** `templates/x-brief.md` (the shape, and only the shape) + `prompts/write.md` (how the sentences are written) + one agent launch: picks and notes in, `brief.md` out. Mirrors the morning brief's write step; reads its `prompts/write.md` and `templates/morning.md` for the house style but copies neither. | 10 |
+| 7 | `x_run.py` chaining 1-6, reading `settings.md`; `tests/` | 7 |
 
 Step 0, before any of them: the orchestrator writes `tests/fixtures/tweets.json`
 by hand from the design's field table (15 made-up tweets covering reposts,

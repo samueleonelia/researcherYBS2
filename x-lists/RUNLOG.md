@@ -195,3 +195,10 @@ code moved yet; the next session builds to them.
 
 First job next session: implement 4 and 5 in code, then a live run, then
 verify 3, 7, 8, 9 on it.
+
+## Contract change, 2026-09-06, later: the brief is the goal
+
+Samuele: the goal is a brief, not a list of picks. Added step 6 **Write**
+(`templates/x-brief.md` + `prompts/write.md` + one opus agent: picks and
+notes in, `brief.md` out) and check 10, now the finish line. The run chain is
+step 7. `x_words_per_sentence_max` added to settings. Nothing built yet.

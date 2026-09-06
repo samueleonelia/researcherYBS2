@@ -13,7 +13,10 @@ only two subjects deserve it. Nothing here fills a slot to reach a number.
 |---|---|---|
 | x_window_hours | 1 | how far back the scrape goes, by timeline position |
 | x_stop_after_old | 3 | non-repost tweets in a row older than the window before the scrape stops |
-| x_min_own_words | 6 | words a tweet must have beyond links to survive the filter |
+| x_min_own_words | 6 | words a tweet must have to survive the filter |
+| x_min_reposts | 10 | reposts a tweet needs to clear the engagement floor; OR-ed with x_min_likes |
+| x_min_likes | 100 | likes a tweet needs to clear the engagement floor; OR-ed with x_min_reposts |
+| x_read_batch | 5 | tweet links one read sub-agent takes, opened one at a time |
 | x_convergence_authors | 3 | distinct list members on one subject; at or above flags CONVERGENCE |
 | x_endorsement_min | 3 | list-member reposts plus quotes of one tweet; at or above flags ENDORSEMENT |
 | x_velocity_percentile | 90 | views-per-minute rank inside the run; at or above flags VELOCITY |

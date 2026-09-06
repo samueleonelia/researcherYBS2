@@ -68,11 +68,51 @@ Drop, in this order:
 1. promoted
 2. is_reply = true
 3. outside window (see rule above)
-4. has_link = true AND text has fewer than `x_min_own_words` words
-   (a bare link share; a link with commentary is kept, link stripped)
+4. has_link = true — **any** link, however much commentary rides with it
 5. text under `x_min_own_words` and no quoted_text (reactions, emoji)
+6. below the engagement floor: reposts < `x_min_reposts` AND likes < `x_min_likes`
+   (either one alone clears it)
 
 Nothing else is dropped here. Relevance is not decided here.
+
+Rule 4 changed on 2026-09-06. It used to keep a link that carried real
+commentary. Samuele's call: a link post sends the reader off X, and the
+pipeline cannot follow it, so it is not a story this pipeline can carry.
+
+Rule 6 is new on the same date. Engagement is now a floor at the feed pass,
+not only an input to velocity later. The two numbers are OR-ed so a post can
+qualify on either reposts or likes.
+
+The filter also writes `links.md`: every survivor as a permalink, marked
+POST or REPOST, and nothing that failed a rule. That file is what the read
+stage consumes.
+
+## 2b. Read (agents, one tweet page each)
+
+New on 2026-09-06, and the reason the single-URL guardrail was narrowed.
+
+The feed shows a collapsed preview: 15 of 49 tweets in the 0954 run were cut
+mid-sentence at ~280 characters, and three of the five picks quoted truncated
+text. The fix is to read each surviving tweet on its own page.
+
+A dispatcher splits `links.md` into batches of `x_read_batch` links and runs
+one sub-agent per batch, up to `x_agents_active_max` at once. Each sub-agent
+opens its links **one at a time** and writes `notes/<id>.md` per tweet:
+
+| field | from |
+|---|---|
+| id, url, author | the link it was given |
+| kind | POST or REPOST, carried from links.md |
+| full_text | the tweet's complete text, expanded, never the preview |
+| quoted | the quoted tweet's text, if the page shows one |
+| media | a one-line description of any image or video |
+| posted_at, replies, reposts, likes, views | re-read from the tweet's own page |
+
+The sub-agent opens the tweet permalink and nothing else. Not the author's
+profile, not the quoted tweet's own page, not a link inside the tweet. It
+reads and writes down; it does not judge, rank or group.
+
+Cluster and judge then work from `notes/`, not from the truncated feed text.
 
 ## 3. Cluster (agent, text only)
 

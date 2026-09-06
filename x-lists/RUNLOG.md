@@ -43,6 +43,37 @@ orchestrator's, before `x-lists-v1` is tagged.
 | 16 | 2026-09-06 | 5 | verifier for check 6 (sonnet/medium) on the real run: ceiling, tags, flags copied not invented, every quote matched against the run's own tweet text, and the CURIOUS pick's rank arithmetic. | PASS. All 5 quotes match kept.json character-for-character, no invented quote. Flags copied exactly. CURIOUS pick rank 83.33 >= 50 with empty flags. 13 KEEP verdicts -> 5 picks -> 8 cut, picks a strict subset, nothing padded in. All 5 rest on a concrete claim, none on opinion alone. | await check 4 |
 | 17 | 2026-09-06 | 2 | re-verifier for check 3 (haiku/low) on REAL data, not the fixture. Sent because all 7 drops were rule 2 and rules 1, 4, 5 fired on nothing: asked to establish whether nothing qualified or a rule is silently dead. | PASS. Recomputed the filter independently: 42 kept / 7 dropped, matching exactly. Rules 4 and 5 had no inputs because all 3 short tweets carried quoted_text; word counts ran min 3, median 29, max 54. Rule 1 had no inputs because 0 tweets were promoted - which does NOT distinguish a clean timeline from a broken promoted heuristic. | record rule 1 as unproven on real data |
 
+## Redesign, 2026-09-06 (Samuele)
+
+After reading the brief, Samuele found two real bugs the seven checks did not
+catch, and changed the design:
+
+- **`text` fell back to `card_title`.** The GB News pick was a bare link share
+  whose body field held the link-card headline, so it read as 9 words of
+  commentary and rule 4 never fired. 1 of 49 in the 0954 run.
+- **Tweet text is captured collapsed.** 15 of 49 tweets cut mid-sentence at
+  ~280 chars; three of five picks quoted truncated text. Check 6 compared the
+  brief against `kept.json`, which itself held the truncated text, so the
+  check could not see it. That is a gap in how check 6 was specified, not a
+  verifier failing.
+
+His three decisions:
+
+1. **The single-URL guardrail is narrowed, not removed.** A read stage may open
+   a tweet permalink that came out of this run's own scrape. Still forbidden:
+   profiles, search, other lists, the quoted tweet's page, links inside tweets.
+2. **Rule 4 is now: drop any tweet with a link**, however much commentary.
+3. **New rule 6, an engagement floor:** reposts < `x_min_reposts` (10) AND
+   likes < `x_min_likes` (100). Either alone clears it. Both editable.
+
+Simulated against the 0954 data: 49 scraped -> 14 survivors (was 42). Three of
+the five picks die - the bare-link one, and the two the orchestrator had already
+flagged as weak. Both of those had been flagged VELOCITY on near-zero
+engagement (0rt/1lk and 1rt/2lk), because velocity is views/minute and a very
+fresh tweet scores high on almost no interaction. The engagement floor closes
+that hole. Rule 4 also makes the card_title bug moot: that tweet now dies for
+having a link at all.
+
 ## Finish line
 
 All seven checks in GOAL.md section 2 have a PASS from a fresh read-only
@@ -83,3 +114,6 @@ Not check failures. Recorded so they are not lost between sessions.
 4. **Two soft records in the 0950 scrape**: one with empty text, one with all
    four engagement metrics at 0, out of 54. Both plausible; a growing share
    would mean a parsing gap.
+
+| 19 | 2026-09-06 | 2 | builder for x_filter.py (sonnet/medium): rule 4 becomes any-link, new rule 6 engagement floor, plus links.md marking POST or REPOST. Given the orchestrator's expected numbers so it cannot quietly fit itself to a wrong answer. | running | verify checks 3 and 8 |
+| 20 | 2026-09-06 | 2b | builder for the read stage (opus/high): prompts/read.md, the dispatcher in x_run.py, and rewiring cluster and judge to read notes/ instead of the truncated feed text. Told to decide serial vs parallel browser access rather than guess, and NOT to drive the real browser while other agents work. | running | verify check 9 |

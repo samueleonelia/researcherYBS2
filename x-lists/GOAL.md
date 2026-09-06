@@ -20,10 +20,14 @@ Never:
 - Operate on any X account other than **@EgoismoEfficace**. Before anything
   else, check the logged-in handle on the page; if it is not @EgoismoEfficace,
   or nobody is logged in, stop and say so. Never switch accounts.
-- Open any X URL other than **https://x.com/i/lists/2091834809903407159**.
-  No tweet pages, no profiles, no search, no other list, no clicking through.
-  Everything is read from that one page as it scrolls. If a step seems to
-  need another URL, stop and ask.
+- Open any X URL other than **https://x.com/i/lists/2091834809903407159**
+  and the **tweet permalinks that scrape captured from it**. Samuele lifted
+  the single-URL rule on 2026-09-06, narrowly: the read stage may open a
+  tweet's own page to read it in full, because the feed shows only a
+  collapsed preview. Still forbidden: profiles, search, any other list, the
+  quoted tweet's page, the author's timeline, and any link inside a tweet.
+  A URL that did not come out of this run's own `tweets.json` is off limits.
+  If a step seems to need one, stop and ask.
 - Post, reply, like, repost, follow, or DM on X. Reading only.
 - Log in, enter a password, or touch account settings. The ego browser already
   holds the session; if it is logged out, stop and say so.
@@ -71,8 +75,14 @@ It passes when, in a fresh run folder `x-lists/runs/<date>-<time>/`, all of this
 7. The tests in `x-lists/tests/` pass. (The root `tests/` are not touched and
    not run; nothing here changes them.)
 
-Checks 1-5 are mechanical: a script can verify them from the JSON alone.
-Checks 6-7 are the only ones that need a reader.
+8. `links.md` exists, listing every surviving tweet as a permalink, each
+   marked POST or REPOST, and nothing that failed a filter rule.
+9. Every link in `links.md` has a note in `notes/`, written from the tweet's
+   own page, holding the tweet's FULL text rather than the feed's collapsed
+   preview.
+
+Checks 1-5 and 8 are mechanical: a script can verify them from the files
+alone. Checks 6, 7 and 9 are the ones that need a reader.
 
 ## 3. How to work
 
@@ -127,11 +137,12 @@ In this order. Each one has its check from section 2.
 | # | Build | Check |
 |---|---|---|
 | 1 | `x_scrape.py`: confirm the handle, open the list in the ego browser, scroll, write `tweets.json` | 1, 2 |
-| 2 | `x_filter.py`: apply the five rules, write `kept.json` (builds in parallel with 1, against the fixture) | 3 |
+| 2 | `x_filter.py`: apply the six rules, write `kept.json` and `links.md` | 3, 8 |
+| 2b | `prompts/read.md` + a dispatcher: sub-agents of `x_read_batch` links each, one tweet page at a time, write `notes/<id>.md` | 9 |
 | 3 | `prompts/cluster.md` + agent launch: text in, subjects out, write `subjects.json` | 4 |
-| 4 | `x_score.py`: measures and flags per subject (builds in parallel with 1, against the fixture) | 5 |
+| 4 | `x_score.py`: measures and flags per subject | 5 |
 | 5 | `prompts/judge.md` + agent launch: profile, lens, preferences in (read from the root); `picks.md` out | 6 |
-| 6 | `x_run.py` chaining 1-5, reading `settings.md`; `tests/` (the chain builds in parallel with 1; its tests run once 1-5 pass) | 7 |
+| 6 | `x_run.py` chaining 1-5, reading `settings.md`; `tests/` | 7 |
 
 Step 0, before any of them: the orchestrator writes `tests/fixtures/tweets.json`
 by hand from the design's field table (15 made-up tweets covering reposts,

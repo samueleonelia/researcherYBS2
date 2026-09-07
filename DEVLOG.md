@@ -226,3 +226,31 @@ Neither branch is merged to `main` yet.
 **Next**
 - Watch `x_views_per_hour` and the AfD-style seam over a few real mornings.
 - Fix the 4 old test failures and make `tests/run-all.sh` run every file.
+
+## 2026-09-07 — one `settings.md`, at the project root
+
+**Done**
+- The article brief's `settings.md` and `x-lists/settings.md` are one file at
+  the project root. Samuele asked for it: two files meant knowing which of two
+  places to open to change a number.
+- No setting renamed. Each half reads only its own `##` headings: `Numbers`
+  and `Models` for the article brief, `X numbers`, `X fixed` and `X models`
+  for the X list. `#` headings divide the file for the reader and are ignored
+  by the loaders.
+- `ybs_run.py` and `x_settings.py` default to `<root>/settings.md` and skip the
+  other half's sections. `x_scrape.py` dropped its own table parser and goes
+  through `x_settings.py` like every other X script.
+- `update.sh` backs up one file instead of two; README, both SKILL.md files and
+  `x-lists/GOAL.md` say where a number lives now.
+- New tests on both sides that the halves stay apart. All x-lists tests pass;
+  the main suite keeps the same 4 pre-existing failures and gains none.
+
+**Decisions**
+- Section-scoped reading instead of renaming keys. Both halves name a step
+  `cluster`, `read` and `write`; renaming them would have touched every prompt
+  and template. Filtering by heading touched two loaders.
+- `/ybs-shows` keeps its own `settings.md`. It is a separate job, run on its
+  own; Samuele reversed an earlier "merge all three" answer.
+
+**Next**
+- Decide whether the X list URL moves into `sources.md` (see the note below).

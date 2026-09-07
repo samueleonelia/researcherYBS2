@@ -1,6 +1,6 @@
 # STATUS: researcherYBS2
 
-_Updated: 2026-09-07 · X list merged into main_
+_Updated: 2026-09-07 · one settings.md at the root_
 
 <!-- Rewrite this file in place. Never append. History belongs in DEVLOG.md. Keep under 60 lines. -->
 
@@ -23,14 +23,16 @@ _Updated: 2026-09-07 · X list merged into main_
 | Test suite | ⚠️ partial | 4 failures predate this repo, see bugs |
 | Git remote | ✅ working | github.com/samueleonelia/researcherYBS2 (private) |
 | Install on another Mac (`/setup`) | ✅ working | |
-| Update in place (`/update`) | ✅ working | keeps runs/, shows/, preferences.md, three settings.md |
+| Update in place (`/update`) | ✅ working | keeps runs/, shows/, preferences.md, two settings.md |
 | His standing instructions | ✅ working | `preferences.md`, read by pick, write and the X judge/write |
+| Settings | ✅ working | one root `settings.md` for brief + X; `/ybs-shows` keeps its own |
 
 ## Next up
-1. Watch the seam between an article figure and a tweet figure on the same story (AfD 43.8% vs 44.5% on 09-07)
-2. Decide whether `world news` and `u.s. news` join `_sections.md`
-3. Fix the 4 old test failures and make `run-all.sh` run every file
-4. Add a `templates/midday.md` when the midday brief starts
+1. Decide whether the X list URL moves into `sources.md` (one list today, not a feed list)
+2. Watch the seam between an article figure and a tweet figure on the same story (AfD 43.8% vs 44.5% on 09-07)
+3. Decide whether `world news` and `u.s. news` join `_sections.md`
+4. Fix the 4 old test failures and make `run-all.sh` run every file
+5. Add a `templates/midday.md` when the midday brief starts
 
 ## Known bugs
 - `picks-sync` does not refuse more than 15 picks (2 tests fail)
@@ -39,4 +41,4 @@ _Updated: 2026-09-07 · X list merged into main_
 - X: the promoted-tweet rule has never fired on real data; `x_views_per_hour` is loose on purpose and unwatched
 
 ## Blocked on you
-- Nothing right now.
+- Should the X list URL live in `sources.md` instead of `settings.md`?

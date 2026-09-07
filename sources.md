@@ -20,5 +20,5 @@ The X half of the brief reads these, not the news sites above. One line each:
 a name, then the list's link. Delete a line and that list is not read any more.
 The name is only a label: it shows up as the evidence for where a post was seen.
 
-1. List one - https://x.com/i/lists/2091834809903407159
-2. List two - https://x.com/i/lists/2091829768081506382
+1. FP - https://x.com/i/lists/2091834809903407159
+2. Economists - https://x.com/i/lists/2091829768081506382

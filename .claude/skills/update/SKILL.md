@@ -22,7 +22,7 @@ Three things are never overwritten:
 
 - `runs/` — every brief ever made here
 - `shows/` — the transcripts, digests and topic profile
-- `sources.md`, `settings.md` and the shows' own `settings.md` — if the user's copy differs from
+- `sources.md` and `settings.md` — if the user's copy differs from
   the new one, the script writes the new one and keeps theirs alongside as
   `<name>.backup`, and says so.
 

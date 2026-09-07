@@ -26,6 +26,7 @@ judgment to fake) and do NOT drive a browser. They cover:
     when a note is missing
 """
 
+import ast
 import json
 import re
 import subprocess
@@ -103,7 +104,7 @@ class TestMissingStep(unittest.TestCase):
             with mock.patch.object(x_run, "die") as mock_die:
                 mock_die.side_effect = SystemExit(1)
                 with self.assertRaises(SystemExit):
-                    x_run.call_claude("prompt", "opus", ROOT)
+                    x_run.call_claude("prompt", "opus", "high", ROOT)
                 self.assertIn("claude", mock_die.call_args[0][0])
 
     def test_chain_full_run_fails_clearly_when_step_missing(self):
@@ -222,7 +223,7 @@ class TestJudgeMerge(unittest.TestCase):
             run_dir = Path(td)
             captured = {}
 
-            def fake_call_claude(prompt_text, model, cwd, timeout=1800):
+            def fake_call_claude(prompt_text, model, effort, cwd, timeout=1800):
                 captured["prompt"] = prompt_text
                 captured["model"] = model
                 # simulate the agent doing its job: write picks.md
@@ -230,7 +231,7 @@ class TestJudgeMerge(unittest.TestCase):
                 return "wrote 0 picks, 0 cut"
 
             with mock.patch.object(x_run, "call_claude", side_effect=fake_call_claude):
-                x_run.merge_judge_verdicts(run_dir, ['{"subject": "x"}'], settings, "opus")
+                x_run.merge_judge_verdicts(run_dir, ['{"subject": "x"}'], settings, "opus", "high")
 
             self.assertTrue((run_dir / "picks.md").exists())
             self.assertEqual(captured["model"], "opus")
@@ -248,7 +249,7 @@ class TestJudgeMerge(unittest.TestCase):
                 with mock.patch.object(x_run, "die") as mock_die:
                     mock_die.side_effect = SystemExit(1)
                     with self.assertRaises(SystemExit):
-                        x_run.merge_judge_verdicts(run_dir, ["{}"], settings, "opus")
+                        x_run.merge_judge_verdicts(run_dir, ["{}"], settings, "opus", "high")
 
 
 class TestReadStageConcurrency(unittest.TestCase):
@@ -265,7 +266,8 @@ class TestReadStageConcurrency(unittest.TestCase):
         return "\n".join(lines) + "\n"
 
     def test_batches_cover_every_link_exactly_once_at_the_settings_batch_size(self):
-        settings = {"x_read_batch": 3, "x_agents_active_max": 8, "read_model": "sonnet"}
+        settings = {"x_read_batch": 3, "x_agents_active_max": 8,
+                    "read_model": "sonnet", "read_effort": "medium"}
         with tempfile.TemporaryDirectory() as td:
             run_dir = Path(td)
             (run_dir / "links.md").write_text(self._make_links_md(10), encoding="utf-8")
@@ -277,7 +279,7 @@ class TestReadStageConcurrency(unittest.TestCase):
                                   "read stage did not pool at x_agents_active_max")
                 return [job() for job in jobs]
 
-            def fake_call_claude(prompt_text, model, cwd, timeout=1800):
+            def fake_call_claude(prompt_text, model, effort, cwd, timeout=1800):
                 ids = re.findall(r"^id:\s*(\d+)\s*$", prompt_text, re.M)
                 seen_ids.extend(ids)
                 notes_dir = run_dir / "notes"
@@ -303,7 +305,8 @@ class TestReadStageConcurrency(unittest.TestCase):
         rule) fails this test, because it asserts the pool call's
         max_workers came from settings, and a fixed max_workers of 1 with
         x_agents_active_max set to 8 in settings does not match."""
-        settings = {"x_read_batch": 3, "x_agents_active_max": 8, "read_model": "sonnet"}
+        settings = {"x_read_batch": 3, "x_agents_active_max": 8,
+                    "read_model": "sonnet", "read_effort": "medium"}
         with tempfile.TemporaryDirectory() as td:
             run_dir = Path(td)
             (run_dir / "links.md").write_text(self._make_links_md(9), encoding="utf-8")
@@ -315,7 +318,7 @@ class TestReadStageConcurrency(unittest.TestCase):
                 captured["n_jobs"] = len(jobs)
                 return [job() for job in jobs]
 
-            def fake_call_claude(prompt_text, model, cwd, timeout=1800):
+            def fake_call_claude(prompt_text, model, effort, cwd, timeout=1800):
                 ids = re.findall(r"^id:\s*(\d+)\s*$", prompt_text, re.M)
                 notes_dir = run_dir / "notes"
                 for tid in ids:
@@ -336,17 +339,19 @@ class TestReadStageConcurrency(unittest.TestCase):
             self.assertEqual(captured["max_workers"], 8)
 
     def test_each_batch_gets_its_own_ego_task_space(self):
-        """GOAL.md: 'each opens its own ego task space... never two agents
-        in one task space.' Each batch's filled prompt must carry a
-        distinct TASK_SPACE value."""
-        settings = {"x_read_batch": 2, "x_agents_active_max": 8, "read_model": "sonnet"}
+        """Many read sub-agents run at the same time, each in its OWN ego
+        task space; two agents in one task space is the thing that must
+        never happen. So each batch's filled prompt must carry a distinct
+        TASK_SPACE value."""
+        settings = {"x_read_batch": 2, "x_agents_active_max": 8,
+                    "read_model": "sonnet", "read_effort": "medium"}
         with tempfile.TemporaryDirectory() as td:
             run_dir = Path(td)
             (run_dir / "links.md").write_text(self._make_links_md(6), encoding="utf-8")
 
             task_spaces = []
 
-            def fake_call_claude(prompt_text, model, cwd, timeout=1800):
+            def fake_call_claude(prompt_text, model, effort, cwd, timeout=1800):
                 m = re.search(r"Browser task space to use:\s*(.+)", prompt_text)
                 self.assertIsNotNone(m)
                 task_spaces.append(m.group(1).strip())
@@ -484,7 +489,7 @@ class TestStepWrite(unittest.TestCase):
 
             captured = {}
 
-            def fake_call_claude(prompt_text, model, cwd, timeout=1800):
+            def fake_call_claude(prompt_text, model, effort, cwd, timeout=1800):
                 captured["prompt"] = prompt_text
                 captured["model"] = model
                 (run_dir / "brief.md").write_text("# What the list is moving on\n", encoding="utf-8")
@@ -543,9 +548,24 @@ class TestNoHardcodedSettings(unittest.TestCase):
         """A crude but real guardrail check: none of settings.md's own
         Numbers values appear in x_run.py as a bare literal outside of
         settings[...] lookups. This can't catch everything, but it fails
-        loudly if e.g. `5` gets hard-coded for x_picks_max."""
+        loudly if e.g. `5` gets hard-coded for x_picks_max.
+
+        The module docstring is prose, not code: it explains the chain and
+        lists the ten finish-line checks, so its numbered rows are not
+        settings values and are skipped. Everything below it is checked."""
         source = (ROOT / "x_run.py").read_text(encoding="utf-8")
         settings = load_settings(SETTINGS_PATH)
+
+        # Prose, not code: skip the module docstring's own lines.
+        tree = ast.parse(source)
+        doc_lines = set()
+        if (tree.body and isinstance(tree.body[0], ast.Expr)
+                and isinstance(tree.body[0].value, ast.Constant)
+                and isinstance(tree.body[0].value.value, str)):
+            node = tree.body[0]
+            doc_lines = set(range(node.lineno, node.end_lineno + 1))
+        self.assertTrue(doc_lines, "x_run.py lost its module docstring")
+
         # Only check multi-digit numbers -- small ints like 0/1 are used as
         # ordinary indices/booleans throughout and would false-positive.
         risky = {v for k, v in settings.items()
@@ -554,6 +574,9 @@ class TestNoHardcodedSettings(unittest.TestCase):
             # allow it inside a string that also contains 'settings' nearby,
             # or as part of a larger number/identifier
             for match in re.finditer(rf"(?<![\w.]){value}(?![\w.])", source):
+                lineno = source.count("\n", 0, match.start()) + 1
+                if lineno in doc_lines:
+                    continue
                 line_start = source.rfind("\n", 0, match.start()) + 1
                 line_end = source.find("\n", match.start())
                 line = source[line_start:line_end]

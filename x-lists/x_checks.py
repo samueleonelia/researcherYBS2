@@ -1,11 +1,33 @@
 #!/usr/bin/env python3
-"""x_checks.py - the mechanical, JSON-only checks from GOAL.md section 2,
-plus check 8 for the links.md artifact.
+"""x_checks.py - the mechanical, JSON-only finish-line checks for one run.
+
+A run of the X pipeline passes when, in its fresh run folder
+`x-lists/runs/<date>-<time>/`, ten things are true. Seven of them can be
+decided from the files alone, and this module holds one function per each:
+checks 1, 2, 3, 4, 5, 8 and the mechanical slice of 10. Each function's own
+docstring states its check in full, so nothing here points elsewhere for the
+rule it enforces.
+
+The three with no function here, and where they live instead:
+
+  - **Check 6** (picks.md holds at most `x_picks_max` subjects, each tagged
+    TRENDING or CURIOUS, with the tweet that states it best and the
+    storyline it touches): the ceiling is applied in
+    `x_run.merge_judge_verdicts`, the tagging and the choosing in
+    `prompts/judge.md` and `prompts/judge-merge.md`.
+  - **Check 7** (the tests in `x-lists/tests/` pass): the tests are the
+    check. The root `tests/` are not touched and not run.
+  - **Check 9** (every link in links.md has a note in notes/, written from
+    the tweet's own page by a read sub-agent, holding the tweet's FULL text
+    rather than the feed's collapsed preview; every quote in picks.md
+    matches a note, not the feed text): the countable half is
+    `x_run.validate_notes`, the reading half is `prompts/read.md`.
 
 Each `check_N` function takes already-loaded JSON (plus settings where a
 number is needed) and returns `(ok: bool, reason: str)`. Nothing here opens
 a browser, calls an agent, or reads a tweet for meaning -- these are the
-checks a verifier or a test can run from the files alone.
+checks a verifier or a test can run from the files alone. Nothing in a run
+calls this module: it is run by `x-lists/tests/` and by verifier agents.
 
 The window rule follows the orchestrator's ruling in
 `plans/interfaces.md` ("The window boundary" section, 2026-09-06):
@@ -83,9 +105,17 @@ def window_boundary(tweets: list, cutoff, stop_after_old: int):
 # ---------------------------------------------------------------- check 1
 
 def check1_schema(tweets_doc: dict, settings: dict):
-    """tweets.json exists (caller loaded it), has >= x_tweets_min tweets,
-    and every record carries every field in TWEET_FIELDS (empty allowed,
-    missing not)."""
+    """CHECK 1, in full: `tweets.json` exists (the caller loaded it) and
+    holds at least `x_tweets_min` tweets, every record carrying every field
+    in the design's field table -- TWEET_FIELDS above. An empty value is
+    allowed; a missing key is not.
+
+    Also enforced here, because a record that names a list nothing scraped is
+    the same kind of schema failure: the document carries `lists`, `account`,
+    `scraped_at`, `window_hours` and `tweets` at the top level; `lists` names
+    at least one list, each with a name and a url; and every tweet's own
+    `lists` names only lists that were scraped, with its `list` among
+    them."""
     if "x_tweets_min" not in settings:
         return False, "settings.md has no x_tweets_min"
     minimum = settings["x_tweets_min"]
@@ -131,9 +161,14 @@ def check1_schema(tweets_doc: dict, settings: dict):
 # ---------------------------------------------------------------- check 2
 
 def check2_window(tweets_doc: dict, settings: dict):
-    """Every tweet in tweets.json is inside the window rule: reposts
-    included, cut at the first run of x_stop_after_old non-repost tweets
-    older than x_window_hours (see the ruling above)."""
+    """CHECK 2, in full: every tweet in `tweets.json` was scraped inside the
+    window rule -- reposts included, cut at the first run of
+    `x_stop_after_old` non-repost tweets older than `x_window_hours` before
+    `scraped_at` (the boundary ruling quoted in this module's header).
+
+    Each list is its own timeline, so the merged pile is split back per list
+    and the rule applied to each: an old run at the end of one list must not
+    cut another list short."""
     for key in ("x_window_hours", "x_stop_after_old"):
         if key not in settings:
             return False, f"settings.md has no {key}"
@@ -276,9 +311,18 @@ def expected_filter(tweets_doc: dict, settings: dict):
 
 
 def check3_kept(tweets_doc: dict, kept_doc: dict, settings: dict):
-    """kept.json holds only tweets that survive the six filter rules, in
-    order, and nothing else was dropped -- checked against an independent
-    recomputation of the rules, not against x_filter.py's own code."""
+    """CHECK 3, in full: `kept.json` exists and holds only the tweets that
+    survive the six screen rules, in timeline order, and nothing else was
+    dropped. In particular no kept tweet carries a link that leaves X, and
+    every kept tweet clears the per-hour engagement gate -- views OR likes OR
+    reposts, divided by the hours since it was posted, against the three
+    `x_*_per_hour` settings.
+
+    Every input tweet lands in exactly one bucket, kept or dropped, and each
+    dropped entry names the rule (1-6) that dropped it. All of it is checked
+    against an independent recomputation of the rules (`expected_filter`
+    below), never against x_filter.py's own code -- two implementations that
+    agree is the point."""
     for key in ("x_window_hours", "x_min_own_words",
                 "x_reposts_per_hour", "x_likes_per_hour", "x_views_per_hour"):
         if key not in settings:
@@ -332,7 +376,9 @@ def check3_kept(tweets_doc: dict, kept_doc: dict, settings: dict):
 # ---------------------------------------------------------------- check 4
 
 def check4_subject_coverage(kept_doc: dict, subjects_doc: dict):
-    """Every kept tweet id appears in exactly one subject."""
+    """CHECK 4, in full: `subjects.json` exists, and every kept tweet id
+    appears in exactly one subject -- none in two, none missing, and no id
+    invented that `kept.json` never held."""
     if "subjects" not in subjects_doc:
         return False, "subjects.json has no 'subjects'"
     kept_ids = {t["id"] for t in kept_doc.get("kept") or []}
@@ -358,9 +404,15 @@ def check4_subject_coverage(kept_doc: dict, subjects_doc: dict):
 # ---------------------------------------------------------------- check 5
 
 def check5_subject_fields(subjects_doc: dict, settings: dict = None):
-    """Every subject carries authors, lists, endorsements, velocity,
-    velocity_rank, cross_list and its flags (plus tag, derived from
-    flags)."""
+    """CHECK 5, in full: every subject carries `authors`, `lists`,
+    `endorsements`, `velocity`, `velocity_rank`, `cross_list` and its
+    `flags`, computed as the design says -- plus `tag`, which is derived from
+    the flags.
+
+    Enforced here: flags is a list drawn only from CONVERGENCE, ENDORSEMENT
+    and VELOCITY; `tag` is TRENDING when the subject has any flag and
+    SINGLETON when it has none; `velocity_rank` is a percentile in 0-100; and
+    `cross_list` is a boolean."""
     subjects = subjects_doc.get("subjects") or []
     if not subjects:
         return False, "subjects.json has no subjects"
@@ -415,10 +467,13 @@ def parse_links_md(text: str):
 
 
 def check8_links(kept_doc: dict, links_md_text: str):
-    """links.md lists every surviving (kept) tweet as a permalink, marked
-    POST or REPOST (REPOST exactly when reposted_by is non-empty), and
-    nothing that failed a rule. The set of urls in it must equal exactly
-    the set of kept tweets' urls."""
+    """CHECK 8, in full: `links.md` exists and lists every surviving tweet as
+    a permalink, each marked POST or REPOST -- REPOST exactly when the tweet
+    carries a `reposted_by` -- and nothing that failed a screen rule.
+
+    So the set of urls in links.md must equal exactly the set of kept tweets'
+    urls: nothing missing, nothing extra, nothing listed twice, and no
+    mismarked kind."""
     kept = kept_doc.get("kept") or []
     if not kept:
         return False, "kept.json has no 'kept' tweets to check links.md against"
@@ -461,8 +516,16 @@ def check8_links(kept_doc: dict, links_md_text: str):
 
 # ---------------------------------------------------------------- check 10
 #
-# Check 10, in full, needs a human reader: "follows templates/x-brief.md",
-# "the story in Yaron's lens", "obeys preferences.md". Those go to a sonnet
+# CHECK 10, in full -- the finish line, the thing Yaron actually reads:
+# brief.md exists, follows templates/x-brief.md, and carries every pick from
+# picks.md and nothing else. One item per pick, in the template's order
+# (TRENDING before CURIOUS), each with the story in Yaron's lens, the tweet
+# permalink, and the storyline. Every figure and quote in it appears in that
+# pick's note. It obeys preferences.md and the x_words_per_sentence_max
+# ceiling in settings.md.
+#
+# Parts of that need a human reader -- "follows templates/x-brief.md", "the
+# story in Yaron's lens", "obeys preferences.md". Those go to a sonnet
 # verifier. What follows is the part a script can decide from the two files
 # alone, independent of x_run.py and x_filter.py (this module imports
 # neither, on purpose -- it re-parses picks.md and brief.md itself, the same
@@ -604,8 +667,18 @@ def extract_prose_sentences(brief_md_text: str):
 
 
 def check10_mechanical(picks_md_text: str, brief_md_text: str, settings: dict):
-    """The mechanical slice of check 10 -- see the block comment above this
-    section for exactly what is and is not covered here."""
+    """The mechanical slice of CHECK 10 (whose full text is in the block
+    comment above this section): brief.md exists and is non-empty; it has one
+    item per pick and no other; its permalinks are exactly picks.md's; every
+    TRENDING item precedes every CURIOUS one, and each item sits under the
+    section its own pick was tagged with; every prose sentence is at or under
+    `x_words_per_sentence_max` words; and every pick's storyline line appears
+    in the brief.
+
+    The reading half of check 10 -- template shape beyond this, Yaron's lens,
+    preferences.md, and every figure and quote tracing to that pick's note --
+    is prompts/write.md's job and a verifier's; see the block comment for why
+    a script must not fake it."""
     if "x_words_per_sentence_max" not in settings:
         return False, "settings.md has no x_words_per_sentence_max"
     max_words = settings["x_words_per_sentence_max"]

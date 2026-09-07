@@ -24,9 +24,9 @@ _Updated: 2026-09-07 · X lists live in sources.md_
 | Test suite | ⚠️ partial | 4 failures predate this repo, see bugs |
 | Git remote | ✅ working | github.com/samueleonelia/researcherYBS2 (private) |
 | Install on another Mac (`/setup`) | ✅ working | |
-| Update in place (`/update`) | ✅ working | keeps runs/, shows/, preferences.md, two settings.md |
+| Update in place (`/update`) | ✅ working | keeps runs/, shows/, preferences.md, sources.md, settings.md |
 | His standing instructions | ✅ working | `preferences.md`, read by pick, write and the X judge/write |
-| Settings | ✅ working | one root `settings.md` for brief + X; `/ybs-shows` keeps its own |
+| Settings | ✅ working | one root `settings.md`: brief, X and shows, numbers and models |
 
 ## Next up
 1. Live acceptance run of the two-list scrape: `python3 x-lists/x_run.py --only 1`

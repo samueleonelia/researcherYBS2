@@ -2,9 +2,7 @@
 
 Every number the morning brief obeys lives here, and nowhere else. Change a
 value in a table below and the scripts and every prompt change with it. One
-file covers both halves of the run: the article brief and the X list.
-(`/ybs-shows` is a different job and keeps its own settings file, in
-`.claude/skills/ybs-shows/`.)
+file covers all three jobs: the article brief, the X list and the shows.
 
 **Every number is a ceiling, never a floor.** A brief with two leads is right
 when only two stories deserve to lead. Nothing in the pipeline fills a slot to
@@ -12,11 +10,13 @@ reach a number.
 
 **How the scripts read this file.** They look only at the `##` headings:
 `Numbers` and `Models` belong to the article brief, `X numbers`, `X fixed` and
-`X models` to the X list. Each half reads its own headings and ignores the
-other's, which is why both halves may name a step `cluster` without clashing.
+`X models` to the X list, and `Shows numbers` and `Shows models` to the shows.
+Each job reads its own headings and ignores the others', which is why two of
+them may name a step `cluster`, or a number `retries_max`, without clashing.
 A `#` heading below is a divider for you, not for them. Print what a script
 actually sees with `python3 .claude/skills/ybs-brief/scripts/ybs_run.py
-settings` or `python3 x-lists/x_settings.py`.
+settings`, `python3 x-lists/x_settings.py`, or `python3
+.claude/skills/ybs-shows/scripts/ybs_shows.py settings`.
 
 # The article brief
 
@@ -67,7 +67,8 @@ decide what the brief says. `check` and `screen` are narrow mechanical work.
 # The X list
 
 The X half runs beside the article half and writes the section under Worth
-Yaron's attention. Its rules and guardrails are in `x-lists/GOAL.md`.
+Yaron's attention. Its steps, and the home of each rule it obeys, are listed in the header of
+`x-lists/x_run.py`.
 
 ## X numbers
 
@@ -111,21 +112,13 @@ is which login is allowed to read them.
 ## X models
 
 What each agent runs at. **These are not ceilings.** A model here is what the
-step uses every time. The rule for changing one is in `x-lists/GOAL.md`,
-section 3. The last column is where the bill comes from: the steps with many
-agents per run decide the cost.
+step uses every time. Raising one costs money on every tweet that step
+touches. Lowering one trades judgment for cost, and a step that has quietly got
+worse still returns something that looks right, so change one only with a
+corpus replay behind it.
 
-Build time (agents that write the pipeline):
-
-| Agent | Model | Effort | Why |
-|---|---|---|---|
-| orchestrator (main session) | opus | medium | launches, reads verdicts, commits; does no work itself |
-| build scrape | sonnet | high | the browser is the hard part; needs care, not judgment |
-| build filter, score, run-chain | sonnet | medium | mechanical rules from a table |
-| build cluster prompt, judge prompt, write prompt and template | opus | high | the prompt *is* the judgment |
-| build tests | sonnet | medium | one per script |
-
-Run time (agents that run on real tweets):
+The last column is where the bill comes from: the steps with many agents per
+run decide the cost.
 
 | Step | Model | Effort | Agents per run |
 |---|---|---|---|
@@ -133,7 +126,35 @@ Run time (agents that run on real tweets):
 | read | sonnet | medium | one per batch of `x_read_batch` links, up to `x_agents_active_max` at once, each in its own ego task space |
 | judge | opus | high | one per subject, up to `x_agents_active_max` at once |
 | write | opus | high | 1; it writes what Yaron reads |
-| verify, check 10 | sonnet | medium | one; reads the brief against the picks and the notes |
-| verify, checks 1-5 | haiku | low | one per check; mechanical, from the JSON alone |
-| verify, check 6 | sonnet | medium | one; needs to read the picks |
-| verify, check 7 | haiku | low | one; runs the tests, reports pass or fail |
+
+# The shows
+
+`/ybs-shows` is its own job: it refreshes the archive of show transcripts and
+rebuilds the topic profile the morning brief reads. It writes no brief and
+sends nothing anywhere.
+
+## Shows numbers
+
+| Setting | Value | What it means |
+|---|---|---|
+| channel | https://www.youtube.com/@YaronBrook/streams | the page the show list is read from |
+| shows_for_profile | 15 | most recent shows the topic profile is built from |
+| excluded_titles | "AMA & Hangout", "Yaron & Nikos Dialogues" | a show whose title contains one of these is never used |
+| agents_active_max | 10 | agents working at the same time in a pooled step |
+| transcript_package | @sinco-lab/mcp-youtube-transcript@0.0.12 | fetches the captions YouTube will not serve any other way; npx downloads it on demand |
+| transcript_words_min | 1000 | a transcript shorter than this is not a show; the fetch treats it as no transcript at all |
+| list_scrolls_max | 8 | times the list page is scrolled before the listing is taken |
+| themes_max_misses | 3 | builds a theme may be absent from before it is dropped from the profile |
+| retries_max | 1 | times one agent may be launched again after a failure |
+
+## Shows models
+
+What each step runs at. **These are not ceilings.** A model here is what the
+step uses every time. The last column is where the bill comes from: the digest
+step is the one that grows with the archive.
+
+| Step | Model | Effort | Agents per run |
+|---|---|---|---|
+| list | haiku | low | 1 |
+| digest | sonnet | medium | one per show among the newest `shows_for_profile` that has no digest yet |
+| profile | opus | high | 1 |

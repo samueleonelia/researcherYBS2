@@ -30,10 +30,11 @@ home; never copy it into a prompt or a reply.
 | file names, launch lines, sentinels | `ybs_run.py schema` |
 | the rules of this pipeline | the hard rules at the end of this file |
 | model and effort per agent | `settings.md`, the `## Models` table |
-| the X list: its steps and its rules | `x-lists/`, with its own `GOAL.md`; its numbers are in `settings.md` under `## X numbers` |
+| the X list: its steps and where each rule lives | `x-lists/x_run.py`, whose header lists them |
 
 The eight agent files in `.claude/agents/ybs4-*.md` are **generated** from the
-templates in `agents/`. Edit a template, then run `ybs_run.py build`.
+templates in `agents/` and the `## Models` table in `settings.md`. Edit either
+one; step 0 rebuilds the agent files at the start of every run.
 
 ## Prompts
 
@@ -96,7 +97,7 @@ Used by triage, read, figure check and counterpoints.
 ```bash
 ego-browser --version
 python3 .claude/skills/ybs-brief/scripts/ybs_run.py settings
-python3 .claude/skills/ybs-brief/scripts/ybs_run.py build --check
+python3 .claude/skills/ybs-brief/scripts/ybs_run.py build
 python3 .claude/skills/ybs-brief/scripts/ybs_run.py sources
 ```
 
@@ -104,7 +105,6 @@ If `sources` lists no news source, or a line has no link, stop and say which
 line. `x_lists` in the same output is the X half's own list of lists, from
 `sources.md`'s `## X lists` section; it is never screened by an agent.
 If `ego-browser` is missing, stop: nothing here works without it.
-If `build --check` reports a stale agent file, run `build` and say you did.
 
 ## Step 1 — start the run
 
@@ -369,7 +369,8 @@ path to `brief.md` to the user. Nothing else.
    handling outside a browser.
 2. **Model and effort come from `settings.md`**, through the built agent files.
    Never pass `model` to the Agent tool, never state an effort in a prompt. To
-   change what a step runs at, edit the `## Models` table and run `build`. The
+   change what a step runs at, edit the `## Models` table: step 0's `build`
+   rebuilds the agent files, so there is nothing else to do. The
    X pipeline's models are its own: they live in the same `settings.md` under
    `## X models`, and reach its agents through `x_run.py`, never through the
    Agent tool. Each half reads only its own headings, so a step named `cluster`

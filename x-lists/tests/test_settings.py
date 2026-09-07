@@ -43,6 +43,17 @@ class TestLoadRealSettings(unittest.TestCase):
         self.assertIn("judge_model", self.settings)
         self.assertIn("judge_effort", self.settings)
 
+    def test_every_agent_step_has_a_model_and_an_effort(self):
+        """The four agent steps x_run.py launches. Both halves of each row
+        must load: since the effort is now passed to `claude -p` as
+        `--effort`, a row with no effort key stops the run instead of
+        quietly running the step at some default."""
+        for step in ("read", "cluster", "judge", "write"):
+            for suffix in ("_model", "_effort"):
+                key = step + suffix
+                self.assertIn(key, self.settings, f"missing {key}")
+                self.assertTrue(str(self.settings[key]).strip(), f"{key} is empty")
+
     def test_the_article_halfs_rows_are_not_read(self):
         """The one file holds both halves. A step named `cluster` in each is
         the reason this loader reads only the `X` headings: the article

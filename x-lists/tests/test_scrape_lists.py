@@ -120,6 +120,55 @@ class TestTweetsJsonHead(unittest.TestCase):
         self.assertIn("List two: no run", reason)
 
 
+NORMAL_TIMELINE = """Home
+List one
+@someone
+Rate limits are killing my bot again, something went wrong all morning.
+1 reply 2 reposts 3 likes 400 views
+@another
+I had to log in to X twice today and the captcha never ended.
+0 replies 1 repost 9 likes 200 views
+"""
+
+
+class TestBlockingPageReason(unittest.TestCase):
+    """The stop that fires when a scroll round adds no tweet and X is walling."""
+
+    def test_a_normal_timeline_is_not_a_block(self):
+        """Tweets that talk about rate limits, logging in and captchas are
+        still an ordinary timeline: nothing may fire on them."""
+        self.assertIsNone(x_scrape.blocking_page_reason(NORMAL_TIMELINE))
+
+    def test_empty_text_is_not_a_block(self):
+        self.assertIsNone(x_scrape.blocking_page_reason(""))
+        self.assertIsNone(x_scrape.blocking_page_reason(None))
+
+    def test_the_login_wall_fires(self):
+        page = ("Don't miss what's happening\n"
+                "People on X are the first to know.\n"
+                "Sign in\nCreate account\n")
+        reason = x_scrape.blocking_page_reason(page)
+        self.assertIsNotNone(reason)
+        self.assertTrue(reason.startswith("login wall"), reason)
+
+    def test_the_captcha_fires(self):
+        reason = x_scrape.blocking_page_reason("Verify you are human before continuing")
+        self.assertTrue(reason.startswith("captcha"), reason)
+
+    def test_the_rate_limit_fires(self):
+        reason = x_scrape.blocking_page_reason(
+            "Rate limit exceeded. Please wait a few moments then try again.")
+        self.assertTrue(reason.startswith("rate limit"), reason)
+
+    def test_something_went_wrong_fires(self):
+        reason = x_scrape.blocking_page_reason("Something went wrong. Try reloading.")
+        self.assertTrue(reason.startswith("something went wrong"), reason)
+
+    def test_the_reason_names_the_pattern_that_fired(self):
+        reason = x_scrape.blocking_page_reason("SIGN IN TO X")
+        self.assertIn("sign in to x", reason)
+
+
 class TestConvergenceCountsLists(unittest.TestCase):
     def test_a_subject_in_two_lists_counts_as_two(self):
         kept = [tweet("1", ONE["name"], author="@a"),

@@ -5,10 +5,16 @@ Scrolls every X list named in sources.md, one after the other, from the top,
 in the logged-in ego browser, and writes DIR/tweets.json plus DIR/page.txt and
 DIR/pages/<slug>.txt. Standard library only.
 
-Guardrails (see GOAL.md): only @EgoismoEfficace, only the list URLs named in
-sources.md, read only, no login, sole owner of the browser for the duration of
-this script. Each list is checked on arrival, so the guardrail holds for the
-second list exactly as for the first.
+Guardrails. This script may operate on one X account only -- the handle in
+`x_account` in the root settings.md -- and it may open no X URL other than the
+list URLs named under `## X lists` in the root sources.md. It reads: it never
+posts, replies, likes, reposts, follows, or DMs, never logs in or enters a
+password, and never touches account settings; the ego browser already holds
+the session, and if it is logged out this script stops and says so. It is the
+sole owner of the browser for the duration of the run, and it deletes nothing.
+Each list is checked on arrival -- the logged-in handle and the URL the browser
+landed on -- so the guardrail holds for the second list exactly as for the
+first.
 No number is hard-coded here -- every one is read from the root settings.md
 at run time, through x_settings.py.
 """
@@ -346,6 +352,66 @@ def _first_index_of_streak(records, streak_len, end_index):
     return idx + 1
 
 
+# ----------------------------------------------------------- blocked page
+
+# A scroll round that adds no new tweet is normal at the end of a list, so the
+# page text alone decides whether the list ended or X stopped us. Every needle
+# below is a full sentence or a whole button label that X's own blocking pages
+# print as page chrome, chosen so an ordinary timeline cannot carry it even
+# when a tweet talks about being rate-limited or quotes "something went wrong":
+# each is longer than the phrase a person would type, and names X itself or the
+# rest of X's sentence. Matching is case-insensitive; needles stop before any
+# apostrophe, because X writes curly ones and copies of its text write straight
+# ones. Ordinary tweet words ("rate limit", "captcha", "login") are deliberately
+# NOT here: on their own they fire on a normal timeline.
+BLOCK_PATTERNS = [
+    # The logged-out wall: the sign-in screen's headline and the two lines X
+    # prints to a signed-out visitor. A logged-in list page prints none of
+    # them. "log in to x" is deliberately absent: that is how a person writes
+    # it in a tweet ("I had to log in to X twice today"), while X's own
+    # headline says "Sign in to X".
+    ("login wall", [
+        "sign in to x",
+        "people on x are the first to know",
+        "sign up to get your own personalized timeline",
+    ]),
+    # The human check. Full sentences from the challenge page; a tweet saying
+    # "captcha" does not carry any of them.
+    ("captcha", [
+        "verify you are human",
+        "prove you are not a robot",
+        "complete a security check",
+        "authenticate your account",
+    ]),
+    # The limit page. "rate limit" alone is a thing people tweet about, so the
+    # needle carries X's whole sentence.
+    ("rate limit", [
+        "rate limit exceeded",
+        "you are over the daily limit",
+        "too many requests",
+    ]),
+    # X's generic error card. The bare phrase is quotable, so both needles
+    # carry the clause that follows it on the card and nowhere else.
+    ("something went wrong", [
+        "something went wrong. try reloading",
+        "something went wrong, but don",
+    ]),
+]
+
+
+def blocking_page_reason(page_text: str):
+    """Name the wall X is showing on this page text, or None if there is none.
+
+    Runs on the text the scrape already collected for page.txt: no extra
+    browser call. Only called for a round that added no new tweet."""
+    low = (page_text or "").lower()
+    for name, needles in BLOCK_PATTERNS:
+        for needle in needles:
+            if needle in low:
+                return f"{name} (page says {needle!r})"
+    return None
+
+
 def scrape(account: str, list_url: str, window_hours: int, stop_after_old: int,
            list_name: str = "", max_rounds: int = 150, stagnant_limit: int = 8):
     """Scroll ONE list from the top and return its tweets in timeline order.
@@ -402,8 +468,15 @@ def scrape(account: str, list_url: str, window_hours: int, stop_after_old: int,
         result = run_js_json(build_scroll_round_script())
         if not result.get("ok"):
             die(f"scroll round {rounds} failed: {result}")
-        added = absorb(result["tweets"], seen_at_iso, result.get("pageText", ""))
+        round_text = result.get("pageText", "")
+        added = absorb(result["tweets"], seen_at_iso, round_text)
         if added == 0:
+            # Nothing new: either the list ended, or X is showing a wall. The
+            # page text says which, and a wall stops the run with its name.
+            blocked = blocking_page_reason(round_text)
+            if blocked:
+                die(f"{list_name or list_url}: scroll round {rounds} added no new "
+                    f"tweet and X is showing a {blocked} -- stopping")
             stagnant_rounds += 1
             if stagnant_rounds >= stagnant_limit:
                 break  # end of the list; nothing new loads any more

@@ -224,9 +224,9 @@ id in your batch.** Code checks this and the run fails, naming the missing ids.
 2. **Never write the collapsed preview.** Expand it or say you could not.
 3. **One tweet at a time**, in the order given.
 4. **Only the permalinks above**, reading only, no clicks that change anything.
-5. **One file per id, and no other file.** Do not edit `links.md`,
-   `kept.json`, or anything else in the run folder. Do not create a summary
-   file, an index, or a log.
+5. **One file per id, and no other file.** Do not edit or delete `links.md`,
+   `kept.json`, or anything else in the run folder, and never delete the run
+   folder itself. Do not create a summary file, an index, or a log.
 6. **Do not judge.** No ranking, no grouping, no relevance, no opinion, no
    "this one is the best". Not in the note, not in your final line.
 

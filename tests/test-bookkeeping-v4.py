@@ -6,10 +6,12 @@ correct in one case, deliberately broken in the next -- and asserts the script
 either accepts it or names the exact problem. Exit 0 = all passed.
 """
 import json
+import os
 import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -19,9 +21,10 @@ SCRIPT = ROOT / ".claude" / "skills" / "ybs-brief" / "scripts" / "ybs_run.py"
 FAILURES = []
 
 
-def run(*args, expect=None):
+def run(*args, expect=None, env=None):
     r = subprocess.run([sys.executable, str(SCRIPT)] + [str(a) for a in args],
-                       capture_output=True, text=True, cwd=ROOT)
+                       capture_output=True, text=True, cwd=ROOT,
+                       env={**os.environ, **env} if env else None)
     if expect is not None and r.returncode != expect:
         FAILURES.append(f"{' '.join(str(a) for a in args[:2])}: exit {r.returncode}, "
                         f"expected {expect}\n    {r.stderr.strip()[:200]}")
@@ -732,6 +735,323 @@ def test_audit_and_close(rd):
           json.loads((rd / "run.json").read_text())["status"] == "completed")
 
 
+# ---------------------------------------------------------------- the X run
+#
+# Nothing here touches the browser, the network or the real x_run.py: YBS_X_RUN
+# points x-start at a stub that does in a second what the chain does in six
+# minutes. The X run folders the stubs create are removed again, and they are
+# the only thing under x-lists/ these tests ever write.
+
+X_BRIEF = """# What the list is moving on
+
+**Run:** 2026-09-06-1246 · **Window:** 2 hours, to 6 September 2026 at 12:46 UTC
+
+## TRENDING
+
+### 1. A member of the list said something worth hearing.
+
+The story, in a paragraph.
+
+- **Storyline:** a storyline name, copied word for word
+- **Flags:** CONVERGENCE · VELOCITY
+- **Source:** [@handle](https://x.com/handle/status/1)
+
+## CURIOUS
+
+### 2. One account reported something nobody else did.
+
+The second story.
+
+- **Storyline:** another storyline
+- **Flags:** none
+- **Source:** [@other](https://x.com/other/status/2)
+
+---
+
+2 picks from 7 subjects judged. TRENDING items carry a flag from the list. CURIOUS ones carry none.
+"""
+
+X_BRIEF_EMPTY = """# What the list is moving on
+
+**Run:** 2026-09-06-1246 · **Window:** 2 hours, to 6 September 2026 at 12:46 UTC
+
+The window held nothing that reaches the brief.
+"""
+
+STUB = """#!/usr/bin/env python3
+import sys, time
+from pathlib import Path
+argv = sys.argv[1:]
+run_dir = Path(argv[argv.index("--run-dir") + 1])
+run_dir.mkdir(parents=True, exist_ok=True)
+print("stub: step 1 (scrape)")
+BRIEF
+NOTES
+time.sleep(SLEEP)
+TAIL
+sys.exit(CODE)
+"""
+
+
+def stub(where, name, brief=None, notes=0, sleep=0.0, code=0, tail=()):
+    """One throwaway x_run.py, doing only what a test needs it to do."""
+    body = ("(run_dir / 'brief.md').write_text(%r, encoding='utf-8')" % brief
+            if brief else "")
+    notes_body = ("\n".join([
+        "(run_dir / 'notes').mkdir(exist_ok=True)",
+        "[(run_dir / 'notes' / (str(i) + '.md')).write_text('note')"
+        " for i in range(" + str(notes) + ")]"]) if notes else "")
+    tail_body = "\n".join("print(%r, file=sys.stderr)" % ln for ln in tail)
+    text = (STUB.replace("BRIEF", body).replace("NOTES", notes_body)
+            .replace("SLEEP", str(sleep)).replace("TAIL", tail_body)
+            .replace("CODE", str(code)))
+    path = Path(where) / name
+    path.write_text(text, encoding="utf-8")
+    return {"YBS_X_RUN": str(path)}
+
+
+def x_dirs_of(rd):
+    """The X run folder this run started, so the test can take it away again."""
+    x = json.loads((rd / "run.json").read_text()).get("x") or {}
+    return Path(x["run_dir"]) if x.get("run_dir") else None
+
+
+def drop_x(*dirs):
+    for d in dirs:
+        if d and d.parent.name == "runs" and d.parent.parent.name == "x-lists":
+            shutil.rmtree(d, ignore_errors=True)
+
+
+def test_x_start(tmp):
+    print("\nx-start")
+    rd, started = new_run(), []
+    try:
+        env = stub(tmp, "slow.py", brief=X_BRIEF, sleep=6)
+        out, _ = run("x-start", "--run", rd, expect=0, env=env)
+        started.append(Path(out["x_run_dir"]))
+        check("launches and says so", out["status"] == "running" and out["launched"],
+              str(out))
+        check("the X run folder is named for the minute, under x-lists/runs",
+              re.fullmatch(r"\d{4}-\d{2}-\d{2}-\d{4}(-\d+)?", Path(out["x_run_dir"]).name)
+              is not None and Path(out["x_run_dir"]).parent.parent.name == "x-lists",
+              out["x_run_dir"])
+        x = json.loads((rd / "run.json").read_text())["x"]
+        check("records the folder, the pid and the log",
+              x["run_dir"] == out["x_run_dir"] and isinstance(x["pid"], int)
+              and Path(x["log"]).exists(), str(x))
+        check("logs that it started",
+              any(e["type"] == "x_started"
+                  for e in json.loads((rd / "run.json").read_text())["events"]))
+
+        out, _ = run("x-start", "--run", rd, expect=0, env=env)
+        check("refuses a second start while one is running",
+              out["status"] == "running" and out["launched"] is False, str(out))
+        check("the brief written early is not a finish signal: the pid decides",
+              (Path(x["run_dir"]) / "brief.md").exists()
+              and out["status"] == "running", str(out))
+        out, _ = run("x-wait", "--run", rd, expect=0, env=env)
+        check("x-wait returns completed once the stub is gone",
+              out["status"] == "completed", str(out))
+        out, _ = run("x-start", "--run", rd, "--retry", expect=0, env=env)
+        check("a completed run is never relaunched", out["launched"] is False, str(out))
+    finally:
+        drop_x(*started)
+        shutil.rmtree(rd, ignore_errors=True)
+
+
+def test_x_failure(tmp):
+    print("\nx-start / x-wait: failure")
+    rd, started = new_run(), []
+    try:
+        env = stub(tmp, "boom.py", code=1,
+                   tail=["Traceback (most recent call last):",
+                         "ERROR: step 1 (scrape) failed: not signed in to X"])
+        run("x-start", "--run", rd, expect=0, env=env)
+        started.append(x_dirs_of(rd))
+        out, _ = run("x-wait", "--run", rd, expect=0, env=env)
+        check("a stub that writes no brief is failed", out["status"] == "failed", str(out))
+        check("the reason is the log's last ERROR line",
+              out["reason"].endswith("not signed in to X"), str(out.get("reason")))
+        check("and the failure is an event",
+              any(e["type"] == "x_failed"
+                  for e in json.loads((rd / "run.json").read_text())["events"]))
+
+        out, _ = run("x-start", "--run", rd, expect=0, env=env)
+        check("a failed run is not relaunched without --retry",
+              out["launched"] is False, str(out))
+
+        env2 = stub(tmp, "quiet.py", code=1, tail=["  File \"x_run.py\", line 3",
+                                                   "KeyError: 'x_window_hours'"])
+        out, _ = run("x-start", "--run", rd, "--retry", expect=0, env=env2)
+        started.append(Path(out["x_run_dir"]))
+        check("--retry launches once", out["launched"] and out["status"] == "running",
+              str(out))
+        check("and counts the retry",
+              json.loads((rd / "run.json").read_text())["x"]["retries"] == 1)
+        out, _ = run("x-wait", "--run", rd, expect=0, env=env2)
+        check("with no ERROR line the reason is the log's last line",
+              out["reason"].startswith("KeyError"), str(out.get("reason")))
+        out, _ = run("x-start", "--run", rd, "--retry", expect=0, env=env2)
+        check("a second --retry is refused", out["launched"] is False, str(out))
+    finally:
+        drop_x(*started)
+        shutil.rmtree(rd, ignore_errors=True)
+
+
+def test_x_skipped():
+    print("\nx-start: no pipeline to start")
+    rd = new_run()
+    try:
+        out, _ = run("x-start", "--run", rd, expect=0,
+                     env={"YBS_X_RUN": str(ROOT / "no-such-x_run.py")})
+        check("a missing X pipeline is skipped, never a crash",
+              out["status"] == "skipped" and out["launched"] is False, str(out))
+        check("and the reason names the missing file",
+              "no-such-x_run.py" in (out.get("reason") or ""), str(out))
+        line, _ = run("audit-line", "--run", rd, expect=0)
+        check("the audit line says X was skipped", "X: none (skipped:" in line,
+              repr(line)[:200])
+    finally:
+        shutil.rmtree(rd, ignore_errors=True)
+
+
+def test_x_timeout(tmp):
+    print("\nx-wait: out of time")
+    rd, started = new_run(), []
+    try:
+        env = stub(tmp, "hang.py", sleep=90)
+        out, _ = run("x-start", "--run", rd, expect=0, env=env)
+        started.append(Path(out["x_run_dir"]))
+        pid = out["pid"]
+        out, _ = run("x-wait", "--run", rd, "--timeout-seconds", 2, expect=0, env=env)
+        check("a run that never ends is failed on time",
+              out["status"] == "failed" and "timeout" in (out.get("reason") or ""),
+              str(out))
+        time.sleep(0.5)
+        alive = subprocess.run(["ps", "-p", str(pid)], capture_output=True).returncode == 0
+        check("and its process group is gone, not left running", not alive)
+    finally:
+        drop_x(*started)
+        shutil.rmtree(rd, ignore_errors=True)
+
+
+BRIEF_BODY = ("# Morning brief\n\n## What leads\n\n### 1. A story.\n\ntext\n\n")
+
+
+def merged_run(tmp, brief, notes=3, tail="{{X_SECTION}}\n{{AUDIT_LINE}}\n"):
+    """A run whose stub has already finished, its brief.md waiting to be merged."""
+    rd = new_run()
+    env = stub(tmp, "done-%s.py" % notes, brief=brief, notes=notes)
+    run("x-start", "--run", rd, expect=0, env=env)
+    run("x-wait", "--run", rd, expect=0, env=env)
+    (rd / "brief.md").write_text(BRIEF_BODY + tail)
+    return rd
+
+
+def test_x_merge(tmp):
+    print("\nx-merge")
+    rd = merged_run(tmp, X_BRIEF)
+    xdir = x_dirs_of(rd)
+    try:
+        out, _ = run("x-merge", "--run", rd, expect=0)
+        text = (rd / "brief.md").read_text()
+        check("says what it merged", out["merged"] and out["status"] == "merged", str(out))
+        check("the X title becomes a section of the brief",
+              "\n## What the list is moving on\n" in text, text[-900:])
+        check("its sections drop a level", "\n### TRENDING\n" in text
+              and "\n### CURIOUS\n" in text, text[-900:])
+        check("its items drop a level too", "\n#### 1. A member" in text, text[-900:])
+        check("the run folder name is dropped, the window kept",
+              "**Run:**" not in text and "**Window:** 2 hours" in text, text[-900:])
+        check("the bullets and the closing line are carried as they are",
+              "- **Flags:** CONVERGENCE · VELOCITY" in text
+              and "2 picks from 7 subjects judged." in text, text[-900:])
+        check("the X section lands above the audit line",
+              text.find("## What the list") < text.find("{{AUDIT_LINE}}"))
+        check("nothing is left of the placeholder", "{{X_SECTION}}" not in text)
+        counts = json.loads((rd / "run.json").read_text())["counts"]
+        check("counts the picks, the subjects and the tweets read",
+              (counts["x_picks"], counts["x_subjects"], counts["x_tweets_read"])
+              == (2, 7, 3), str(counts))
+        check("the X run's own brief is not touched",
+              (xdir / "brief.md").read_text() == X_BRIEF)
+        out, _ = run("x-merge", "--run", rd, expect=0)
+        check("refuses to merge twice", out["merged"] is False, str(out))
+        check("and the section is in the brief once",
+              (rd / "brief.md").read_text().count("## What the list") == 1)
+        line, _ = run("audit-line", "--run", rd, expect=0)
+        check("the audit line carries the counts",
+              "X: 2 picks from 7 subjects, 3 tweets read" in line, repr(line)[:300])
+    finally:
+        drop_x(xdir)
+        shutil.rmtree(rd, ignore_errors=True)
+
+
+def test_x_merge_shapes(tmp):
+    print("\nx-merge: the other shapes")
+    # The write agent dropped the placeholder.
+    rd = merged_run(tmp, X_BRIEF, notes=1, tail="{{AUDIT_LINE}}\n")
+    xdir = x_dirs_of(rd)
+    try:
+        run("x-merge", "--run", rd, expect=0)
+        text = (rd / "brief.md").read_text()
+        check("without the placeholder it still lands above the audit line",
+              0 < text.find("## What the list") < text.find("{{AUDIT_LINE}}"), text[-400:])
+    finally:
+        drop_x(xdir)
+        shutil.rmtree(rd, ignore_errors=True)
+
+    # The audit line is already filled in.
+    rd = merged_run(tmp, X_BRIEF, notes=1, tail="")
+    xdir = x_dirs_of(rd)
+    try:
+        run("audit-line", "--run", rd, "--append", expect=0)
+        run("x-merge", "--run", rd, expect=0)
+        text = (rd / "brief.md").read_text()
+        check("an audit line already written is still the last line",
+              0 < text.find("## What the list") < text.find("Audit: "), text[-400:])
+    finally:
+        drop_x(xdir)
+        shutil.rmtree(rd, ignore_errors=True)
+
+    # A run that found nothing worth carrying.
+    rd = merged_run(tmp, X_BRIEF_EMPTY, notes=0)
+    xdir = x_dirs_of(rd)
+    try:
+        out, _ = run("x-merge", "--run", rd, expect=0)
+        text = (rd / "brief.md").read_text()
+        check("a run with no picks is carried the same way, at zero",
+              "## What the list is moving on" in text
+              and "nothing that reaches the brief" in text
+              and (out["x_picks"], out["x_subjects"]) == (0, 0), str(out))
+    finally:
+        drop_x(xdir)
+        shutil.rmtree(rd, ignore_errors=True)
+
+    # A failed run leaves no section at all: the audit line says why.
+    rd = new_run()
+    env = stub(tmp, "gone.py", code=1, tail=["ERROR: the list would not load"])
+    try:
+        run("x-start", "--run", rd, expect=0, env=env)
+        xdir = x_dirs_of(rd)
+        run("x-wait", "--run", rd, expect=0, env=env)
+        (rd / "brief.md").write_text(BRIEF_BODY + "{{X_SECTION}}\n{{AUDIT_LINE}}\n")
+        out, _ = run("x-merge", "--run", rd, expect=0)
+        text = (rd / "brief.md").read_text()
+        check("a failed X run leaves no heading and no placeholder",
+              "{{X_SECTION}}" not in text and "What the list" not in text
+              and out["merged"] is False, text[-300:])
+        check("the brief is otherwise untouched",
+              text == BRIEF_BODY + "{{AUDIT_LINE}}\n", repr(text[-200:]))
+        line, _ = run("audit-line", "--run", rd, expect=0)
+        check("and the audit line says X failed, with the reason",
+              "X: none (failed: ERROR: the list would not load)" in line,
+              repr(line)[:300])
+    finally:
+        drop_x(xdir)
+        shutil.rmtree(rd, ignore_errors=True)
+
+
 def main():
     rd = new_run()
     print(f"test run: {rd.name}")
@@ -750,6 +1070,16 @@ def main():
         test_audit_and_close(rd)
     finally:
         shutil.rmtree(rd, ignore_errors=True)
+    tmp = tempfile.mkdtemp(prefix="ybs-x-stub-")
+    try:
+        test_x_start(tmp)
+        test_x_failure(tmp)
+        test_x_skipped()
+        test_x_timeout(tmp)
+        test_x_merge(tmp)
+        test_x_merge_shapes(tmp)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
     print()
     if FAILURES:
         print(f"{len(FAILURES)} FAILED")

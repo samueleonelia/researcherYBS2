@@ -50,6 +50,7 @@ repeats that.
 
 <up to {{settings.worth_max}} items in this section>
 
+{{X_SECTION}}
 {{AUDIT_LINE}}
 ```
 
@@ -58,7 +59,9 @@ repeats that.
 ### Sections
 
 - The three `##` sections are fixed and always in this order. A section with
-  nothing qualifying is omitted: no placeholder, no "none".
+  nothing qualifying is omitted: no placeholder, no "none". You write those
+  three. Code adds a fourth below them, from the X run, where the placeholder
+  sits.
 - Every ceiling is a ceiling, never a floor. Two leads on a two-lead day is right.
 - Leads are numbered, most consequential first, up to {{settings.lead_max}}.
   Worth Yaron's attention holds up to {{settings.worth_max}}.
@@ -88,7 +91,8 @@ repeats that.
 - Its one source is the article its file names.
 - A lead with no counterpoint simply has none, and nothing marks the absence.
 
-### Last line
+### Last lines
 
-- `{{AUDIT_LINE}}`, exactly as above. Code replaces it; never write an audit
-  line yourself.
+- `{{X_SECTION}}` and `{{AUDIT_LINE}}`, on their own lines, exactly as above.
+  Copy both placeholders and write neither: code puts the X section and the
+  audit line in their place.

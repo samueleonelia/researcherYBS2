@@ -68,7 +68,7 @@ RUN_VARS = {
     "ARTICLES", "NOTES", "PICKS", "COUNTERPOINTS", "TEMPLATE",
     "PART_NOTE", "PART_ITEMS", "PARTS",
     "ARTICLE_ID", "WHAT_HAPPENED", "PRINCIPLE", "ANGLE", "ITEM_POOL",
-    "AUDIT_LINE",
+    "AUDIT_LINE", "X_SECTION",
 }
 
 ANY_PLACEHOLDER = re.compile(r"\{\{([A-Za-z_][A-Za-z0-9_.-]*)\}\}")
@@ -106,6 +106,11 @@ def test_placeholders():
     check("morning.md: every placeholder is one the script can fill", not unknown,
           f"nothing provides {sorted(unknown)}")
     check("morning.md carries the audit-line placeholder", "{{AUDIT_LINE}}" in tpl)
+    # x-merge puts the X section where this sits, and audit-line ends the file,
+    # so the order of the two placeholders is the order of the two edits.
+    check("morning.md carries the X placeholder above the audit line",
+          0 <= tpl.find("{{X_SECTION}}") < tpl.find("{{AUDIT_LINE}}"),
+          f"X_SECTION at {tpl.find('{{X_SECTION}}')}")
 
     # The template is the only statement of the brief's shape, and write.md the
     # only statement of its sentences. Neither may drift into the other's job.
@@ -115,6 +120,18 @@ def test_placeholders():
         check(f"write.md does not restate the shape ({s})", s not in wr)
     for s in ("words", "clause", "dash", "semicolon", "metaphor"):
         check(f"morning.md carries no sentence rule ({s})", s not in tpl)
+
+
+def test_pass_through():
+    """Two placeholders survive `fill` and `build` untouched, because code fills
+    them after the agent has run. Anything else left in a rendered file is a
+    hole."""
+    print("\npass-through placeholders")
+    src = SCRIPT.read_text()
+    m = re.search(r"^PASS_THROUGH = \{(.*?)\}", src, re.M | re.S)
+    names = set(re.findall(r'"([A-Z_]+)"', m.group(1))) if m else set()
+    check("the script passes AUDIT_LINE and X_SECTION through",
+          names == {"AUDIT_LINE", "X_SECTION"}, str(sorted(names)))
 
 
 def test_agent_files_are_generated():
@@ -402,6 +419,7 @@ def main():
     test_shared_fragments()
     test_nothing_is_said_twice()
     test_numbers_live_in_settings()
+    test_pass_through()
     test_agent_files_are_generated()
     test_agents_match_skill()
     test_examples_are_valid_json()

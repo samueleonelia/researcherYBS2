@@ -21,6 +21,9 @@ Commands
   read-list --run DIR      the article ids still to read, one launch line each
   check-sync --run DIR     apply figure-check verdicts; list redos or strikes
   picks-sync --run DIR     validate the pick reply, and trim it to picks_max
+  x-start --run DIR        launch the X-list pipeline in the background, once
+  x-wait --run DIR         block until that X run is done, failed or out of time
+  x-merge --run DIR        put the X run's brief under the article brief
   event --run DIR ...      record something that happened (failure, retry, ...)
   audit-line --run DIR     build the audit line from run.json (never from a model)
   close --run DIR          write run-log.md and mark the run finished
@@ -31,7 +34,11 @@ Exit codes: 0 = ok, 1 = did the job but found a problem, 2 = bad usage / error.
 import argparse
 import json
 import re
+import shutil
+import signal
+import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -149,9 +156,9 @@ def log_event(run_dir: Path, etype: str, detail: str = "", **extra):
 
 PLACEHOLDER = re.compile(r"\{\{([A-Za-z_][A-Za-z0-9_.-]*)\}\}")
 
-# Filled by the audit-line command long after an agent has run, so `fill` and
-# `build` leave it alone.
-PASS_THROUGH = {"AUDIT_LINE"}
+# Filled by code long after an agent has run, so `fill` and `build` leave both
+# alone: the audit line by `audit-line`, the X section by `x-merge`.
+PASS_THROUGH = {"AUDIT_LINE", "X_SECTION"}
 
 SCHEMA = {
     "path": {
@@ -190,6 +197,15 @@ SCHEMA = {
         "verdict": "READ | MAYBE | DROP",
     },
     "tag": {"all": "LEAD | BODY | WORTH"},
+    "x": {
+        "run_dir": "x-lists/runs/<YYYY-MM-DD-HHMM>",
+        "log": "<run_dir>/x/x-run.log",
+        "brief": "<x_run_dir>/brief.md",
+        "record": ("run.json 'x': run_dir, pid, log, started_utc, status, "
+                   "retries, reason"),
+        "status": "running | completed | failed | skipped | merged",
+        "placeholder": "{{X_SECTION}}",
+    },
     "reason_type": {
         "all": "evidence | duplicate | no-development | relevance",
         "evidence": "its `WEAK SPOTS`, or a claim nothing supports",
@@ -912,6 +928,7 @@ MAYBE_SHARE_MAX = SETTINGS["maybe_share_max"]
 READ_ITEMS_MAX = SETTINGS["read_items_max"]
 CLUSTER_MAX = SETTINGS["cluster_articles_max"]
 RETRIES_MAX = SETTINGS["retries_max"]
+X_WAIT_MINUTES = SETTINGS["x_wait_minutes_max"]
 
 
 # ---------------------------------------------------------------- sources
@@ -1654,6 +1671,391 @@ def cmd_picks_sync(args):
     return 1 if problems else 0
 
 
+# ---------------------------------------------------------------- the X run
+#
+# The X-list pipeline is one command of its own, `x-lists/x_run.py`, and nothing
+# here reaches inside it: this launches it, waits for it, and copies the brief it
+# wrote under the article brief. Every number it obeys lives in
+# `x-lists/settings.md`; the only number here is how long step 10 waits.
+
+X_POLL_SECONDS = 2          # how often x-wait looks; the run takes minutes
+X_KILL_GRACE_SECONDS = 5    # between SIGTERM and SIGKILL on a timeout
+X_LOG_MARK = "=== x-start"   # one launch's output starts below this line
+
+
+def x_lists_dir() -> Path:
+    return project_root() / "x-lists"
+
+
+def x_script() -> Path:
+    """The X chain's entry point. `YBS_X_RUN` overrides it, and only the tests
+    set it: a stub there is how they exercise this without a browser."""
+    override = os.environ.get("YBS_X_RUN")
+    if override:
+        return Path(override).expanduser()
+    return x_lists_dir() / "x_run.py"
+
+
+def new_x_run_dir() -> Path:
+    """x-lists/runs/<YYYY-MM-DD-HHMM>, UTC, with -2, -3 on a collision.
+
+    The same name `x_run.py` gives itself, because its write step reads the
+    run's date and time out of the folder name.
+    """
+    root = x_lists_dir() / "runs"
+    base = utc_now().strftime("%Y-%m-%d-%H%M")
+    candidate, n = root / base, 2
+    while candidate.exists():
+        candidate = root / f"{base}-{n}"
+        n += 1
+    candidate.mkdir(parents=True, exist_ok=False)
+    return candidate
+
+
+def pid_age_seconds(pid: int):
+    """How long the process holding this pid has been running, or None."""
+    try:
+        r = subprocess.run(["ps", "-o", "etime=", "-p", str(pid)],
+                           capture_output=True, text=True, timeout=5)
+    except Exception:
+        return None
+    m = re.match(r"^\s*(?:(\d+)-)?(?:(\d+):)?(\d+):(\d+)\s*$", r.stdout)
+    if not m:
+        return None
+    days, hours, mins, secs = (int(x or 0) for x in m.groups())
+    return ((days * 24 + hours) * 60 + mins) * 60 + secs
+
+
+def x_alive(pid, started_utc: str = None) -> bool:
+    """Is the X run still going?
+
+    `os.kill(pid, 0)` alone would be fooled by a pid the system has handed to
+    someone else, so the process's own age is checked against the moment we
+    recorded launching it: a process older than that is not ours. `ps` may
+    answer nothing on some machine, and then the pid is taken at face value --
+    the window for a reused pid inside one morning is small.
+    """
+    if not isinstance(pid, int):
+        return False
+    try:
+        os.kill(pid, 0)
+    except (ProcessLookupError, ValueError):
+        return False
+    except PermissionError:
+        return False        # someone else's process, so not the run we started
+    age = pid_age_seconds(pid)
+    started = parse_iso(started_utc) if started_utc else None
+    if age is not None and started is not None:
+        ours = (utc_now() - started).total_seconds()
+        if age > ours + 60:
+            return False    # running before we launched: the pid was reused
+    return True
+
+
+def x_reason(log: Path) -> str:
+    """Why an X run that wrote no brief stopped: its last `ERROR:` line, else
+    the last thing it printed. A traceback ends without an `ERROR:`.
+
+    A retry appends to the same log, so only what the last launch wrote counts:
+    the first run's error is not the second run's reason.
+    """
+    if not log.exists():
+        return "the X run left no log"
+    lines = log.read_text(encoding="utf-8", errors="replace").splitlines()
+    marks = [i for i, ln in enumerate(lines) if ln.startswith(X_LOG_MARK)]
+    if marks:
+        lines = lines[marks[-1] + 1:]
+    lines = [ln.rstrip() for ln in lines if ln.strip()]
+    if not lines:
+        return "the X run wrote nothing to its log"
+    errors = [ln for ln in lines if ln.lstrip().startswith("ERROR:")]
+    return (errors[-1] if errors else lines[-1]).strip()[:300]
+
+
+def x_state(run_dir: Path) -> dict:
+    """The one status test, used by x-start, x-wait and x-merge.
+
+    `running` while the pid is alive. `completed` once it is gone **and** the X
+    run wrote its brief: the write agent edits that file while the chain is
+    still up, so the file alone is not a finish signal. `failed` when it is gone
+    and there is no brief. `skipped`, `failed` and `merged` are settled facts and
+    are never recomputed.
+    """
+    data = load_run(run_dir)
+    x = data.get("x")
+    if not x:
+        return {"status": "none"}
+    if x.get("status") in ("skipped", "failed", "merged"):
+        return x
+    before = x.get("status")
+    if x_alive(x.get("pid"), x.get("started_utc")):
+        x["status"] = "running"
+    elif (Path(x["run_dir"]) / "brief.md").exists():
+        x["status"] = "completed"
+    else:
+        x["status"] = "failed"
+        x["reason"] = x_reason(Path(x["log"]))
+    if x["status"] != before:
+        data["x"] = x
+        save_run(run_dir, data)
+    return x
+
+
+def x_out(state: dict, **extra) -> int:
+    """Every X command prints one JSON object, and none of them stops the brief."""
+    out = {"status": state.get("status", "none"),
+           "x_run_dir": state.get("run_dir"), "pid": state.get("pid"),
+           "log": state.get("log"), "reason": state.get("reason")}
+    out.update(extra)
+    print(json.dumps(out, indent=2, ensure_ascii=False))
+    return 0
+
+
+def cmd_x_start(args):
+    """Launch the X-list pipeline in its own process, once.
+
+    Detached (`start_new_session`) so it outlives this command, and with its
+    stdin closed: a child holding on to the Bash tool's pipe would keep the
+    orchestrator's call hanging until the chain finished, which is the one thing
+    running it in parallel is for.
+    """
+    run_dir = run_dir_of(args)
+    state = x_state(run_dir)
+    status = state.get("status")
+
+    if status in ("running", "completed", "merged"):
+        return x_out(state, launched=False,
+                     note=f"an X run is already {status}; nothing was launched")
+    if status == "skipped":
+        return x_out(state, launched=False,
+                     note="X was skipped for this run; nothing was launched")
+    if status == "failed":
+        if not args.retry:
+            return x_out(state, launched=False,
+                         note="the X run failed; only --retry launches again")
+        if state.get("retries", 0) >= RETRIES_MAX:
+            return x_out(state, launched=False,
+                         note=f"already retried {state['retries']} time(s); "
+                              f"retries_max is {RETRIES_MAX}")
+
+    retries = state.get("retries", 0) + 1 if status == "failed" else 0
+    data = load_run(run_dir)
+
+    def skip(reason):
+        data["x"] = {"status": "skipped", "reason": reason, "retries": retries,
+                     "run_dir": None, "pid": None, "log": None,
+                     "started_utc": iso(utc_now())}
+        save_run(run_dir, data)
+        log_event(run_dir, "x_skipped", reason)
+        return x_out(data["x"], launched=False)
+
+    script = x_script()
+    if not script.exists():
+        return skip(f"no X pipeline at {script}")
+    # The browser check is for the real chain only. `YBS_X_RUN` names a stub,
+    # and a stub needs no browser.
+    if not os.environ.get("YBS_X_RUN") and not shutil.which("ego-browser"):
+        return skip("ego-browser is not on the PATH")
+
+    x_dir = new_x_run_dir()
+    log_path = run_dir / "x" / "x-run.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(log_path, "a", encoding="utf-8") as log:
+        # Append, so a retry keeps the first run's log, and mark where this
+        # launch begins so its own last line is the one that explains it.
+        log.write(f"{X_LOG_MARK} {iso(utc_now())} ===\n")
+        log.flush()
+        proc = subprocess.Popen(
+            [sys.executable, str(script), "--run-dir", str(x_dir)],
+            cwd=str(x_lists_dir()), stdin=subprocess.DEVNULL,
+            stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
+            # Unbuffered, so the log reads in the order things happened: the
+            # chain's progress goes to stdout and its errors to stderr, and a
+            # buffered stdout would land after them, on top of the reason.
+            env={**os.environ, "PYTHONUNBUFFERED": "1"})
+
+    data = load_run(run_dir)
+    data["x"] = {"run_dir": str(x_dir), "pid": proc.pid, "log": str(log_path),
+                 "started_utc": iso(utc_now()), "status": "running",
+                 "retries": retries}
+    save_run(run_dir, data)
+    log_event(run_dir, "x_retry" if retries else "x_started",
+              f"{x_dir.name} as pid {proc.pid}", retry=True if retries else None)
+    return x_out(data["x"], launched=True)
+
+
+def cmd_x_wait(args):
+    """Block until the X run is done, failed, or out of time.
+
+    The orchestrator calls this once and gets one answer; the polling is here so
+    that no agent ever sits in a loop. `--timeout-seconds` is for the tests,
+    which run the real settings table and so cannot inject a shorter wait.
+    """
+    run_dir = run_dir_of(args)
+    state = x_state(run_dir)
+    if state.get("status") in ("none", "skipped", "merged", "completed"):
+        return x_out(state, waited_seconds=0)
+    if state.get("status") == "failed":
+        return x_out(x_note_failure(run_dir, state), waited_seconds=0)
+
+    limit = args.timeout_seconds or X_WAIT_MINUTES * 60
+    started = time.monotonic()
+    while state.get("status") == "running":
+        left = limit - (time.monotonic() - started)
+        if left <= 0:
+            break
+        time.sleep(min(X_POLL_SECONDS, left))
+        state = x_state(run_dir)
+
+    waited = round(time.monotonic() - started, 1)
+
+    if state.get("status") == "running":
+        # Out of time. Nothing this run started outlives step 10: the whole
+        # process group goes, so no headless agent is left heating the Mac.
+        pid = state.get("pid")
+        try:
+            group = os.getpgid(pid)
+            os.killpg(group, signal.SIGTERM)
+            for _ in range(X_KILL_GRACE_SECONDS * 2):
+                time.sleep(0.5)
+                if not x_alive(pid, state.get("started_utc")):
+                    break
+            else:
+                os.killpg(group, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError, TypeError):
+            pass
+        spent = (f"{limit // 60} minutes" if limit >= 60 else f"{limit} seconds")
+        state["status"] = "failed"
+        state["reason"] = f"timeout after {spent}"
+        data = load_run(run_dir)
+        data["x"] = state
+        save_run(run_dir, data)
+
+    if state.get("status") == "failed":
+        state = x_note_failure(run_dir, state)
+    return x_out(state, waited_seconds=waited)
+
+
+def x_note_failure(run_dir: Path, state: dict) -> dict:
+    """Record a failed X run once, however x-wait came to see it. The audit line
+    counts it as a failure from here, and a retry is launched from x-start."""
+    events = load_run(run_dir).get("events", [])
+    logged = sum(1 for e in events if e.get("type") == "x_failed")
+    if logged <= state.get("retries", 0):
+        log_event(run_dir, "x_failed", state.get("reason", ""))
+    return state
+
+
+def x_section(brief_text: str) -> str:
+    """The X run's own brief, as a section of the article brief.
+
+    Every heading drops one level, so the X items sit under one `##` heading
+    the way an article story does, and the run folder name comes off the header
+    line: it means nothing to Yaron. Nothing else is touched. The bullets, the
+    rule and the closing line are the section's own, and they carry the X
+    pipeline's own checks with them.
+    """
+    out = []
+    for line in brief_text.strip().splitlines():
+        if re.match(r"^#{1,5} ", line):
+            out.append("#" + line)
+            continue
+        if line.startswith("**Run:**"):
+            rest = [p.strip() for p in line.split("·") if p.strip()
+                    and not p.strip().startswith("**Run:**")]
+            if rest:
+                out.append(" · ".join(rest))
+            continue
+        out.append(line)
+    return "\n".join(out).strip()
+
+
+X_COUNTS = re.compile(r"(\d+)\s+picks?\s+from\s+(\d+)\s+subjects", re.I)
+
+
+def cmd_x_merge(args):
+    """Put the X run's brief under the article brief, in code.
+
+    The X write agent already produced a verified, show-ready section, so this
+    copies it rather than feeding its picks to another writer. The X run's own
+    brief.md is read and never written.
+    """
+    run_dir = run_dir_of(args)
+    brief = run_dir / "brief.md"
+    if not brief.exists():
+        die("no brief.md to merge into")
+    state = x_state(run_dir)
+    status = state.get("status")
+
+    if status == "merged":
+        return x_out(state, merged=False, note="this run's X section is already in")
+
+    text = brief.read_text(encoding="utf-8")
+    section, picks, subjects, tweets = "", 0, 0, 0
+
+    if status == "completed":
+        x_brief = Path(state["run_dir"]) / "brief.md"
+        if not x_brief.exists():
+            die(f"no X brief at {x_brief}")
+        section = x_section(x_brief.read_text(encoding="utf-8"))
+        m = X_COUNTS.search(section)       # the no-picks brief has no closing line
+        if m:
+            picks, subjects = int(m.group(1)), int(m.group(2))
+        notes = Path(state["run_dir"]) / "notes"
+        tweets = len([f for f in notes.iterdir() if f.is_file()]) if notes.is_dir() else 0
+    elif status not in ("failed", "skipped"):
+        # running, or no X run at all: nothing to merge and nothing to clear.
+        return x_out(state, merged=False,
+                     note=f"the X run is {status}; nothing was merged")
+
+    # Placement, the way audit-line places its own line: the placeholder if the
+    # write agent kept it, else above the audit line, else at the end.
+    placeholder = SCHEMA["x"]["placeholder"]
+    body = section + "\n\n" if section else ""
+    if placeholder in text:
+        text = re.sub(r"^[ \t]*" + re.escape(placeholder) + r"[ \t]*\n?",
+                      body, text, count=1, flags=re.M)
+    elif section:
+        anchor = ("{{AUDIT_LINE}}" if "{{AUDIT_LINE}}" in text else
+                  next((ln for ln in text.splitlines()
+                        if ln.startswith("Audit: ")), None))
+        if anchor:
+            text = text.replace(anchor, section + "\n\n" + anchor, 1)
+        else:
+            text = text.rstrip() + "\n\n" + section + "\n"
+    brief.write_text(text, encoding="utf-8")
+
+    data = load_run(run_dir)
+    if status == "completed":
+        state["status"] = "merged"
+        data["counts"].update({"x_picks": picks, "x_subjects": subjects,
+                               "x_tweets_read": tweets})
+    data["x"] = state
+    save_run(run_dir, data)
+    log_event(run_dir, "x_merged",
+              f"{picks} picks from {subjects} subjects, {tweets} tweets read"
+              if status == "completed" else f"nothing to merge: {status}")
+    return x_out(state, merged=status == "completed", x_picks=picks,
+                 x_subjects=subjects, x_tweets_read=tweets)
+
+
+def x_audit_bit(run_dir: Path) -> str:
+    """What the audit line says about X, or nothing when the run never had it."""
+    d = load_run(run_dir)
+    x = d.get("x")
+    if not x:
+        return ""
+    status = x.get("status")
+    if status == "merged":
+        c = d.get("counts", {})
+        return (f"X: {c.get('x_picks', 0)} picks from "
+                f"{c.get('x_subjects', 0)} subjects, "
+                f"{c.get('x_tweets_read', 0)} tweets read")
+    if status in ("failed", "skipped"):
+        return f"X: none ({status}: {x.get('reason', 'no reason recorded')})"
+    return f"X: {status}"
+
+
 # ---------------------------------------------------------------- log, audit, close
 
 def cmd_event(args):
@@ -1697,6 +2099,11 @@ def build_audit_line(run_dir: Path) -> str:
         f"{mix.get('maybe', 0)} maybe",
         f"profile of {profile_built}",
         f"{len(cps)} counterpoints",
+    ]
+    x_bit = x_audit_bit(run_dir)
+    if x_bit:
+        bits.append(x_bit)
+    bits += [
         f"{retries} retries",
         f"{len(failures)} failures",
     ]
@@ -1794,6 +2201,19 @@ def main():
     p.set_defaults(fn=cmd_check_sync)
 
     with_run(sub.add_parser("picks-sync")).set_defaults(fn=cmd_picks_sync)
+
+    p = with_run(sub.add_parser("x-start"))
+    p.add_argument("--retry", action="store_true",
+                   help="launch again after a failed X run, once")
+    p.set_defaults(fn=cmd_x_start)
+
+    p = with_run(sub.add_parser("x-wait"))
+    # Hidden: the tests read the same settings.md the run does, so a short wait
+    # can only come from here.
+    p.add_argument("--timeout-seconds", type=int, default=0, help=argparse.SUPPRESS)
+    p.set_defaults(fn=cmd_x_wait)
+
+    with_run(sub.add_parser("x-merge")).set_defaults(fn=cmd_x_merge)
 
     p = with_run(sub.add_parser("event"))
     p.add_argument("--type", required=True)

@@ -167,3 +167,49 @@
 **Next**
 - The call. After two weeks of real briefs, revisit whether his corrections
   cluster into something worth automating.
+
+## 2026-09-07 — the X list runs inside /ybs-brief
+
+**Status:** branch `x-in-brief` (off `x-lists`), tagged `x-in-brief-v1`, pushed.
+Neither branch is merged to `main` yet.
+
+**Done**
+- Plan in `plans/x-in-brief.md`, verified by a separate agent (no blocker, four
+  should-fix items folded in), then implemented and tested by a third.
+- `ybs_run.py` gained `x-start`, `x-wait` and `x-merge`. Step 1 starts
+  `x-lists/x_run.py` as one detached process (its own process group, stdin
+  closed, log in `<run_dir>/x/x-run.log`); step 6 offers it one relaunch if it
+  failed; step 10 waits for it (9 minutes at most, then the group is killed),
+  turns its brief into a fourth `##` section under Worth Yaron's attention,
+  and the audit line gains an `X:` bit. `{{X_SECTION}}` in the template is a
+  pass-through like the audit line. Nothing in `x-lists/` changed.
+- Live test with a Sonnet orchestrator at high effort, headless
+  (`claude -p "/ybs-brief morning" --model sonnet --effort high`):
+  run `2026-09-07_morning_125113`, 10:51:13Z to 11:27:44Z, **36.5 minutes**.
+  X started 3 s after the run, scraped 78 tweets beside the six screeners,
+  kept 24, read all 24, judged 21 subjects, wrote its brief by 10:56:56Z.
+  Merged brief: 15 picks (5 leads, 4 worth), 5 X picks (3 TRENDING, 2 CURIOUS),
+  longest sentence 25 words, 0 failures, no stray process left behind.
+- 43 new bookkeeping tests, a pass-through test; same 4 old failures, no new.
+- `update.sh` keeps `x-lists/settings.md` with a `.backup`; README says where
+  the X section comes from; two allow-list entries for the X script and tests.
+
+**Decisions**
+- The X pipeline stays a separate process, not Agent-tool subagents: it is
+  verified as is, its guardrails live in `x-lists/GOAL.md`, and one detached
+  process is the simplest true parallelism.
+- The merge is code, not the write agent: the X write step already passes its
+  own check 10, and concatenation keeps both briefs' checks valid.
+- `completed` means the X process is gone AND its brief exists; the file
+  alone is not enough because the X write agent may still be editing it.
+- Storyline and Flags bullets are kept in the merged section for now.
+
+**Seen on the test, not failures**
+- Lead 1 and X item 2 give different AfD percentages (43.8% from an article,
+  44.5% from a tweet). Each traces to its own note. Worth a look at whether
+  the seam should be smoothed: a later write step that sees both, or nothing.
+- The Times of Israel screener timed out once and succeeded on retry.
+
+**Next**
+- Merge `x-in-brief` (which contains `x-lists`) into `main` when Samuele says.
+- Watch `x_views_per_hour` and the AfD-style seam over a few real mornings.

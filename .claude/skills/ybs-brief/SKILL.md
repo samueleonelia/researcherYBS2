@@ -1,6 +1,6 @@
 ---
 name: ybs-brief
-description: Produce a show-ready morning news brief for Yaron Brook from the sources in sources.md. Screens every source's front page in the ego browser with his logged-in sessions, groups the day's stories so one event is read once, reads each chosen article the way a person would, checks every figure against the page it came from, cuts the result to the picks the settings allow and writes the brief. Use when asked to run the morning brief, or when the user types /ybs-brief. Does NOT send email, does NOT read X, does NOT read show transcripts, and never schedules itself.
+description: Produce a show-ready morning news brief for Yaron Brook from the sources in sources.md. Screens every source's front page in the ego browser with his logged-in sessions, groups the day's stories so one event is read once, reads each chosen article the way a person would, checks every figure against the page it came from, cuts the result to the picks the settings allow and writes the brief. Use when asked to run the morning brief, or when the user types /ybs-brief. Runs the X-list pipeline in x-lists/ at the same time and puts its section under the article brief. Does NOT send email, does NOT read show transcripts, and never schedules itself.
 argument-hint: "morning"
 ---
 
@@ -30,6 +30,7 @@ home; never copy it into a prompt or a reply.
 | file names, launch lines, sentinels | `ybs_run.py schema` |
 | the rules of this pipeline | the hard rules at the end of this file |
 | model and effort per agent | `settings.md`, the `## Models` table |
+| the X list: its steps, its numbers, its rules | `x-lists/`, with its own `settings.md` and `GOAL.md` |
 
 The eight agent files in `.claude/agents/ybs4-*.md` are **generated** from the
 templates in `agents/`. Edit a template, then run `ybs_run.py build`.
@@ -113,6 +114,15 @@ It prints `run_dir`, the window, the sources and the profile's date. Every later
 command takes `--run <run_dir>`. The window is local midnight to now.
 
 If it says there is no topic profile, stop and tell the user to run `/ybs-shows`.
+
+```bash
+python3 .claude/skills/ybs-brief/scripts/ybs_run.py x-start --run <run_dir>
+```
+
+This puts the X list on its own process, working while you screen and triage.
+`skipped` means this copy has no X pipeline, or no browser to run it in: the
+brief goes on without that section. Either way X is not touched again until
+step 6.
 
 ## Step 2 — screen every source
 
@@ -216,7 +226,14 @@ stop: the run has no plan, and a plan is never written by hand.
 
 ```bash
 python3 .claude/skills/ybs-brief/scripts/ybs_run.py read-list --run <run_dir>
+python3 .claude/skills/ybs-brief/scripts/ybs_run.py x-start --run <run_dir> --retry
 ```
+
+`x-start --retry` launches again only if the first X run has failed, and only
+this once; on anything else it does nothing and says so. A failure inside one
+of its pooled steps can take a while to surface, because the chain waits for
+its other agents before it exits, so `running` here is not proof that all is
+well. There is nothing to do about that: read what it prints and carry on.
 
 **Run the rolling pool** with `ybs4-reader`. Each reader opens its article in its
 own ego task space, saves the page and writes its own note; you write neither.
@@ -322,15 +339,25 @@ Read <run_dir>/prompts/write.md and follow it. Reply with the finished brief in
 markdown, and nothing else.
 ```
 
-Write the reply to `<run_dir>/brief.md`, then:
+Write the reply to `<run_dir>/brief.md`, then, in this order:
 
 ```bash
+python3 .claude/skills/ybs-brief/scripts/ybs_run.py x-wait --run <run_dir>
+python3 .claude/skills/ybs-brief/scripts/ybs_run.py x-merge --run <run_dir>
 python3 .claude/skills/ybs-brief/scripts/ybs_run.py audit-line --run <run_dir> --append
 python3 .claude/skills/ybs-brief/scripts/ybs_run.py close --run <run_dir>
 ```
 
-`audit-line` replaces the placeholder the template ends with. Report the audit
-line and the path to `brief.md` to the user. Nothing else.
+Give `x-wait` the Bash tool's `timeout: 600000`, its highest: the wait is
+deliberately shorter than that, and a tool kill would land on the wrong
+process. It usually returns at once, because X started hours of agent-minutes
+ago in wall-clock terms and is long done. Whatever it says, the next command
+runs: an X run that failed or ran out of time is a fact the audit line
+carries, never a reason to hold the brief.
+
+`x-merge` puts the X section under the last article section, and `audit-line`
+replaces the placeholder the template ends with. Report the audit line and the
+path to `brief.md` to the user. Nothing else.
 
 ---
 
@@ -340,7 +367,9 @@ line and the path to `brief.md` to the user. Nothing else.
    handling outside a browser.
 2. **Model and effort come from `settings.md`**, through the built agent files.
    Never pass `model` to the Agent tool, never state an effort in a prompt. To
-   change what a step runs at, edit the `## Models` table and run `build`.
+   change what a step runs at, edit the `## Models` table and run `build`. The
+   X pipeline's models are its own: they live in `x-lists/settings.md` and reach
+   its agents through `x_run.py`, never through the Agent tool.
 3. **Never write a pooled agent's result file.** You launch, you count, you run
    the sync command. For the single-call steps, match the reply to its file by
    the agent's label, never by reading the content and guessing.
@@ -363,3 +392,7 @@ line and the path to `brief.md` to the user. Nothing else.
     skill produces one file and reports where it is.
 12. **Every number in `settings.md` is a ceiling, never a floor.** No step fills
     a slot to reach a number.
+13. **`x-start` is the only door to X.** Never open the list yourself, never run
+    `x_run.py` by hand, never start a second one while a run is recorded as
+    going, and never write the X section yourself. One relaunch is the ceiling,
+    and `x-start --retry` is where it happens.

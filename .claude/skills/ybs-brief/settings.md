@@ -22,6 +22,7 @@ reach a number.
 | lead_max | 5 | stories that may be tagged LEAD |
 | worth_max | 5 | stories that may be tagged WORTH |
 | words_per_sentence_max | 30 | words in one sentence of the brief |
+| x_wait_minutes_max | 9 | minutes step 10 waits for the X run before the brief goes out without it |
 
 BODY has no setting: it is whatever is left of the picks after LEAD and WORTH.
 

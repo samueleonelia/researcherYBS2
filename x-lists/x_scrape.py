@@ -6,8 +6,8 @@ browser, and writes DIR/tweets.json plus DIR/page.txt. Standard library only.
 
 Guardrails (see GOAL.md): only @EgoismoEfficace, only the one list URL, read
 only, no login, sole owner of the browser for the duration of this script.
-No number is hard-coded here -- every one is read from settings.md at run
-time.
+No number is hard-coded here -- every one is read from the root settings.md
+at run time, through x_settings.py.
 """
 
 import argparse
@@ -17,6 +17,9 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from x_settings import load_settings, default_settings_path  # noqa: E402
 
 TASK_SPACE_NAME = "x-lists scrape"
 
@@ -30,27 +33,14 @@ FIELDS = [
 
 # --------------------------------------------------------------- settings
 
-def _script_dir() -> Path:
-    return Path(__file__).resolve().parent
-
-
-ROW_RE = re.compile(r"^\|\s*([A-Za-z_][A-Za-z0-9_]*)\s*\|\s*([^|]+?)\s*\|")
-
-
 def read_settings(path: Path) -> dict:
-    """Every row of every markdown table in settings.md, key -> raw value."""
-    values = {}
-    for line in path.read_text(encoding="utf-8").splitlines():
-        m = ROW_RE.match(line.strip())
-        if not m:
-            continue
-        key, val = m.group(1), m.group(2).strip()
-        if key in ("Setting",):  # header row
-            continue
-        if set(val) <= {"-"}:  # separator row
-            continue
-        values[key] = val
-    return values
+    """The X half of settings.md, key -> value, through the shared loader.
+
+    One loader for the whole pipeline: the root settings.md holds the article
+    brief's tables too, and only `## X numbers`, `## X fixed` and `## X models`
+    belong to us.
+    """
+    return load_settings(path)
 
 
 def require_int(values: dict, key: str) -> int:
@@ -426,8 +416,8 @@ def write_page_text(run_dir: Path, text: str):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-dir", required=True, help="the run folder to write into")
-    parser.add_argument("--settings", default=str(_script_dir() / "settings.md"),
-                         help="path to settings.md (default: x-lists/settings.md)")
+    parser.add_argument("--settings", default=str(default_settings_path()),
+                         help="path to settings.md (default: the root settings.md)")
     args = parser.parse_args()
 
     run_dir = Path(args.run_dir).resolve()

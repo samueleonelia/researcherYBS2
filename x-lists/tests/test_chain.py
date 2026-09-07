@@ -42,7 +42,7 @@ sys.path.insert(0, str(ROOT))
 import x_run  # noqa: E402
 from x_settings import load_settings  # noqa: E402
 
-SETTINGS_PATH = ROOT / "settings.md"
+SETTINGS_PATH = ROOT.parent / "settings.md"   # one settings.md, at the project root
 
 
 class TestRunDir(unittest.TestCase):

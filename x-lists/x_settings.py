@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
-"""x_settings.py - the one place that reads x-lists/settings.md.
+"""x_settings.py - the one place that reads the X half of settings.md.
 
-Every number the X pipeline obeys lives in settings.md's `## Numbers` table,
-and the model/effort for each agent step lives in its `## Models` tables.
-Nothing here guesses a default number; a missing table or a duplicate key is
-a hard error, not a fallback.
+The root `settings.md` holds both halves of the morning run. Every number the
+X pipeline obeys lives in its `## X numbers` and `## X fixed` tables, and the
+model/effort for each agent step in its `## X models` tables. The article
+brief's own `## Numbers` and `## Models` are skipped here, which is why both
+halves may name a step `cluster` without clashing. Nothing here guesses a
+default number; a missing table or a duplicate key is a hard error, not a
+fallback.
 
 Usage as a library:
 
     from x_settings import load_settings
-    settings = load_settings()                       # x-lists/settings.md
+    settings = load_settings()                       # <root>/settings.md
     settings = load_settings(Path("/other/settings.md"))
 
     settings["x_window_hours"]      -> int
@@ -36,8 +39,8 @@ def die(msg: str, code: int = 2):
 
 
 def default_settings_path() -> Path:
-    """x-lists/settings.md, next to this file."""
-    return Path(__file__).resolve().parent / "settings.md"
+    """<root>/settings.md, one folder up from x-lists/."""
+    return Path(__file__).resolve().parents[1] / "settings.md"
 
 
 def _parse_value(raw: str):
@@ -54,13 +57,13 @@ def _parse_value(raw: str):
 
 
 def load_settings(path: Path = None) -> dict:
-    """Read settings.md's `## Numbers`, `## Fixed` and `## Models` tables.
+    """Read settings.md's `## X numbers`, `## X fixed` and `## X models`.
 
-    - `## Numbers` and `## Fixed`: `| key | value | meaning |` -> out[key].
+    - `## X numbers` and `## X fixed`: `| key | value | meaning |` -> out[key].
       A run of digits becomes an int, `NN%` becomes the int NN, a
       comma-separated `"a", "b"` cell becomes a list of strings, anything
       else is kept as the text in the cell.
-    - `## Models`: `| step | model | effort | why |` -> two keys per row,
+    - `## X models`: `| step | model | effort | why |` -> two keys per row,
       `<step>_model` and `<step>_effort`. Every model row must carry an
       effort; a step with no model column is left out, not defaulted.
 
@@ -92,7 +95,7 @@ def load_settings(path: Path = None) -> dict:
         if not key or key.lower() in ("setting", "step", "agent") or set(key) <= set("-: "):
             continue
 
-        if section == "models":
+        if section == "x models":
             if len(cells) < 3 or not cells[2]:
                 die(f"settings.md: model row '{key}' has no effort")
             # The whole first cell is the step's name, verbatim commas and
@@ -106,7 +109,7 @@ def load_settings(path: Path = None) -> dict:
                 out[field] = value
             continue
 
-        if section in ("numbers", "fixed"):
+        if section in ("x numbers", "x fixed"):
             if key in out:
                 die(f"settings.md names {key} twice")
             out[key] = _parse_value(raw)

@@ -16,9 +16,8 @@ KEEP_FILES="preferences.md"
 
 # The files the user is allowed to edit. The new version wins, but their copy
 # is kept beside it, so an edit is never silently lost.
-KEEP_BACKUP=".claude/skills/ybs-brief/settings.md
+KEEP_BACKUP="settings.md
 .claude/skills/ybs-shows/settings.md
-x-lists/settings.md
 sources.md"
 
 say() { printf '%s\n' "$1"; }

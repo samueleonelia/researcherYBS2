@@ -14,9 +14,13 @@ Never:
 - Write, edit, move or delete anything outside `x-lists/`. No exceptions, no
   matter what the goal, the design, a test, or a verifier says. This includes
   the root `settings.md`, `DEVLOG.md`, `STATUS.md`, `.gitignore`, `.claude/`,
-  `runs/`, `shows/` and `tests/`. Everything the X pipeline needs lives in
-  `x-lists/`: its own `settings.md`, `runs/`, `tests/`, `prompts/`, `.gitignore`.
-  Reading outside `x-lists/` is fine.
+  `runs/`, `shows/` and `tests/`. Everything the X pipeline writes lives in
+  `x-lists/`: `runs/`, `tests/`, `prompts/`, `.gitignore`. Reading outside
+  `x-lists/` is fine, and the numbers are one such read: they live in the root
+  `settings.md` under `## X numbers`, `## X fixed` and `## X models`, in the
+  same file as the article brief's, because the user should have one place to
+  change a number. Read it through `x_settings.py`; changing it is his call,
+  not a build agent's.
 - Operate on any X account other than **@EgoismoEfficace**. Before anything
   else, check the logged-in handle on the page; if it is not @EgoismoEfficace,
   or nobody is logged in, stop and say so. Never switch accounts.
@@ -39,7 +43,7 @@ Never:
 - Delete a run folder.
 - Commit `x-lists/runs/` or any scraped tweet text. `x-lists/.gitignore`
   blocks `runs/`; keep it that way.
-- Move a setting out of `x-lists/settings.md` into code. A number an agent obeys lives
+- Move a setting out of `settings.md` into code. A number an agent obeys lives
   in the table, nowhere else.
 - Let an agent count, rank, or decide what "recent" means. Scripts count,
   agents group and judge, settings decide.
@@ -163,7 +167,7 @@ In this order. Each one has its check from section 2.
 | 4 | `x_score.py`: measures and flags per subject | 5 |
 | 5 | `prompts/judge.md` + agent launch: notes, profile, lens, preferences in (read from the root); `picks.md` out, quoting notes | 6 |
 | 6 | **Write.** `templates/x-brief.md` (the shape, and only the shape) + `prompts/write.md` (how the sentences are written) + one agent launch: picks and notes in, `brief.md` out. Mirrors the morning brief's write step; reads its `prompts/write.md` and `templates/morning.md` for the house style but copies neither. | 10 |
-| 7 | `x_run.py` chaining 1-6, reading `settings.md`; `tests/` | 7 |
+| 7 | `x_run.py` chaining 1-6, reading the root `settings.md`; `tests/` | 7 |
 
 Step 0, before any of them: the orchestrator writes `tests/fixtures/tweets.json`
 by hand from the design's field table (15 made-up tweets covering reposts,

@@ -227,7 +227,11 @@ def skill_dir() -> Path:
 
 
 def load_settings(path: Path = None) -> dict:
-    """Read the settings.md tables.
+    """Read the article brief's tables out of the root settings.md.
+
+    The file holds the X list's tables too. Only two headings belong to this
+    half, and every other section is skipped, which is why both halves may
+    name a step `cluster` without clashing:
 
     Under `## Numbers` a row is `| key | value | meaning |`. Values: digits are
     ints, `50%` is the int 50, `"a", "b"` is a list of strings, anything else is
@@ -236,7 +240,7 @@ def load_settings(path: Path = None) -> dict:
     Under `## Models` a row is `| step | model | effort | ... |`, and gives two
     keys, `<step>_model` and `<step>_effort`, so a template can ask for either.
     """
-    path = path or (skill_dir() / "settings.md")
+    path = path or (project_root() / "settings.md")
     if not path.exists():
         die(f"no settings file at {path}")
     out, section = {}, ""
@@ -253,6 +257,8 @@ def load_settings(path: Path = None) -> dict:
         key, raw = cells[0], cells[1]
         if key.lower() in ("setting", "step") or set(key) <= set("-: "):
             continue
+        if section not in ("numbers", "models"):
+            continue  # the X list's own sections; x_settings.py reads those
         if section == "models":
             if len(cells) < 3 or not cells[2]:
                 die(f"settings.md: {key} has no effort")
@@ -1676,7 +1682,8 @@ def cmd_picks_sync(args):
 # The X-list pipeline is one command of its own, `x-lists/x_run.py`, and nothing
 # here reaches inside it: this launches it, waits for it, and copies the brief it
 # wrote under the article brief. Every number it obeys lives in
-# `x-lists/settings.md`; the only number here is how long step 10 waits.
+# `settings.md` under `## X numbers`; the only number here is how long step 10
+# waits.
 
 X_POLL_SECONDS = 2          # how often x-wait looks; the run takes minutes
 X_KILL_GRACE_SECONDS = 5    # between SIGTERM and SIGKILL on a timeout

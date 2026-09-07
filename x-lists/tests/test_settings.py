@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for x_settings.py -- the shared settings.md loader."""
+"""Tests for x_settings.py -- the loader for the X half of settings.md."""
 
 import sys
 import tempfile
@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import x_settings  # noqa: E402
 
 
-REAL_SETTINGS = Path(__file__).resolve().parents[1] / "settings.md"
+REAL_SETTINGS = Path(__file__).resolve().parents[2] / "settings.md"
 
 
 class TestLoadRealSettings(unittest.TestCase):
@@ -39,6 +39,15 @@ class TestLoadRealSettings(unittest.TestCase):
         self.assertIn("judge_model", self.settings)
         self.assertIn("judge_effort", self.settings)
 
+    def test_the_article_halfs_rows_are_not_read(self):
+        """The one file holds both halves. A step named `cluster` in each is
+        the reason this loader reads only the `X` headings: the article
+        brief's own tables must not reach here at all."""
+        self.assertNotIn("picks_max", self.settings)
+        self.assertNotIn("triage_batch_size", self.settings)
+        self.assertNotIn("screen_model", self.settings)
+        self.assertNotIn("counterpoint_model", self.settings)
+
     def test_no_key_named_twice(self):
         # load_settings itself dies (exit 2) on a duplicate; loading twice
         # without dying is itself the proof there is no collision.
@@ -54,7 +63,7 @@ class TestLoaderMechanics(unittest.TestCase):
         return Path(tmp.name)
 
     def test_percent_cell_becomes_int(self):
-        path = self.write("## Numbers\n\n| Setting | Value | What |\n|---|---|---|\n"
+        path = self.write("## X numbers\n\n| Setting | Value | What |\n|---|---|---|\n"
                            "| x_thing | 90% | a percentile |\n")
         settings = x_settings.load_settings(path)
         self.assertEqual(settings["x_thing"], 90)
@@ -65,13 +74,23 @@ class TestLoaderMechanics(unittest.TestCase):
         self.assertNotEqual(ctx.exception.code, 0)
 
     def test_duplicate_key_exits_nonzero(self):
-        path = self.write("## Numbers\n\n| Setting | Value | What |\n|---|---|---|\n"
+        path = self.write("## X numbers\n\n| Setting | Value | What |\n|---|---|---|\n"
                            "| x_dup | 1 | first |\n| x_dup | 2 | second |\n")
         with self.assertRaises(SystemExit):
             x_settings.load_settings(path)
 
+    def test_a_foreign_section_is_skipped_not_merged(self):
+        path = self.write(
+            "## Numbers\n\n| Setting | Value | What |\n|---|---|---|\n"
+            "| cluster_articles_max | 150 | the article half |\n\n"
+            "## X numbers\n\n| Setting | Value | What |\n|---|---|---|\n"
+            "| x_thing | 7 | ours |\n")
+        settings = x_settings.load_settings(path)
+        self.assertEqual(settings["x_thing"], 7)
+        self.assertNotIn("cluster_articles_max", settings)
+
     def test_models_row_without_effort_exits_nonzero(self):
-        path = self.write("## Models\n\n| Step | Model | Effort |\n|---|---|---|\n"
+        path = self.write("## X models\n\n| Step | Model | Effort |\n|---|---|---|\n"
                            "| cluster | opus |  |\n")
         with self.assertRaises(SystemExit):
             x_settings.load_settings(path)

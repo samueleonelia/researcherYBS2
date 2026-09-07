@@ -16,7 +16,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from x_settings import load_settings
+from x_settings import load_settings, default_settings_path
 
 FLAG_NAMES = ("CONVERGENCE", "ENDORSEMENT", "VELOCITY")
 
@@ -196,11 +196,11 @@ def score_subjects(kept: list, subjects: list, settings: dict, scraped_at: str):
 def main():
     ap = argparse.ArgumentParser(description="Score subjects.json in place.")
     ap.add_argument("--run-dir", required=True, help="run folder holding kept.json and subjects.json")
-    ap.add_argument("--settings", default=None, help="path to settings.md (default: x-lists/settings.md next to this script)")
+    ap.add_argument("--settings", default=None, help="path to settings.md (default: the root settings.md, one folder up)")
     args = ap.parse_args()
 
     run_dir = Path(args.run_dir).resolve()
-    settings_path = Path(args.settings).resolve() if args.settings else (Path(__file__).resolve().parent / "settings.md")
+    settings_path = Path(args.settings).resolve() if args.settings else default_settings_path()
 
     kept_path = run_dir / "kept.json"
     subjects_path = run_dir / "subjects.json"

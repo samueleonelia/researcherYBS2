@@ -42,7 +42,7 @@ plumbing against the fixture:
 
     --run-dir DIR     use this folder instead of creating a fresh one
                        (e.g. one seeded with the fixture as tweets.json)
-    --settings PATH   defaults to x-lists/settings.md
+    --settings PATH   defaults to the root settings.md
     --from STEP       start at this step (1-7), skipping earlier ones
                        because their output is already in --run-dir
     --only STEP       run just this one step
@@ -822,7 +822,7 @@ def main():
     ap.add_argument("--run-dir", default=None,
                      help="use this folder instead of creating a fresh one")
     ap.add_argument("--settings", default=None,
-                     help="path to settings.md (default: x-lists/settings.md)")
+                     help="path to settings.md (default: the root settings.md)")
     ap.add_argument("--from", dest="from_step", type=int, default=1, choices=range(1, 8),
                      help="start at this step, skipping earlier ones")
     ap.add_argument("--only", type=int, default=0, choices=range(0, 8),

@@ -161,7 +161,7 @@ SHINGLE = 12          # words; long enough that a shared run of them is a copy
 def prose_sources():
     """Every file a person edits by hand. Rendered agent files are excluded:
     they are copies by design, which is what `build` is for."""
-    files = [SKILL / "SKILL.md", SKILL / "settings.md"]
+    files = [SKILL / "SKILL.md", ROOT / "settings.md"]
     files += sorted(PROMPTS.glob("*.md"))
     files += sorted((SKILL / "templates").glob("*.md"))
     files += sorted((SKILL / "agents").glob("*.md.tmpl"))

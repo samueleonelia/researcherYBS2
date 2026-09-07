@@ -1052,10 +1052,29 @@ def test_x_merge_shapes(tmp):
         shutil.rmtree(rd, ignore_errors=True)
 
 
+def test_settings_halves():
+    """One settings.md holds both halves of the run. This script must read the
+    article brief's `## Numbers` and `## Models` and nothing else: the X list
+    names a step `cluster` too, and its rows would quietly overwrite ours."""
+    print("\nsettings: the two halves stay apart")
+    out, _ = run("settings")
+    check("the article numbers are there", out["picks_max"] == 15, str(out.get("picks_max")))
+    check("the article models are there", out["counterpoint_model"] == "opus",
+          str(out.get("counterpoint_model")))
+    check("cluster is the article brief's own row", out["cluster_effort"] == "high",
+          str(out.get("cluster_effort")))
+    for key in ("x_window_hours", "x_picks_max", "x_account", "judge_model",
+                "verify_check_7_model"):
+        check(f"the X list's {key} is not read here", key not in out, str(out.get(key)))
+    check("except x_wait_minutes_max, which is ours", out["x_wait_minutes_max"] == 9,
+          str(out.get("x_wait_minutes_max")))
+
+
 def main():
     rd = new_run()
     print(f"test run: {rd.name}")
     try:
+        test_settings_halves()
         test_screen_sync(rd)
         test_dates()
         test_triage(rd)

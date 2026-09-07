@@ -17,7 +17,7 @@ home; never copy it into a prompt or a reply.
 
 | What | Home |
 |---|---|
-| every number | `settings.md`, printed by `ybs_run.py settings` |
+| every number | the project root's `settings.md`, printed by `ybs_run.py settings` |
 | what the show covers | `prompts/_beats.md` |
 | the sections code keeps without an agent | `prompts/_sections.md` |
 | how a story is read | `prompts/_lens.md` |
@@ -30,7 +30,7 @@ home; never copy it into a prompt or a reply.
 | file names, launch lines, sentinels | `ybs_run.py schema` |
 | the rules of this pipeline | the hard rules at the end of this file |
 | model and effort per agent | `settings.md`, the `## Models` table |
-| the X list: its steps, its numbers, its rules | `x-lists/`, with its own `settings.md` and `GOAL.md` |
+| the X list: its steps and its rules | `x-lists/`, with its own `GOAL.md`; its numbers are in `settings.md` under `## X numbers` |
 
 The eight agent files in `.claude/agents/ybs4-*.md` are **generated** from the
 templates in `agents/`. Edit a template, then run `ybs_run.py build`.
@@ -368,8 +368,10 @@ path to `brief.md` to the user. Nothing else.
 2. **Model and effort come from `settings.md`**, through the built agent files.
    Never pass `model` to the Agent tool, never state an effort in a prompt. To
    change what a step runs at, edit the `## Models` table and run `build`. The
-   X pipeline's models are its own: they live in `x-lists/settings.md` and reach
-   its agents through `x_run.py`, never through the Agent tool.
+   X pipeline's models are its own: they live in the same `settings.md` under
+   `## X models`, and reach its agents through `x_run.py`, never through the
+   Agent tool. Each half reads only its own headings, so a step named `cluster`
+   in both tables is two different settings.
 3. **Never write a pooled agent's result file.** You launch, you count, you run
    the sync command. For the single-call steps, match the reply to its file by
    the agent's label, never by reading the content and guessing.

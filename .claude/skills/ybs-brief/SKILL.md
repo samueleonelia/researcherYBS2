@@ -100,7 +100,9 @@ python3 .claude/skills/ybs-brief/scripts/ybs_run.py build --check
 python3 .claude/skills/ybs-brief/scripts/ybs_run.py sources
 ```
 
-If `sources` lists nothing, or a line has no link, stop and say which line.
+If `sources` lists no news source, or a line has no link, stop and say which
+line. `x_lists` in the same output is the X half's own list of lists, from
+`sources.md`'s `## X lists` section; it is never screened by an agent.
 If `ego-browser` is missing, stop: nothing here works without it.
 If `build --check` reports a stale agent file, run `build` and say you did.
 

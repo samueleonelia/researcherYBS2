@@ -939,6 +939,11 @@ X_WAIT_MINUTES = SETTINGS["x_wait_minutes_max"]
 
 # ---------------------------------------------------------------- sources
 
+# The heading in sources.md that divides the two halves. Everything under it is
+# an X list; everything else is a news front page.
+X_LISTS_HEADING = "x lists"
+
+
 def read_sources(root: Path) -> list:
     """Read sources.md. One source per line, in any of these shapes:
 
@@ -950,13 +955,24 @@ def read_sources(root: Path) -> list:
     A third part is the logged-in marker for a paid site: text that only appears
     on the page when the session is alive. Lines without a link are ignored,
     which is why the notes at the top of the file are harmless.
+
+    Lines under the `## X lists` heading are NOT news sources: they belong to
+    the X half of the run and are read by `read_x_lists` instead. A front page
+    is screened by an agent; an X list is scrolled by `x-lists/x_scrape.py`,
+    and mixing the two would send a screener to x.com.
     """
     f = root / "sources.md"
     if not f.exists():
         die("sources.md not found at " + str(f))
     rows = []
+    section = ""
     for line in f.read_text(encoding="utf-8").splitlines():
         if line.startswith("    ") or line.startswith("\t"):
+            continue
+        if line.strip().startswith("#"):
+            section = line.strip().lstrip("#").strip().lower()
+            continue
+        if section == X_LISTS_HEADING:
             continue
         s = re.sub(r"^\s*(\d+[.)]|[-*+])\s+", "", line.strip())
         if not s or s.startswith("#") or "http" not in s:
@@ -977,8 +993,42 @@ def read_sources(root: Path) -> list:
     return rows
 
 
+def read_x_lists(root: Path) -> list:
+    """Read the `## X lists` section of sources.md: `1. Name - https://x.com/...`.
+
+    Same forgiving line shape as a news source, minus the logged-in marker (the
+    X half checks the logged-in handle itself). An empty or absent section is
+    not an error: the X half then has nothing to read and says so.
+    """
+    f = root / "sources.md"
+    if not f.exists():
+        die("sources.md not found at " + str(f))
+    rows, section = [], ""
+    for line in f.read_text(encoding="utf-8").splitlines():
+        if line.startswith("    ") or line.startswith("\t"):
+            continue
+        if line.strip().startswith("#"):
+            section = line.strip().lstrip("#").strip().lower()
+            continue
+        if section != X_LISTS_HEADING:
+            continue
+        s = re.sub(r"^\s*(\d+[.)]|[-*+])\s+", "", line.strip())
+        if not s or "http" not in s:
+            continue
+        parts = [p.strip() for p in re.split(r"\s+[-–—]\s+", s) if p.strip()]
+        url = next((p for p in parts if p.startswith("http")), None)
+        if not url or parts[0] == url:
+            continue
+        i = parts.index(url)
+        name = " - ".join(parts[:i])
+        rows.append({"name": name, "slug": slugify(name), "url": url})
+    return rows
+
+
 def cmd_sources(args):
-    print(json.dumps(read_sources(project_root()), indent=2, ensure_ascii=False))
+    print(json.dumps({"sources": read_sources(project_root()),
+                       "x_lists": read_x_lists(project_root())},
+                      indent=2, ensure_ascii=False))
     return 0
 
 

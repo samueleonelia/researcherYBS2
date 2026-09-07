@@ -26,7 +26,7 @@ from datetime import datetime, timedelta, timezone
 # The full tweet schema: the design's field table plus `promoted`, which
 # filter rule 1 needs and the design's table omits (see interfaces.md).
 TWEET_FIELDS = [
-    "id", "url", "list", "author", "reposted_by", "posted_at", "seen_at",
+    "id", "url", "list", "lists", "author", "reposted_by", "posted_at", "seen_at",
     "text", "card_title", "quoted_text", "is_reply", "has_link", "promoted",
     "replies", "reposts", "likes", "views",
 ]
@@ -90,9 +90,18 @@ def check1_schema(tweets_doc: dict, settings: dict):
         return False, "settings.md has no x_tweets_min"
     minimum = settings["x_tweets_min"]
 
-    for key in ("list_url", "account", "scraped_at", "window_hours", "tweets"):
+    for key in ("lists", "account", "scraped_at", "window_hours", "tweets"):
         if key not in tweets_doc:
             return False, f"tweets.json is missing top-level '{key}'"
+
+    heads = tweets_doc["lists"]
+    if not isinstance(heads, list) or not heads:
+        return False, "tweets.json's 'lists' names no list"
+    names = set()
+    for i, row in enumerate(heads):
+        if not isinstance(row, dict) or not row.get("name") or not row.get("url"):
+            return False, f"tweets.json's lists[{i}] has no name or no url"
+        names.add(row["name"])
 
     tweets = tweets_doc["tweets"]
     if not isinstance(tweets, list):
@@ -106,8 +115,17 @@ def check1_schema(tweets_doc: dict, settings: dict):
         missing = [f for f in TWEET_FIELDS if f not in t]
         if missing:
             return False, f"tweet {t.get('id', f'#{i}')} is missing field(s): {missing}"
+        seen_in = t.get("lists") or []
+        if not isinstance(seen_in, list) or not seen_in:
+            return False, f"tweet {t.get('id', f'#{i}')} names no list in 'lists'"
+        stray = [n for n in seen_in if n not in names]
+        if stray:
+            return False, f"tweet {t.get('id', f'#{i}')} names a list nothing scraped: {stray}"
+        if t.get("list") not in seen_in:
+            return False, f"tweet {t.get('id', f'#{i}')}'s 'list' is not among its 'lists'"
 
-    return True, f"{len(tweets)} tweets, all {len(TWEET_FIELDS)} fields present"
+    return True, (f"{len(tweets)} tweets from {len(heads)} list(s), "
+                   f"all {len(TWEET_FIELDS)} fields present")
 
 
 # ---------------------------------------------------------------- check 2
@@ -131,25 +149,37 @@ def check2_window(tweets_doc: dict, settings: dict):
         return False, str(e)
     cutoff = scraped_at - timedelta(hours=window_hours)
 
-    try:
-        boundary = window_boundary(tweets, cutoff, stop_after_old)
-    except (ValueError, KeyError) as e:
-        return False, f"unparseable tweet: {e}"
+    # The rule is about ONE timeline: a run of old non-reposts is where that
+    # list's scroll should have stopped. Two lists are two timelines, so the
+    # merged pile is split back into the order each list was read in and the
+    # rule is applied to each -- an old run at the end of list one must not
+    # cut list two short, and vice versa.
+    per_list, order = {}, []
+    for t in tweets:
+        name = t.get("list") or ""
+        if name not in per_list:
+            per_list[name] = []
+            order.append(name)
+        per_list[name].append(t)
 
-    if boundary is None:
-        return True, f"no run of {stop_after_old} old non-reposts found; all {len(tweets)} tweets in window"
+    parts = []
+    for name in order:
+        group = per_list[name]
+        try:
+            boundary = window_boundary(group, cutoff, stop_after_old)
+        except (ValueError, KeyError) as e:
+            return False, f"unparseable tweet in {name or 'the list'}: {e}"
+        label = name or "list"
+        if boundary is None:
+            parts.append(
+                f"{label}: no run of {stop_after_old} old non-reposts; "
+                f"all {len(group)} in window")
+        else:
+            parts.append(
+                f"{label}: boundary at position {boundary} (0-based), "
+                f"{boundary} in window, {len(group) - boundary} at or after the old run")
 
-    kept_len = boundary
-    dropped = tweets[boundary:]
-    # every dropped tweet must be part of, or after, that first old run --
-    # i.e. nothing before the boundary is out, nothing at/after it is in.
-    if len(tweets) != kept_len + len(dropped):
-        return False, "internal accounting error"
-
-    return True, (
-        f"boundary at position {boundary} (0-based); "
-        f"{kept_len} tweets in window, {len(dropped)} cut at the old run"
-    )
+    return True, "; ".join(parts) or "no tweets"
 
 
 # ---------------------------------------------------------------- check 3

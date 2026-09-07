@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """x_scrape.py -- step 1 of the X lists pipeline.
 
-Scrolls the one allowed X list timeline from the top, in the logged-in ego
-browser, and writes DIR/tweets.json plus DIR/page.txt. Standard library only.
+Scrolls every X list named in sources.md, one after the other, from the top,
+in the logged-in ego browser, and writes DIR/tweets.json plus DIR/page.txt and
+DIR/pages/<slug>.txt. Standard library only.
 
-Guardrails (see GOAL.md): only @EgoismoEfficace, only the one list URL, read
-only, no login, sole owner of the browser for the duration of this script.
+Guardrails (see GOAL.md): only @EgoismoEfficace, only the list URLs named in
+sources.md, read only, no login, sole owner of the browser for the duration of
+this script. Each list is checked on arrival, so the guardrail holds for the
+second list exactly as for the first.
 No number is hard-coded here -- every one is read from the root settings.md
 at run time, through x_settings.py.
 """
@@ -19,15 +22,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from x_settings import load_settings, default_settings_path  # noqa: E402
+from x_settings import (load_settings, default_settings_path,  # noqa: E402
+                          default_sources_path, read_x_lists)
 
 TASK_SPACE_NAME = "x-lists scrape"
 
 # The design's field table, plus `promoted` (see plans/interfaces.md).
 FIELDS = [
-    "id", "url", "list", "author", "reposted_by", "posted_at", "seen_at",
-    "text", "card_title", "quoted_text", "is_reply", "has_link", "promoted",
-    "replies", "reposts", "likes", "views",
+    "id", "url", "list", "lists", "author", "reposted_by", "posted_at",
+    "seen_at", "text", "card_title", "quoted_text", "is_reply", "has_link",
+    "promoted", "replies", "reposts", "likes", "views",
 ]
 
 
@@ -223,6 +227,19 @@ if (handle !== {json.dumps("ACCOUNT_PLACEHOLDER")}) {{
 """
 
 
+def build_close_script() -> str:
+    """Close the tab this list was read in.
+
+    Between two lists the browser must start clean: the next list opens its own
+    tab, so a scroll round can never land on the tab of the list before it, and
+    a run does not leave a pile of tabs behind."""
+    return f"""
+const task = await useOrCreateTaskSpace({json.dumps(TASK_SPACE_NAME)});
+try {{ await closeTab(); }} catch (e) {{ }}
+cliLog(JSON.stringify({{ ok: true }}));
+"""
+
+
 def build_scroll_round_script() -> str:
     return f"""
 const task = await useOrCreateTaskSpace({json.dumps(TASK_SPACE_NAME)});
@@ -252,7 +269,7 @@ def parse_counts(group_aria: str) -> dict:
     return out
 
 
-def to_record(raw: dict, seen_at_iso: str) -> dict:
+def to_record(raw: dict, seen_at_iso: str, list_name: str = "") -> dict:
     href = raw.get("href") or ""
     path = href.split("?")[0].rstrip("/")
     tweet_id = path.rsplit("/", 1)[-1] if "/status/" in path else ""
@@ -273,7 +290,8 @@ def to_record(raw: dict, seen_at_iso: str) -> dict:
     return {
         "id": tweet_id,
         "url": url,
-        "list": "B",
+        "list": list_name,
+        "lists": [list_name] if list_name else [],
         "author": author,
         "reposted_by": reposted_by,
         "posted_at": raw.get("time_datetime", "") or "",
@@ -329,7 +347,12 @@ def _first_index_of_streak(records, streak_len, end_index):
 
 
 def scrape(account: str, list_url: str, window_hours: int, stop_after_old: int,
-           max_rounds: int = 150, stagnant_limit: int = 8):
+           list_name: str = "", max_rounds: int = 150, stagnant_limit: int = 8):
+    """Scroll ONE list from the top and return its tweets in timeline order.
+
+    Called once per list in sources.md. Each call re-checks the logged-in
+    handle and the URL it landed on, so the guardrail holds for the second
+    list exactly as it does for the first."""
     seen_order = []  # tweet ids, in first-seen (timeline) order
     by_id = {}
     page_texts = []  # one chunk of raw text per round, for page.txt
@@ -339,7 +362,7 @@ def scrape(account: str, list_url: str, window_hours: int, stop_after_old: int,
             page_texts.append(page_text)
         added = 0
         for raw in raw_tweets:
-            rec = to_record(raw, seen_at_iso)
+            rec = to_record(raw, seen_at_iso, list_name)
             if not rec["id"]:
                 continue
             if rec["id"] not in by_id:
@@ -396,9 +419,36 @@ def scrape(account: str, list_url: str, window_hours: int, stop_after_old: int,
 
 # ---------------------------------------------------------------------- io
 
-def write_tweets_json(run_dir: Path, account: str, list_url: str, window_hours: int, tweets: list):
+def merge_lists(scraped: list) -> tuple:
+    """Merge what each list returned into one timeline-ordered pile.
+
+    `scraped` is [(list_row, tweets)] in the order the lists were read. A tweet
+    carried by two lists is ONE record: the first list that showed it keeps the
+    `list` field (so every prompt and every note reads the same as before), and
+    every list it appeared in is added to `lists`, which is what makes a subject
+    carried by two lists count as two.
+
+    Returns (tweets, per_list_counts).
+    """
+    by_id, order, counts = {}, [], []
+    for row, tweets in scraped:
+        seen_here = 0
+        for rec in tweets:
+            seen_here += 1
+            first = by_id.get(rec["id"])
+            if first is None:
+                by_id[rec["id"]] = rec
+                order.append(rec["id"])
+                continue
+            if row["name"] not in first["lists"]:
+                first["lists"].append(row["name"])
+        counts.append({"name": row["name"], "url": row["url"], "tweets": seen_here})
+    return [by_id[i] for i in order], counts
+
+
+def write_tweets_json(run_dir: Path, account: str, lists: list, window_hours: int, tweets: list):
     payload = {
-        "list_url": list_url,
+        "lists": lists,
         "account": account,
         "scraped_at": iso(utc_now()),
         "window_hours": window_hours,
@@ -407,8 +457,17 @@ def write_tweets_json(run_dir: Path, account: str, list_url: str, window_hours: 
     (run_dir / "tweets.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
-def write_page_text(run_dir: Path, text: str):
-    (run_dir / "page.txt").write_text(text, encoding="utf-8")
+def write_page_text(run_dir: Path, per_list: list):
+    """One page.txt per list under pages/, plus the joined page.txt every
+    later step already reads, so a figure still traces to the page it came
+    from."""
+    pages = run_dir / "pages"
+    pages.mkdir(parents=True, exist_ok=True)
+    chunks = []
+    for row, text in per_list:
+        (pages / f"{row['slug']}.txt").write_text(text, encoding="utf-8")
+        chunks.append(f"===== {row['name']} ({row['url']}) =====\n\n{text}")
+    (run_dir / "page.txt").write_text("\n\n".join(chunks), encoding="utf-8")
 
 
 # --------------------------------------------------------------------- cli
@@ -418,6 +477,9 @@ def main():
     parser.add_argument("--run-dir", required=True, help="the run folder to write into")
     parser.add_argument("--settings", default=str(default_settings_path()),
                          help="path to settings.md (default: the root settings.md)")
+    parser.add_argument("--sources", default=None,
+                         help="path to sources.md, which lists the X lists "
+                               "(default: the root sources.md)")
     args = parser.parse_args()
 
     run_dir = Path(args.run_dir).resolve()
@@ -429,19 +491,38 @@ def main():
     values = read_settings(settings_path)
 
     account = require_str(values, "x_account")
-    list_url = require_str(values, "x_list_url")
     window_hours = require_int(values, "x_window_hours")
     stop_after_old = require_int(values, "x_stop_after_old")
     tweets_min = require_int(values, "x_tweets_min")
 
-    tweets, page_text = scrape(account, list_url, window_hours, stop_after_old)
+    sources_path = Path(args.sources).resolve() if args.sources else default_sources_path()
+    lists = read_x_lists(sources_path)
 
-    write_tweets_json(run_dir, account, list_url, window_hours, tweets)
-    write_page_text(run_dir, page_text)
+    scraped, pages = [], []
+    for row in lists:
+        print(f"x_scrape: reading {row['name']} ({row['url']})", flush=True)
+        tweets, page_text = scrape(account, row["url"], window_hours,
+                                    stop_after_old, list_name=row["name"])
+        print(f"x_scrape: {row['name']}: {len(tweets)} tweets in window", flush=True)
+        scraped.append((row, tweets))
+        pages.append((row, page_text))
+        if row is not lists[-1]:
+            # Not fatal: a tab that will not close costs a tab, not the run.
+            try:
+                run_js_json(build_close_script())
+            except SystemExit:
+                print(f"x_scrape: could not close the tab for {row['name']}", flush=True)
+
+    tweets, counts = merge_lists(scraped)
+
+    write_tweets_json(run_dir, account, counts, window_hours, tweets)
+    write_page_text(run_dir, pages)
 
     ok = len(tweets) >= tweets_min
+    per_list = ", ".join(f"{c['name']}: {c['tweets']}" for c in counts)
     print(
-        f"x_scrape: wrote {len(tweets)} tweets to {run_dir / 'tweets.json'} "
+        f"x_scrape: wrote {len(tweets)} tweets from {len(counts)} list(s) "
+        f"({per_list}) to {run_dir / 'tweets.json'} "
         f"(min required: {tweets_min}, {'PASS' if ok else 'BELOW MINIMUM'})"
     )
     sys.exit(0 if ok else 1)

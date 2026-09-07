@@ -110,8 +110,14 @@ def score_subjects(kept: list, subjects: list, settings: dict, scraped_at: str):
             if rb:
                 authors.add(rb)
 
-        # lists: how many of A, B appear among this subject's tweets.
-        lists_seen = {t.get("list") for t in tws if t.get("list")}
+        # lists: how many of the lists in sources.md this subject appears in.
+        # A tweet carries every list that showed it, so one tweet in two lists
+        # counts as two -- which is the point of the measure.
+        lists_seen = set()
+        for t in tws:
+            for name in (t.get("lists") or ([t["list"]] if t.get("list") else [])):
+                if name:
+                    lists_seen.add(name)
         lists_count = len(lists_seen)
 
         # endorsements: max over tweets of (reposts by list members inside
@@ -178,7 +184,9 @@ def score_subjects(kept: list, subjects: list, settings: dict, scraped_at: str):
     all_velocities = [p["velocity"] for p in prepared]
     for p in prepared:
         p["velocity_rank"] = percentile_rank(all_velocities, p["velocity"])
-        p["cross_list"] = (p["lists"] == 2)
+        # True when a subject was carried by more than one list, however many
+        # lists sources.md names (it was written when there were exactly two).
+        p["cross_list"] = (p["lists"] >= 2)
 
         flags = []
         if p["authors"] >= conv_n:

@@ -25,7 +25,11 @@ Never:
   else, check the logged-in handle on the page; if it is not @EgoismoEfficace,
   or nobody is logged in, stop and say so. Never switch accounts.
 - Open any X URL other than these two kinds:
-  1. **https://x.com/i/lists/2091834809903407159**, by the scraper only.
+  1. **A list URL named in the root `sources.md`, under `## X lists`**, by the
+     scraper only. It reads them one after the other, checks the handle and the
+     URL it landed on for each, and closes each list's tab before the next.
+     A list URL that is not in that file is off limits, and so is every other
+     list on the account.
   2. **A tweet permalink that this run's `links.md` lists**, by a read
      sub-agent only. Many read sub-agents run at the same time, each in its
      own ego task space; but **each one opens one link at a time**, finishes
@@ -33,7 +37,7 @@ Never:
      never two tweets open at once inside one sub-agent. This is the one
      exception to the single-URL rule (Samuele, 2026-09-06): the feed shows
      a collapsed preview, so a surviving tweet is read on its own page.
-  Still forbidden for everyone: profiles, search, any other list, the quoted
+  Still forbidden for everyone: profiles, search, any list not in `sources.md`, the quoted
   tweet's page, the author's timeline, and any link inside a tweet. A URL
   that is not in this run's `links.md` is off limits. If a step seems to
   need one, stop and ask.

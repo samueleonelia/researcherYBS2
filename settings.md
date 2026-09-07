@@ -35,7 +35,7 @@ settings` or `python3 x-lists/x_settings.py`.
 | lead_max | 5 | stories that may be tagged LEAD |
 | worth_max | 5 | stories that may be tagged WORTH |
 | words_per_sentence_max | 30 | words in one sentence of the brief |
-| x_wait_minutes_max | 9 | minutes step 10 waits for the X run before the brief goes out without it |
+| x_wait_minutes_max | 30 | safety timeout only: minutes step 10 waits for the X run before the brief goes out without it. Not a speed target — raise it if the X lists take longer |
 
 BODY has no setting: it is whatever is left of the picks after LEAD and WORTH.
 
@@ -100,10 +100,13 @@ names is a bug, not a setting.
 
 Not numbers, and not tunable by a run. Changing one is a design decision.
 
+Which lists are read is **not** here: they are in `sources.md`, under
+`## X lists`, one line each, the same way the news sites are listed. This row
+is which login is allowed to read them.
+
 | Setting | Value |
 |---|---|
 | x_account | @EgoismoEfficace |
-| x_list_url | https://x.com/i/lists/2091834809903407159 |
 
 ## X models
 

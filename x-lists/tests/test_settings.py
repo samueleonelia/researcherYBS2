@@ -31,7 +31,11 @@ class TestLoadRealSettings(unittest.TestCase):
 
     def test_fixed_values_present(self):
         self.assertEqual(self.settings["x_account"], "@EgoismoEfficace")
-        self.assertTrue(self.settings["x_list_url"].startswith("https://x.com/i/lists/"))
+
+    def test_which_lists_to_read_is_not_in_settings(self):
+        """The lists live in sources.md now, so Yaron adds one the same way he
+        adds a news site. A leftover x_list_url here would be read by nothing."""
+        self.assertNotIn("x_list_url", self.settings)
 
     def test_models_table_gives_model_and_effort(self):
         self.assertIn("cluster_model", self.settings)
@@ -94,6 +98,62 @@ class TestLoaderMechanics(unittest.TestCase):
                            "| cluster | opus |  |\n")
         with self.assertRaises(SystemExit):
             x_settings.load_settings(path)
+
+
+class TestReadXLists(unittest.TestCase):
+    """`## X lists` in sources.md is where the lists to read are named."""
+
+    def write(self, text: str) -> Path:
+        tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False)
+        tmp.write(text)
+        tmp.close()
+        return Path(tmp.name)
+
+    SOURCES = (
+        "# Sources\n\n"
+        "1. Guardian - https://www.theguardian.com/\n"
+        "2. Reason - https://reason.com/ - Sign Out\n\n"
+        "## X lists\n\n"
+        "Prose with no link is ignored, the way it is above.\n\n"
+        "1. List one - https://x.com/i/lists/111\n"
+        "- List two - https://x.com/i/lists/222\n"
+    )
+
+    def test_reads_the_x_section_only(self):
+        rows = x_settings.read_x_lists(self.write(self.SOURCES))
+        self.assertEqual([r["url"] for r in rows],
+                          ["https://x.com/i/lists/111", "https://x.com/i/lists/222"])
+        self.assertEqual([r["name"] for r in rows], ["List one", "List two"])
+        self.assertEqual([r["slug"] for r in rows], ["list-one", "list-two"])
+
+    def test_a_news_front_page_is_never_returned(self):
+        rows = x_settings.read_x_lists(self.write(self.SOURCES))
+        for r in rows:
+            self.assertNotIn("theguardian", r["url"])
+            self.assertNotIn("reason.com", r["url"])
+
+    def test_one_list_is_fine(self):
+        rows = x_settings.read_x_lists(self.write(
+            "## X lists\n\n1. Only - https://x.com/i/lists/1\n"))
+        self.assertEqual(len(rows), 1)
+
+    def test_no_section_exits_nonzero(self):
+        with self.assertRaises(SystemExit):
+            x_settings.read_x_lists(self.write(
+                "# Sources\n\n1. Guardian - https://www.theguardian.com/\n"))
+
+    def test_the_same_list_twice_exits_nonzero(self):
+        with self.assertRaises(SystemExit):
+            x_settings.read_x_lists(self.write(
+                "## X lists\n\n1. A - https://x.com/i/lists/1\n"
+                "2. B - https://x.com/i/lists/1\n"))
+
+    def test_the_real_sources_file_names_at_least_one_list(self):
+        rows = x_settings.read_x_lists()
+        self.assertTrue(rows)
+        for r in rows:
+            self.assertTrue(r["url"].startswith("https://x.com/i/lists/"), r["url"])
+            self.assertTrue(r["name"])
 
 
 if __name__ == "__main__":

@@ -1052,6 +1052,24 @@ def test_x_merge_shapes(tmp):
         shutil.rmtree(rd, ignore_errors=True)
 
 
+def test_sources_halves():
+    """sources.md holds the news front pages and, at the bottom, the X lists.
+    A screener agent must never be sent to x.com, so the two halves are read
+    by two commands and the X section is invisible to `read_sources`."""
+    print("\nsources: news pages and X lists stay apart")
+    out, _ = run("sources")
+    news = out["sources"]
+    xlists = out["x_lists"]
+    check("the news sources are there", len(news) >= 1, str(len(news)))
+    check("no news source is an X list",
+          not [s for s in news if "x.com" in s["front_page"]],
+          str([s["front_page"] for s in news if "x.com" in s["front_page"]]))
+    check("the X lists are read separately", len(xlists) >= 1, str(xlists))
+    for row in xlists:
+        check(f"{row['name']} is an x.com list", "x.com/i/lists/" in row["url"], row["url"])
+        check(f"{row['name']} has a slug", bool(row["slug"]), str(row))
+
+
 def test_settings_halves():
     """One settings.md holds both halves of the run. This script must read the
     article brief's `## Numbers` and `## Models` and nothing else: the X list
@@ -1066,7 +1084,7 @@ def test_settings_halves():
     for key in ("x_window_hours", "x_picks_max", "x_account", "judge_model",
                 "verify_check_7_model"):
         check(f"the X list's {key} is not read here", key not in out, str(out.get(key)))
-    check("except x_wait_minutes_max, which is ours", out["x_wait_minutes_max"] == 9,
+    check("except x_wait_minutes_max, which is ours", out["x_wait_minutes_max"] == 30,
           str(out.get("x_wait_minutes_max")))
 
 
@@ -1075,6 +1093,7 @@ def main():
     print(f"test run: {rd.name}")
     try:
         test_settings_halves()
+        test_sources_halves()
         test_screen_sync(rd)
         test_dates()
         test_triage(rd)

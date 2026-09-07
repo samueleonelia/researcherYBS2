@@ -119,6 +119,55 @@ def load_settings(path: Path = None) -> dict:
     return out
 
 
+def default_sources_path() -> Path:
+    """<root>/sources.md, where the X lists are listed."""
+    return Path(__file__).resolve().parents[1] / "sources.md"
+
+
+def read_x_lists(path: Path = None) -> list:
+    """The `## X lists` section of sources.md -> [{name, slug, url}].
+
+    One line each: `1. Name - https://x.com/i/lists/...`. The marker and its
+    number are decoration. Lines under any other heading are news front pages
+    and belong to the article half, which reads them with its own parser in
+    ybs_run.py -- the two halves parse the same file shape on purpose, so
+    neither has to import the other.
+
+    Dies if the file is missing or the section names no list: the X half with
+    nothing to read is a mistake, not an empty run.
+    """
+    path = Path(path) if path else default_sources_path()
+    if not path.exists():
+        die(f"no sources file at {path}")
+    rows, section = [], ""
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.startswith("    ") or line.startswith("\t"):
+            continue
+        if line.strip().startswith("#"):
+            section = line.strip().lstrip("#").strip().lower()
+            continue
+        if section != "x lists":
+            continue
+        stripped = re.sub(r"^\s*(\d+[.)]|[-*+])\s+", "", line.strip())
+        if not stripped or "http" not in stripped:
+            continue
+        parts = [p.strip() for p in re.split(r"\s+[-\u2013\u2014]\s+", stripped) if p.strip()]
+        url = next((p for p in parts if p.startswith("http")), None)
+        if not url or parts[0] == url:
+            continue
+        name = " - ".join(parts[:parts.index(url)])
+        slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "list"
+        rows.append({"name": name, "slug": slug, "url": url})
+    if not rows:
+        die(f"{path} has no `## X lists` section, or it names no list")
+    seen = set()
+    for r in rows:
+        if r["url"] in seen:
+            die(f"sources.md names the same X list twice: {r['url']}")
+        seen.add(r["url"])
+    return rows
+
+
 def require(settings: dict, *keys):
     """Fetch several keys at once, dying with all missing names at once."""
     missing = [k for k in keys if k not in settings]

@@ -31,7 +31,9 @@ The brief lands in `runs/`, in a folder named for today, as `brief.md`. Claude p
 the exact path when it finishes.
 
 Under the news, the brief carries a section called "What the list is moving on":
-what the people you follow on X were posting about while the news was being read.
+what the people in your X lists were posting about while the news was being read.
+It reads every list named at the bottom of `sources.md`, one after the other, and
+a post carried by two lists counts twice, which is what makes it stand out.
 That part runs by itself, at the same time. Its own numbers live in the same
 `settings.md` as the rest, under "The X list": how far back it looks, how many
 posts it opens, and how many picks it may carry. If X is signed out or the list will not load, the brief still
@@ -44,7 +46,8 @@ ego lite has to be open while a brief runs.
 Three files are yours to edit:
 
 - `preferences.md` — what you want from the brief, in your own words
-- `sources.md` — which news sites are read
+- `sources.md` — which news sites are read, and which X lists (at the bottom,
+  under "X lists" — one line each, add or delete a line and that is the change)
 - `settings.md` — every number, both halves: how many stories reach the brief
   under "The article brief", and the X section's own numbers under "The X list"
 

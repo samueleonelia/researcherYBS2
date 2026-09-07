@@ -53,7 +53,7 @@ Forbidden, without exception:
 
 - any profile page, including the author's own
 - any X search, explore, notifications, home or bookmarks page
-- any list page, including the list this run scraped
+- any list page, including the lists this run scraped
 - **the quoted tweet's own page** — read the quoted text from the card shown
   inside the tweet you are on, and if it is truncated there, write down what is
   shown and note that it was truncated. Do not click through to it.

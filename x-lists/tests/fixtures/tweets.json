@@ -1,5 +1,11 @@
 {
-  "list_url": "https://x.com/i/lists/2091834809903407159",
+  "lists": [
+    {
+      "name": "List one",
+      "url": "https://x.com/i/lists/2091834809903407159",
+      "tweets": 24
+    }
+  ],
   "account": "@EgoismoEfficace",
   "scraped_at": "2026-09-06T12:00:00Z",
   "window_hours": 1,
@@ -7,7 +13,10 @@
     {
       "id": "1000000000000000001",
       "url": "https://x.com/econwatcher/status/1000000000000000001",
-      "list": "B",
+      "list": "List one",
+      "lists": [
+        "List one"
+      ],
       "author": "@econwatcher",
       "reposted_by": "",
       "posted_at": "2026-09-06T11:52:00Z",
@@ -26,7 +35,10 @@
     {
       "id": "1000000000000000020",
       "url": "https://x.com/agedrop/status/1000000000000000020",
-      "list": "B",
+      "list": "List one",
+      "lists": [
+        "List one"
+      ],
       "author": "@agedrop",
       "reposted_by": "",
       "posted_at": "2026-09-06T10:30:00Z",
@@ -45,7 +57,10 @@
     {
       "id": "1000000000000000021",
       "url": "https://x.com/boundaryclear/status/1000000000000000021",
-      "list": "B",
+      "list": "List one",
+      "lists": [
+        "List one"
+      ],
       "author": "@boundaryclear",
       "reposted_by": "",
       "posted_at": "2026-09-06T11:30:00Z",
@@ -64,7 +79,10 @@
     {
       "id": "1000000000000000022",
       "url": "https://x.com/boundarydrop/status/1000000000000000022",
-      "list": "B",
+      "list": "List one",
+      "lists": [
+        "List one"
+      ],
       "author": "@boundarydrop",
       "reposted_by": "",
       "posted_at": "2026-09-06T11:30:00Z",
@@ -83,7 +101,10 @@
     {
       "id": "1000000000000000002",
       "url": "https://x.com/oldpost/status/1000000000000000002",
-      "list": "B",
+      "list": "List one",
+      "lists": [
+        "List one"
+      ],
       "author": "@oldpost",
       "reposted_by": "@econwatcher",
       "posted_at": "2026-09-05T08:15:00Z",
@@ -102,7 +123,10 @@
     {
       "id": "1000000000000000003",
       "url": "https://x.com/replyguy/status/1000000000000000003",
-      "list": "B",
+      "list": "List one",
+      "lists": [
+        "List one"
+      ],
       "author": "@replyguy",
       "reposted_by": "",
       "posted_at": "2026-09-06T11:49:00Z",
@@ -121,7 +145,10 @@
     {
       "id": "1000000000000000004",
       "url": "https://x.com/linkdropper/status/1000000000000000004",
-      "list": "B",
+      "list": "List one",
+      "lists": [
+        "List one"
+      ],
       "author": "@linkdropper",
       "reposted_by": "",
       "posted_at": "2026-09-06T11:44:00Z",
@@ -140,7 +167,10 @@
     {
       "id": "1000000000000000005",
       "url": "https://x.com/policywonk/status/1000000000000000005",
-      "list": "B",
+      "list": "List one",
+      "lists": [
+        "List one"
+      ],
       "author": "@policywonk",
       "reposted_by": "",
       "posted_at": "2026-09-06T11:40:00Z",
@@ -159,7 +189,10 @@
     {
       "id": "1000000000000000006",
       "url": "https://x.com/quotetweeter/status/1000000000000000006",
-      "list": "B",
+      "list": "List one",
+      "lists": [
+        "List one"
+      ],
       "author": "@quotetweeter",
       "reposted_by": "",
       "posted_at": "2026-09-06T11:36:00Z",
@@ -178,7 +211,10 @@
     {
       "id": "1000000000000000007",
       "url": "https://x.com/brandaccount/status/1000000000000000007",
-      "list": "B",
+      "list": "List one",
+      "lists": [
+        "List one"
+      ],
       "author": "@brandaccount",
       "reposted_by": "",
       "posted_at": "2026-09-06T11:33:00Z",
@@ -197,7 +233,10 @@
     {
       "id": "1000000000000000008",
       "url": "https://x.com/shortreact/status/1000000000000000008",
-      "list": "B",
+      "list": "List one",
+      "lists": [
+        "List one"
+      ],
       "author": "@shortreact",
       "reposted_by": "",
       "posted_at": "2026-09-06T11:30:00Z",
@@ -216,7 +255,10 @@
     {
       "id": "1000000000000000009",
       "url": "https://x.com/marketsdaily/status/1000000000000000009",
-      "list": "B",
+      "list": "List one",
+      "lists": [
+        "List one"
+      ],
       "author": "@marketsdaily",
       "reposted_by": "",
       "posted_at": "2026-09-06T11:26:00Z",
@@ -235,7 +277,10 @@
     {
       "id": "1000000000000000010",
       "url": "https://x.com/fastmover/status/1000000000000000010",
-      "list": "B",
+      "list": "List one",
+      "lists": [
+        "List one"
+      ],
       "author": "@fastmover",
       "reposted_by": "",
       "posted_at": "2026-09-06T11:55:00Z",
@@ -254,7 +299,10 @@
     {
       "id": "1000000000000000011",
       "url": "https://x.com/bondtrader/status/1000000000000000011",
-      "list": "B",
+      "list": "List one",
+      "lists": [
+        "List one"
+      ],
       "author": "@bondtrader",
       "reposted_by": "@marketsdaily",
       "posted_at": "2026-09-06T11:20:00Z",
@@ -273,7 +321,10 @@
     {
       "id": "1000000000000000012",
       "url": "https://x.com/ratesdesk/status/1000000000000000012",
-      "list": "B",
+      "list": "List one",
+      "lists": [
+        "List one"
+      ],
       "author": "@ratesdesk",
       "reposted_by": "",
       "posted_at": "2026-09-06T11:14:00Z",
@@ -292,7 +343,10 @@
     {
       "id": "1000000000000000016",
       "url": "https://x.com/linkreplier/status/1000000000000000016",
-      "list": "B",
+      "list": "List one",
+      "lists": [
+        "List one"
+      ],
       "author": "@linkreplier",
       "reposted_by": "",
       "posted_at": "2026-09-06T11:59:00Z",
@@ -311,7 +365,10 @@
     {
       "id": "1000000000000000017",
       "url": "https://x.com/repostfloor/status/1000000000000000017",
-      "list": "B",
+      "list": "List one",
+      "lists": [
+        "List one"
+      ],
       "author": "@repostfloor",
       "reposted_by": "",
       "posted_at": "2026-09-06T11:57:00Z",
@@ -330,7 +387,10 @@
     {
       "id": "1000000000000000018",
       "url": "https://x.com/likefloor/status/1000000000000000018",
-      "list": "B",
+      "list": "List one",
+      "lists": [
+        "List one"
+      ],
       "author": "@likefloor",
       "reposted_by": "",
       "posted_at": "2026-09-06T11:56:00Z",
@@ -349,7 +409,10 @@
     {
       "id": "1000000000000000019",
       "url": "https://x.com/belowfloor/status/1000000000000000019",
-      "list": "B",
+      "list": "List one",
+      "lists": [
+        "List one"
+      ],
       "author": "@belowfloor",
       "reposted_by": "",
       "posted_at": "2026-09-06T11:55:00Z",
@@ -368,7 +431,10 @@
     {
       "id": "1000000000000000013",
       "url": "https://x.com/slowfeed/status/1000000000000000013",
-      "list": "B",
+      "list": "List one",
+      "lists": [
+        "List one"
+      ],
       "author": "@slowfeed",
       "reposted_by": "",
       "posted_at": "2026-09-06T10:44:00Z",
@@ -387,7 +453,10 @@
     {
       "id": "1000000000000000014",
       "url": "https://x.com/latenight/status/1000000000000000014",
-      "list": "B",
+      "list": "List one",
+      "lists": [
+        "List one"
+      ],
       "author": "@latenight",
       "reposted_by": "",
       "posted_at": "2026-09-06T10:31:00Z",
@@ -406,7 +475,10 @@
     {
       "id": "1000000000000000015",
       "url": "https://x.com/yesterdaynews/status/1000000000000000015",
-      "list": "B",
+      "list": "List one",
+      "lists": [
+        "List one"
+      ],
       "author": "@yesterdaynews",
       "reposted_by": "",
       "posted_at": "2026-09-06T10:18:00Z",
@@ -425,7 +497,10 @@
     {
       "id": "1000000000000000023",
       "url": "https://x.com/staleaccount/status/1000000000000000023",
-      "list": "B",
+      "list": "List one",
+      "lists": [
+        "List one"
+      ],
       "author": "@staleaccount",
       "reposted_by": "",
       "posted_at": "2026-09-06T08:00:00Z",
@@ -444,7 +519,10 @@
     {
       "id": "1000000000000000024",
       "url": "https://x.com/quietrepost/status/1000000000000000024",
-      "list": "B",
+      "list": "List one",
+      "lists": [
+        "List one"
+      ],
       "author": "@quietrepost",
       "reposted_by": "@freshvoice",
       "posted_at": "2026-09-05T09:00:00Z",

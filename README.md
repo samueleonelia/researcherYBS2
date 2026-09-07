@@ -30,15 +30,23 @@ Open the Claude app, Code tab, the project folder. A fresh chat is fine.
 The brief lands in `runs/`, in a folder named for today, as `brief.md`. Claude prints
 the exact path when it finishes.
 
+Under the news, the brief carries a section called "What the list is moving on":
+what the people you follow on X were posting about while the news was being read.
+That part runs by itself, at the same time. Its own numbers live in
+`x-lists/settings.md`: how far back it looks, how many posts it opens, and how
+many picks it may carry. If X is signed out or the list will not load, the brief still
+arrives; its last line then says X gave nothing, and why.
+
 ego lite has to be open while a brief runs.
 
 ## Changing what it does
 
-Three files are yours to edit:
+Four files are yours to edit:
 
 - `preferences.md` — what you want from the brief, in your own words
 - `sources.md` — which news sites are read
 - `.claude/skills/ybs-brief/settings.md` — how many stories reach the brief, and more
+- `x-lists/settings.md` — the same kind of numbers for the X section
 
 `preferences.md` is the one you will use. Write plain sentences, one per line,
 like "never lead with a celebrity story" or "keep the leads shorter". Every brief

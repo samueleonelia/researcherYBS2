@@ -321,3 +321,13 @@ process failures stand, and the orchestrator will not rule on its own conduct:
    preview - the right call, and worth keeping as the expected behaviour.
 6. **The scraper's `card_title` contamination is unfixed**, merely bypassed by
    rule 4 dropping any link.
+
+## Session 2026-09-07: the handle check cries logout when nobody is logged out
+
+Fresh budget, 25 attempts.
+
+| # | date | step | what changed | check result | next |
+|---|---|---|---|---|---|
+| 1 | 2026-09-07 | 1 | Samuele ran `python3 x_run.py`. Step 1 died: `logged-in handle is None, not '@EgoismoEfficace'`. `runs/2026-09-07-0943/` is empty, no page.txt. He confirms @EgoismoEfficace IS logged in. | the guardrail fired correctly on a false premise | diagnose in the browser before touching code |
+| 2 | 2026-09-07 | 1 | diagnostic agent (sonnet/medium), read-only, allowed exactly ONE URL (the list) and forbidden to log in or write any file. Sent to test three hypotheses: narrow window, timing, changed markup. | **All three of the orchestrator's guesses were wrong except the vaguest.** X changed the account-switcher button to ICON-ONLY: zero `<span>` children, empty textContent, at 900px, 1600px and 2200px. Not a viewport problem, not a timing problem, not a page-load problem - `primaryColumn` had four articles. The testid itself is unchanged. The handle now lives in a nested `data-testid="UserAvatar-Container-EgoismoEfficace"`. | builder 3 |
+| 3 | 2026-09-07 | 1 | builder (sonnet/medium) for `x_scrape.py` alone, given the diagnosis and one warning that outranked the fix: `UserAvatar-Container-<handle>` ALSO appears on every tweet author's avatar, so a page-wide query would silently match a random author and turn the guardrail into "did I find a handle somewhere". Told to keep the selector scoped inside the button, never to fall back to the display name, and that an undetermined handle must still stop the run. | fixed. Primary path reads the avatar testid scoped inside the button; the old span-scan is kept as a scoped fallback in case X reverts; both empty still yields null and still stops. `@` prefix normalised explicitly. **Proved both halves:** returns `@EgoismoEfficace` live, AND still stops with `wrong_handle` when the expected account is changed in a /tmp copy. | Samuele re-runs |

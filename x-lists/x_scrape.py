@@ -208,6 +208,15 @@ const info = await pageInfo();
 const handle = await js(String.raw`(() => {{
   const btn = document.querySelector('[data-testid="SideNav_AccountSwitcher_Button"]');
   if (!btn) return null;
+  // Primary: X now renders this button icon-only, with the logged-in handle
+  // encoded in the avatar container's testid instead of visible text.
+  const avatar = btn.querySelector('[data-testid^="UserAvatar-Container-"]');
+  if (avatar) {{
+    const raw = avatar.getAttribute('data-testid').replace('UserAvatar-Container-', '').trim();
+    if (raw) return '@' + raw.replace(/^@/, '');
+  }}
+  // Fallback: the old span-scan, kept in case X reverts the markup. Still
+  // scoped to the button so it can never pick up a tweet author's handle.
   const spans = [...btn.querySelectorAll('span')].map(s => s.textContent.trim()).filter(Boolean);
   const at = spans.find(s => s.startsWith('@'));
   return at || null;

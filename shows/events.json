@@ -23,6 +23,12 @@
       "type": "fetch_failed",
       "detail": "yt-dlp: 'This live event will begin in 3 hours' - stream has not aired yet, no captions exist",
       "show": "HgG_a5U8Efk"
+    },
+    {
+      "utc": "2026-09-07T20:43:30Z",
+      "type": "no_transcript",
+      "detail": "",
+      "show": "WRyx6p9ttZE"
     }
   ]
 }

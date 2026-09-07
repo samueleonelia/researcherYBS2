@@ -1680,7 +1680,7 @@ def cmd_picks_sync(args):
 
 X_POLL_SECONDS = 2          # how often x-wait looks; the run takes minutes
 X_KILL_GRACE_SECONDS = 5    # between SIGTERM and SIGKILL on a timeout
-X_TITLE = "What the list is moving on"
+X_LOG_MARK = "=== x-start"   # one launch's output starts below this line
 
 
 def x_lists_dir() -> Path:
@@ -1754,12 +1754,18 @@ def x_alive(pid, started_utc: str = None) -> bool:
 
 def x_reason(log: Path) -> str:
     """Why an X run that wrote no brief stopped: its last `ERROR:` line, else
-    the last thing it printed. A traceback ends without an `ERROR:`."""
+    the last thing it printed. A traceback ends without an `ERROR:`.
+
+    A retry appends to the same log, so only what the last launch wrote counts:
+    the first run's error is not the second run's reason.
+    """
     if not log.exists():
         return "the X run left no log"
-    lines = [ln.rstrip() for ln in
-             log.read_text(encoding="utf-8", errors="replace").splitlines()
-             if ln.strip()]
+    lines = log.read_text(encoding="utf-8", errors="replace").splitlines()
+    marks = [i for i, ln in enumerate(lines) if ln.startswith(X_LOG_MARK)]
+    if marks:
+        lines = lines[marks[-1] + 1:]
+    lines = [ln.rstrip() for ln in lines if ln.strip()]
     if not lines:
         return "the X run wrote nothing to its log"
     errors = [ln for ln in lines if ln.lstrip().startswith("ERROR:")]
@@ -1854,11 +1860,19 @@ def cmd_x_start(args):
     x_dir = new_x_run_dir()
     log_path = run_dir / "x" / "x-run.log"
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(log_path, "ab") as log:      # append: a retry keeps the first log
+    with open(log_path, "a", encoding="utf-8") as log:
+        # Append, so a retry keeps the first run's log, and mark where this
+        # launch begins so its own last line is the one that explains it.
+        log.write(f"{X_LOG_MARK} {iso(utc_now())} ===\n")
+        log.flush()
         proc = subprocess.Popen(
             [sys.executable, str(script), "--run-dir", str(x_dir)],
             cwd=str(x_lists_dir()), stdin=subprocess.DEVNULL,
-            stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+            stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
+            # Unbuffered, so the log reads in the order things happened: the
+            # chain's progress goes to stdout and its errors to stderr, and a
+            # buffered stdout would land after them, on top of the reason.
+            env={**os.environ, "PYTHONUNBUFFERED": "1"})
 
     data = load_run(run_dir)
     data["x"] = {"run_dir": str(x_dir), "pid": proc.pid, "log": str(log_path),
@@ -1879,8 +1893,10 @@ def cmd_x_wait(args):
     """
     run_dir = run_dir_of(args)
     state = x_state(run_dir)
-    if state.get("status") in ("none", "skipped", "failed", "merged", "completed"):
+    if state.get("status") in ("none", "skipped", "merged", "completed"):
         return x_out(state, waited_seconds=0)
+    if state.get("status") == "failed":
+        return x_out(x_note_failure(run_dir, state), waited_seconds=0)
 
     limit = args.timeout_seconds or X_WAIT_MINUTES * 60
     started = time.monotonic()
@@ -1916,11 +1932,18 @@ def cmd_x_wait(args):
         save_run(run_dir, data)
 
     if state.get("status") == "failed":
-        already = any(e.get("type") == "x_failed"
-                      for e in load_run(run_dir).get("events", []))
-        if not already:
-            log_event(run_dir, "x_failed", state.get("reason", ""))
+        state = x_note_failure(run_dir, state)
     return x_out(state, waited_seconds=waited)
+
+
+def x_note_failure(run_dir: Path, state: dict) -> dict:
+    """Record a failed X run once, however x-wait came to see it. The audit line
+    counts it as a failure from here, and a retry is launched from x-start."""
+    events = load_run(run_dir).get("events", [])
+    logged = sum(1 for e in events if e.get("type") == "x_failed")
+    if logged <= state.get("retries", 0):
+        log_event(run_dir, "x_failed", state.get("reason", ""))
+    return state
 
 
 def x_section(brief_text: str) -> str:

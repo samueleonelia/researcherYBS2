@@ -5,42 +5,49 @@ in the project, and the change takes effect on the next run with nothing else
 to do. Nothing a run obeys is stated in a file he cannot find, and no rule a run
 obeys lives in a build-time document.
 
-**Not in scope.** Scheduling, more than one brief a day, and anything in the
-X pipeline's behaviour. Nothing an agent does at run time changes; only where
-its instructions are kept.
+**Not in scope.** Scheduling, more than one brief a day, and what the agents do
+at run time. Only where their instructions and their numbers are kept changes,
+plus two small code fixes that the goal requires (X effort was never passed to
+the agents; a misspelled X model row was silently ignored).
 
 ## What is wrong today
 
 1. **A model change in `settings.md` is not live by itself.** The `## Models`
    table reaches the agents only through `ybs_run.py build`, which rewrites
    `.claude/agents/ybs4-*.md`. Step 0 of `/ybs-brief` runs `build --check` and
-   tells the orchestrator to run `build` if anything is stale. That works when
-   the orchestrator reads carefully; it is one conditional instruction away
-   from a silent no-op.
+   tells the orchestrator to run `build` if anything is stale
+   (`SKILL.md:99,107`). One conditional instruction away from a silent no-op.
 2. **`/ybs-shows` has no model setting at all.** Its three agents carry a
    hand-written `model:` and `effort:` in `.claude/agents/ybs4-shows-*.md`,
    with no table and no `build`. Yaron cannot change them.
 3. **The shows numbers hide in `.claude/skills/ybs-shows/settings.md`.** A dot
-   folder he will never open, not named in the README's "three files are
-   yours", and a second file for `/update` to back up.
+   folder he will never open, not named in the README, and a second file for
+   `/update` to back up.
 4. **`x-lists/GOAL.md` is still pointed at as a rule book.** It was the
    contract for the sessions that *built* the X pipeline: attempt budget,
-   commit rules, builder-and-verifier rules, a step table. Three of its rules
-   still matter at run time (which account, which URLs, reading only), and
-   those already live in `x_scrape.py` and `prompts/read.md`. Yet
-   `settings.md` (twice), the brief's `SKILL.md`, `x_checks.py`, `x_scrape.py`,
-   `x_run.py` and one test still cite it as the authority. The `## X models`
-   table also carries a "Build time" table and four "verify" rows that no
-   run-time code reads: `x_run.py` has seven steps and no verifier agent.
+   commit rules, builder-and-verifier rules, a step table. Its run-time rules
+   (which account, which URLs, reading only) already live in `x_scrape.py` and
+   `prompts/read.md`, with one exception: nothing detects a login wall, captcha
+   or rate-limit page (`x_scrape.py` has no such check; only `x_tweets_min`
+   stops a run that got nothing). Meanwhile `settings.md` (twice), the brief's
+   `SKILL.md`, `x_checks.py`, `x_scrape.py`, `x_run.py` and one test still cite
+   GOAL.md as the authority. The `## X models` table carries a "Build time"
+   table and four "verify" rows that no code reads: `x_run.py` uses only
+   `read_model`, `cluster_model`, `judge_model`, `write_model`
+   (`x_run.py:385,461,603,774`), each with a hard-coded fallback, and passes
+   no effort at all to `claude -p` (`x_run.py:190`).
 
 ## What Yaron sees afterwards
 
 - `settings.md` has three dividers: `# The article brief`, `# The X list`,
   `# The shows`. Each has a numbers table and a models table. The X list keeps
   its `## X fixed` table. Nothing else in the project holds a number or a model.
-- He edits a model row, runs the skill, and the run uses it. No other step.
-- `x-lists/GOAL.md` and `x-lists/RUNLOG.md` are gone from the working tree
-  (history keeps them). Nothing points at them.
+- He edits a model or effort row, runs the skill, and the run uses it. No other
+  step. This is true for all three halves, X effort included.
+- `x-lists/GOAL.md` and `x-lists/RUNLOG.md` are gone from the tree (git keeps
+  them) and from every installed copy after `/update`. Nothing in code, a
+  skill, a prompt or a test points at them. Old plan documents may still
+  mention them as history.
 - The README's "three files are yours to edit" stays true, and now says that
   the shows' numbers and every model are in `settings.md` too.
 
@@ -49,107 +56,186 @@ its instructions are kept.
 ### A. Models are live on every run
 
 1. **`/ybs-brief` step 0** runs `ybs_run.py build` unconditionally instead of
-   `build --check` plus an instruction. `build` already writes only what
-   changed and prints the list, so it is safe to run every time. `--check`
-   stays for the tests.
-2. **`/ybs-shows` gets the same machinery.** New `.claude/skills/ybs-shows/
-   agents/{list,digest,profile}.md.tmpl`, made from the three current agent
-   files with `model:` and `effort:` replaced by placeholders. New
-   `ybs_shows.py build [--check]`, a copy of the brief's `cmd_build` shape,
-   rendering `.claude/agents/ybs4-shows-*.md` with the generated-file stamp.
-   Step 0 of the shows skill runs `build` after `start`. The generated files
-   stay committed, as the brief's do, so a fresh clone works before any run.
+   `build --check` plus the instruction at `SKILL.md:107`. `build` writes only
+   what changed and prints the list, so it is safe every time. `--check` stays
+   for the tests. Reword the two other places that say "edit the table and run
+   `build`": `SKILL.md:36` and hard rule 2 (`SKILL.md:369-372`) now say "edit
+   the table; step 0 rebuilds the agent files".
+2. **`/ybs-shows` gets the same machinery.** New
+   `.claude/skills/ybs-shows/agents/shows-{list,digest,profile}.md.tmpl`,
+   made from the three current agent files with `model:` and `effort:`
+   replaced by `{{settings.list_model}}` / `{{settings.list_effort}}` and so
+   on: the same placeholder style the brief's templates use. The template
+   name carries the `shows-` part so the copied `cmd_build` (which writes
+   `ybs4-<name>.md`, `ybs_run.py:495`) produces `ybs4-shows-list.md` and the
+   other two under their current names, which `tests/test-shows-v4.py:112`
+   and the shows `SKILL.md` launch lines expect. `ybs_shows.py` gains a
+   `build [--check]` command that copies four small pieces from `ybs_run.py`:
+   `cmd_build` (`:477-509`), `stamp`, a `namespace` that yields the
+   `settings.<key>` strings (`:393`), and `render` (`:418`) with the
+   placeholder regex at `:157`. The existing `fill` regex at
+   `ybs_shows.py:519` is uppercase-only and cannot match a dotted name;
+   `fill` is left as it is. Banner text: "Generated by ybs_shows.py build from
+   .claude/skills/ybs-shows/agents/<name>.md.tmpl". Step 0 of the shows skill
+   runs `build` right after `start`. The generated files stay committed so a
+   fresh clone works before any run. Optional: `{{settings.shows_for_profile}}`
+   for the word "fifteen" at `ybs4-shows-digest.md:11`.
+3. **X effort becomes real.** `x_run.py call_claude` takes an `effort`
+   argument and passes `--effort <value>` (a real `claude -p` flag). It has
+   seven call sites (`x_run.py:412,478,494,523,633,667,791`): the four steps
+   pass `settings["<step>_effort"]`, and `merge_judge_verdicts` (`:648`),
+   which today receives `model` as a parameter, receives `effort` the same
+   way and passes it at `:667`. The four `settings.get(..., "<fallback>")`
+   reads at `:385,461,603,774` become `settings["<step>_model"]`, so a missing
+   or misspelled row is a hard error like the other two loaders, not a silent
+   default.
 
 ### B. One `settings.md`
 
-3. **Move the shows table into the root file** under a `# The shows` divider
+4. **Move the shows table into the root file** under a `# The shows` divider
    as `## Shows numbers`, and add a `## Shows models` table:
 
    | Step | Model | Effort | Agents per run |
    |---|---|---|---|
    | list | haiku | low | 1 |
-   | digest | sonnet | medium | one per show not yet archived |
+   | digest | sonnet | medium | one per show among the newest `shows_for_profile` that has no digest yet |
    | profile | opus | high | 1 |
 
-   These are the values the agent files carry today; nothing changes at run
-   time.
-4. **`ybs_shows.py load_settings`** reads the root `settings.md` and only the
-   `## Shows numbers` and `## Shows models` headings, the way `x_settings.py`
-   scopes its headings. `agents_active_max` and `retries_max` exist in all
-   three halves; heading scope is what keeps them apart. A missing heading is
-   a hard error, not a fallback.
-5. **Delete `.claude/skills/ybs-shows/settings.md`.** Update every pointer:
-   the shows `SKILL.md` "Where things live" table, `update.sh`'s
-   `KEEP_BACKUP` (drop the line), the settings-file intro paragraph in the root
-   `settings.md`, the README, `STATUS.md`.
+   These are the values `ybs4-shows-{list,digest,profile}.md:4-5` carry today;
+   nothing changes at run time. The intro paragraph under the heading must not
+   contain a `|` outside the table.
+5. **Rewrite `ybs_shows.py load_settings`** (`:95-123`). Five edits:
+   (a) default path `project_root() / "settings.md"`;
+   (b) track the current `## ` heading, lower-cased, the way
+   `x_settings.py:86-88` and `ybs_run.py:250-252` do, and accept rows only
+   under `shows numbers` and `shows models`;
+   (c) skip the header row keyed `step` as well as `setting`;
+   (d) the models table produces `<step>_model` and `<step>_effort`, as in
+   `ybs_run.py:262-268`;
+   (e) a missing heading or a duplicate key inside the scope is a hard error.
+   `SETTINGS = load_settings()` at import (`:126`) stays; a broken file then
+   fails loudly at import, including in `tests/test-shows-v4.py`, which is
+   the intended behaviour.
+   The other two loaders already skip any heading that is not theirs
+   (`ybs_run.py:261`, `x_settings.py:98,112`), so the shows keys reach neither.
+   `agents_active_max` and `retries_max` exist in the article `## Numbers` and
+   in the shows table; the X half prefixes every key with `x_`. Heading scope
+   is what keeps the two same-named keys apart.
+6. **Delete `.claude/skills/ybs-shows/settings.md`** and update every
+   pointer: the shows `SKILL.md:20` ("Where things live"), `update.sh:19-21`
+   (`KEEP_BACKUP` loses the line), `.claude/skills/update/SKILL.md:25`, the
+   root `settings.md` intro (`:6-7`, and the "How the scripts read this file"
+   paragraph at `:13-19`, which gains `Shows numbers` / `Shows models` and the
+   print command `python3 .claude/skills/ybs-shows/scripts/ybs_shows.py
+   settings`), `STATUS.md:27,29`, and the README, which gains one sentence
+   saying the shows' numbers and every model live in `settings.md`.
+7. **`update.sh` removes what the new version no longer ships.** Today
+   `KEEP_BACKUP` acts only on files present in both trees (`update.sh:55`) and
+   the copy is `cp -R` with no deletion (`:63-77`), so on an installed Mac the
+   old shows file, `GOAL.md` and `RUNLOG.md` would stay behind, and an edit to
+   the old shows file would be abandoned silently. Add a `RETIRED` list:
+   `.claude/skills/ybs-shows/settings.md`, `x-lists/GOAL.md`,
+   `x-lists/RUNLOG.md`. For each that exists in the user's copy: the shows file
+   is renamed to `.backup` beside where it was and the final message says its
+   values now live in `settings.md` under "The shows"; the two X files are
+   deleted. The list lives at the top of the script beside `KEEP_BACKUP` so a
+   future retirement is one line.
 
 ### C. Retire `GOAL.md`
 
-6. **Every run-time rule in GOAL.md section 1 is confirmed to have a home, or
-   gets one.** The implementer walks the list and records the home of each:
-   - only `x_account` may read: `x_scrape.py` (handle check per list, dies on
-     `wrong_handle`), setting in `## X fixed`;
-   - only list URLs from `sources.md`, by the scraper: `x_scrape.py`;
+8. **Every run-time rule in GOAL.md section 1 has a home.** Confirmed by the
+   verifier, so the implementer does not re-derive them:
+   - only `x_account` may read: `x_scrape.py:218-219,382-383`, setting in
+     `## X fixed`;
+   - only list URLs from `sources.md`: `x_scrape.py:384-385`;
    - only permalinks from `links.md`, one at a time, never off X, never a
-     profile, search, quoted page or thread: `prompts/read.md`, "never open"
-     list and "one at a time";
-   - reading only, no login, no settings: `prompts/read.md`; the scraper is
-     code and cannot click;
-   - never delete a run folder: `x_run.py` never does; `read.md` rule 5 for
-     agents;
-   - never commit `x-lists/runs/`: `x-lists/.gitignore`;
-   - stop on login wall, captcha, rate limit: check whether `x_scrape.py`
-     dies on these; if it scrolls on silently, add the stop.
-   Anything found missing is written into the file that owns it, not into a
-   new rule book.
-7. **The finish-line checks (section 2) become the docstrings of
-   `x_checks.py`.** Each `check_N` states its own check in full, and the
-   module docstring no longer cites GOAL.md. Checks 6, 9 and 10, which need a
-   reader, are stated in the prompt that enforces them (`judge.md`,
-   `read.md`, `write.md`) or, where nothing enforces them at run time, noted in
-   the `x_run.py` header as what the tests cover.
-8. **The model-change rule (section 3, "cheapest model that passes") moves
-   into the `## X models` intro** in `settings.md`, in the same words the
-   article `## Models` intro already uses. The "Build time" table and the four
-   "verify" rows are deleted: no run reads them.
-9. **Rewrite every citation** to state the rule instead of pointing:
-   `x_run.py` lines 40, 78-79, 392, 575; `x_scrape.py` line 8; `x_checks.py`
-   line 2; `x-lists/tests/test_chain.py` line 339; `settings.md` lines 70 and
-   114; `.claude/skills/ybs-brief/SKILL.md` line 33, which becomes "the X list:
-   its steps | `x-lists/x_run.py`, whose header lists them".
-10. **`git rm x-lists/GOAL.md x-lists/RUNLOG.md`.** Both are build history and
-    git keeps them. `x-lists/plans/` stays: design documents are history too,
-    but they are the only account of *why* the field table and the window rule
-    look the way they do.
+     quoted page, profile, search or thread, reading only, no login:
+     `prompts/read.md:43-70,80-82,225`;
+   - never delete a run folder: no `rmtree`/`unlink`/`rmdir` in `x_run.py` or
+     `x_scrape.py`; `read.md` rule 5 (`:227-229`) forbids editing anything in
+     the run folder and gains the word "delete";
+   - never commit `x-lists/runs/`: `x-lists/.gitignore:1`.
+   **One rule has no home and gets one:** `x_scrape.py` dies with a named
+   reason when a scroll round adds no new tweet and the page text carries a
+   login wall, a captcha, a rate-limit notice or "Something went wrong". The
+   check runs on the page text the scrape already collects (`page.txt`), so no
+   new browser call. `x_run.py:146-147` already turns a non-zero exit into a
+   die, and the brief's `x-wait` already records an X failure in the audit
+   line, so nothing downstream changes.
+9. **The finish-line checks (section 2) are stated where they run.**
+   `x_checks.py` holds `check1_schema`, `check2_window`, `check3_kept`,
+   `check4_subject_coverage`, `check5_subject_fields`, `check8_links`,
+   `check10_mechanical`; each docstring states its check in full and the
+   module docstring stops citing GOAL.md. Checks 6, 7 and 9 have no function:
+   6 is enforced by `x_run.py:652-656` (`x_picks_max`) and `judge.md:80-142`;
+   9 by `read.md:19-23,224`; 10's reader half by `write.md:24,51-59,79-96`.
+   The `x_run.py` header lists all ten in one short table with the home of
+   each, and notes that `x_checks.py` is run by `x-lists/tests/`, never by a
+   run.
+10. **The model-change rule (section 3) moves into the `## X models` intro**
+    in `settings.md`, in the words the article `## Models` intro already
+    uses. The "Build time" table and the four "verify" rows are deleted. No
+    test names them (`tests/test-bookkeeping-v4.py:1085` asserts one is
+    *absent* from the brief's loader and stays green;
+    `x-lists/tests/test_settings.py:40-44` needs only `cluster_*` and
+    `judge_*`).
+11. **Rewrite every citation in code, skills, prompts and tests** to state
+    the rule instead of pointing: `x_run.py:40,78-79,392,575`;
+    `x_scrape.py:8`; `x_checks.py:2`; `x-lists/tests/test_chain.py:339`;
+    `x-lists/tests/test_checks.py:18,283` (these cite RUNLOG.md);
+    `settings.md:70,114`; `.claude/skills/ybs-brief/SKILL.md:33`, which
+    becomes "the X list: its steps and where each rule lives |
+    `x-lists/x_run.py`, whose header lists them". Plan documents
+    (`plans/x-in-brief.md:58,187,310`, `x-lists/plans/interfaces.md:87,99`)
+    are history and are left alone.
+12. **`git rm x-lists/GOAL.md x-lists/RUNLOG.md`.** `x-lists/plans/` stays: it
+    is the only account of why the field table and the window rule look the
+    way they do.
 
 ## Tests
 
-- `tests/test-shows-v4.py`: `load_settings` reads the root file; the three
-  model keys exist; `build --check` exits 0 on a clean tree and 1 after a
-  model cell is edited in a temp copy.
-- `tests/test-prompts-v4.py`: keep the existing `build --check` test.
-- `x-lists/tests/test_settings.py`: unchanged keys still load; the deleted
-  verify and build-time keys are gone (a test that named one is updated).
-- `grep -rn GOAL.md` over the project, outside `.git/` and `DEVLOG.md`, returns
-  nothing.
-- `zsh tests/run-all.sh` and `bash x-lists/tests/run-all.sh` end with the same
-  four known failures as before and no new one.
+- `tests/test-shows-v4.py`: `load_settings` reads the root file and yields
+  the three `*_model` and three `*_effort` keys; `build --check` exits 0 on a
+  clean tree; an in-process test renders one template with a settings dict
+  whose `digest_model` is changed and asserts the `model:` line follows (no
+  temp file, no extra flag, because settings load at import).
+- `tests/test-prompts-v4.py`: the existing `build --check` test stays; its
+  skip of `ybs4-shows-*` (`:141-142`) is replaced by a check for the shows
+  banner.
+- `x-lists/tests/test_settings.py`: adds that the four `*_effort` keys load.
+  `x-lists/tests/test_chain.py`: the mocked `call_claude` accepts the new
+  `effort` argument; the hand-built settings dicts at `:268,306,342` gain
+  `read_effort` (and the other three `*_effort` keys where the dict names a
+  `*_model`), the direct call at `:106` passes an effort, and the direct
+  `merge_judge_verdicts(..., "opus")` call at `:232` passes an effort too.
+- `grep -rn "GOAL.md\|RUNLOG.md"` over the project, excluding `.git/`,
+  `DEVLOG.md`, `plans/` and `x-lists/plans/`, returns nothing.
+- `python3 tests/test-bookkeeping-v4.py`, `python3 tests/test-prompts-v4.py`
+  and `python3 tests/test-shows-v4.py` run **one by one** (`run-all.sh` uses
+  `set -e` and never reaches the shows file), ending with the four known
+  failures and no new one: three in bookkeeping (picks-sync over 15, twice;
+  beat-over-topic, once) and one in prompts (`pick.md` asks for `NOTE_COUNT`,
+  `NOTE_IDS`). `bash x-lists/tests/run-all.sh` all green.
 - A live `/ybs-shows` run, which usually reports nothing new, proves step 0's
   `build` and the moved settings.
 
 ## Order of work
 
-1. B (move the shows table, new loader, delete the old file) — the loader is
-   the only code with risk.
-2. A (templates, `build`, step 0 of both skills).
-3. C (walk the guardrails, rewrite citations, delete the two files).
+1. B (table move, loader rewrite, delete the old file, `update.sh` retired
+   list). The loader is the riskiest code.
+2. A (templates, `build`, step 0 of both skills, X effort and hard errors).
+3. C (login-wall stop in the scraper, check docstrings, citations, delete the
+   two files).
 4. README, STATUS.md, DEVLOG.md.
 
-About three hours of agent time. C is the longest because of the guardrail
-walk in item 6, and the one step where something may turn up missing.
+About four hours of agent time: three as before, plus one for the login-wall
+stop and the X effort change.
 
-## Open question for Samuele
+## Known and accepted
 
-None blocking. One choice made here: the X list's model-change rule joins the
-X models intro rather than a shared paragraph, so each half of `settings.md`
-still reads on its own.
+- Every model edit dirties the committed `ybs4-*.md` files on the next run.
+  That is already true for the brief's eight agents.
+- `/update` replaces `settings.md` and keeps the user's copy as `.backup`, as
+  it does today for every number; a model edit is no different.
+- `build` in step 0 of `/ybs-shows` means a broken template stops a shows run.
+  That is the loud failure wanted.

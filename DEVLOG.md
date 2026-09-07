@@ -213,3 +213,16 @@ Neither branch is merged to `main` yet.
 **Next**
 - Merge `x-in-brief` (which contains `x-lists`) into `main` when Samuele says.
 - Watch `x_views_per_hour` and the AfD-style seam over a few real mornings.
+
+## 2026-09-07 — `x-in-brief` merged into `main`
+
+**Done**
+- Merged `x-in-brief` into `main` with a merge commit (`7e661b4`). It carries
+  the whole `x-lists/` pipeline as well, since `x-lists` was its base.
+- Re-ran the tests on `main` after the merge: every `x-lists` test passes; the
+  main suite shows the same 4 pre-existing failures and no new ones.
+- Tagged `x-in-brief-merged` and pushed `main` to `origin`.
+
+**Next**
+- Watch `x_views_per_hour` and the AfD-style seam over a few real mornings.
+- Fix the 4 old test failures and make `tests/run-all.sh` run every file.

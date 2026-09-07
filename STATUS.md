@@ -1,12 +1,12 @@
 # STATUS: researcherYBS2
 
-_Updated: 2026-09-07 · X list runs inside /ybs-brief_
+_Updated: 2026-09-07 · X list merged into main_
 
 <!-- Rewrite this file in place. Never append. History belongs in DEVLOG.md. Keep under 60 lines. -->
 
 **What this is:** A Claude Code skill (`/ybs-brief`) that builds a morning news brief for Yaron Brook from six sources plus one X list, and `/ybs-shows` which keeps his show profile current.
 
-**Right now:** Branch `x-in-brief` (tagged `x-in-brief-v1`, pushed) runs the X pipeline in parallel with the articles and appends its section. Live test: 36.5 minutes, both parts present, every ceiling respected. Not merged to `main` yet.
+**Right now:** `main` carries everything. The X pipeline runs in parallel with the articles and appends its section; live test 36.5 minutes, both parts present, every ceiling respected. Merged and pushed 2026-09-07 (tag `x-in-brief-merged`).
 
 ## Feature areas
 | Area | State | Note |
@@ -27,11 +27,10 @@ _Updated: 2026-09-07 · X list runs inside /ybs-brief_
 | His standing instructions | ✅ working | `preferences.md`, read by pick, write and the X judge/write |
 
 ## Next up
-1. Merge `x-in-brief` into `main` (it carries `x-lists` too), then push
-2. Watch the seam between an article figure and a tweet figure on the same story (AfD 43.8% vs 44.5% on 09-07)
-3. Decide whether `world news` and `u.s. news` join `_sections.md`
-4. Fix the 4 old test failures and make `run-all.sh` run every file
-5. Add a `templates/midday.md` when the midday brief starts
+1. Watch the seam between an article figure and a tweet figure on the same story (AfD 43.8% vs 44.5% on 09-07)
+2. Decide whether `world news` and `u.s. news` join `_sections.md`
+3. Fix the 4 old test failures and make `run-all.sh` run every file
+4. Add a `templates/midday.md` when the midday brief starts
 
 ## Known bugs
 - `picks-sync` does not refuse more than 15 picks (2 tests fail)
@@ -40,4 +39,4 @@ _Updated: 2026-09-07 · X list runs inside /ybs-brief_
 - X: the promoted-tweet rule has never fired on real data; `x_views_per_hour` is loose on purpose and unwatched
 
 ## Blocked on you
-- Say when to merge `x-in-brief` into `main`.
+- Nothing right now.

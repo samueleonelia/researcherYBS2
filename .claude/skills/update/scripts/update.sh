@@ -16,10 +16,16 @@ KEEP_FILES="preferences.md"
 
 # The files the user is allowed to edit. The new version wins, but their copy
 # is kept beside it, so an edit is never silently lost.
-KEEP_BACKUP=".claude/skills/ybs-brief/settings.md
-.claude/skills/ybs-shows/settings.md
-x-lists/settings.md
+KEEP_BACKUP="settings.md
 sources.md"
+
+# Files the newest version no longer ships. A copy over the top never removes
+# them, so they are named here: one line per retirement.
+# RETIRED_BACKUP is the same thing for a file the user was allowed to edit: it
+# is renamed beside where it was, so an edit is never thrown away in silence.
+RETIRED="x-lists/GOAL.md
+x-lists/RUNLOG.md"
+RETIRED_BACKUP=".claude/skills/ybs-shows/settings.md"
 
 say() { printf '%s\n' "$1"; }
 
@@ -77,6 +83,21 @@ main() {
     cp -R "$item" "$root/"
   done
 
+  # What the new version no longer ships is still here, because a copy over the
+  # top only adds. Remove it by name.
+  retired=""
+  for f in $RETIRED_BACKUP; do
+    if [ -f "$root/$f" ]; then
+      mv "$root/$f" "$root/$f.backup"
+      retired="$retired $f"
+    fi
+  done
+  for f in $RETIRED; do
+    if [ -f "$root/$f" ]; then
+      rm -f "$root/$f"
+    fi
+  done
+
   # shows/ is kept whole, but a new version may ship new digests, and those are
   # part of the code, not of his archive. Only files he does not have are added.
   if [ -d "$new/shows/digests" ]; then
@@ -102,6 +123,13 @@ main() {
     say "and your old copy is beside it, ending in .backup:"
     for f in $backed_up; do say "  $f"; done
     say "Ask Claude to compare them if you want your changes back."
+  fi
+  if [ -n "$retired" ]; then
+    say ""
+    say "This file is no longer part of the project. Its values now live in"
+    say "settings.md, under \"The shows\". Your old copy is beside where it was,"
+    say "ending in .backup:"
+    for f in $retired; do say "  $f"; done
   fi
   say ""
   say "Now run /setup once: a new version may need a tool you do not have yet."

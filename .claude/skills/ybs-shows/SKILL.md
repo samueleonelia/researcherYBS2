@@ -17,7 +17,7 @@ every step names the agent that does it, and every agent writes its own files.
 
 | What | Home |
 |---|---|
-| the channel, the exclusions, every number | `settings.md`, printed by `ybs_shows.py settings` |
+| the channel, the exclusions, every number and every model | the project's own `settings.md`, under "The shows", printed by `ybs_shows.py settings` |
 | the words and the dates as fetched | `shows/raw/<id>.txt` and `<id>.meta.json` |
 | what the archive holds | `shows/shows.json` |
 | one show's words | `shows/transcripts/<id>.md` |
@@ -41,10 +41,16 @@ poll; the completion notification is the signal.
 ```bash
 ego-browser --version
 python3 .claude/skills/ybs-shows/scripts/ybs_shows.py start
+python3 .claude/skills/ybs-shows/scripts/ybs_shows.py build
 ```
 
 `start` prints what the archive holds, when the profile was last built, and the
 settings in force. If `ego-browser` is missing, stop.
+
+`build` rewrites the three `.claude/agents/ybs4-shows-*.md` files from the
+templates in `.claude/skills/ybs-shows/agents/` plus the `## Shows models`
+table in `settings.md`, so changing a model or an effort in that table is all
+there is to do. It writes only what changed and prints the list.
 
 ## Step 1 — list the channel
 

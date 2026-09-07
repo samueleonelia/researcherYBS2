@@ -15,7 +15,9 @@ Checks 1 and 2 run against the real fixture. Check 3 runs the real
 x_filter.py against the fixture (when it exists) and validates its output
 against an independent recomputation of the rules; it also runs a
 synthetic case built to discriminate the window ruling from the older,
-looser reading a verifier already caught once (see RUNLOG.md attempt 7).
+looser reading a verifier already caught once: an early x_filter.py cut at
+the FIRST non-repost older than the window instead of at the first run of
+x_stop_after_old of them, which drops tweets the rule keeps.
 Checks 4 and 5 run against a hand-built subjects.json plus the real
 x_score.py's enrichment of it (when it exists). Check 8 runs the real
 x_filter.py's links.md against an independent parse/recompute.
@@ -101,7 +103,7 @@ import x_checks  # noqa: E402
 from x_settings import load_settings  # noqa: E402
 
 FIXTURE = ROOT / "tests" / "fixtures" / "tweets.json"
-SETTINGS_PATH = ROOT / "settings.md"
+SETTINGS_PATH = ROOT.parent / "settings.md"   # one settings.md, at the project root
 
 
 def load_fixture():
@@ -279,10 +281,12 @@ class TestCheck3Kept(unittest.TestCase):
         # id ...007 (fixture): promoted=true, and would otherwise clear
         # every later rule easily. Named explicitly so this is a real
         # assertion on rule 1 firing, not just an incidental match inside
-        # the whole-set comparisons above -- rule 1 has never fired on a
-        # real scrape in this project (see RUNLOG.md), so this fixture
-        # record is what stands between "never fires because it's dead"
-        # and "never fires because no real tweet has been promoted yet".
+        # the whole-set comparisons above. Rule 1 has never fired on a real
+        # scrape in this project: every real run so far carried zero promoted
+        # tweets, so the scraper's promoted heuristic is still unproven
+        # against a real ad. This fixture record is what stands between
+        # "never fires because it's dead" and "never fires because no real
+        # tweet has been promoted yet".
         exp_kept, exp_dropped = x_checks.expected_filter(self.doc, self.settings)
         self.assertNotIn("1000000000000000007", exp_kept)
         self.assertEqual(exp_dropped.get("1000000000000000007"), 1)

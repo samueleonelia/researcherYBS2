@@ -42,7 +42,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from x_settings import load_settings, require
+from x_settings import load_settings, require, default_settings_path
 
 
 def die(msg: str, code: int = 2):
@@ -192,7 +192,7 @@ def main():
 
     run_dir = Path(args.run_dir).resolve()
     settings_path = (Path(args.settings).resolve() if args.settings
-                      else Path(__file__).resolve().parent / "settings.md")
+                      else default_settings_path())
 
     settings = load_settings(settings_path)
     data = load_json(run_dir / "tweets.json")

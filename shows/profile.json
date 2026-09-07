@@ -2,237 +2,218 @@
   "storylines": [
     {
       "rank": 1,
-      "name": "The Iran war with no exit strategy and the Strait of Hormuz still choked",
+      "name": "The Iran war: Hormuz half-open, sanctions as bluster, no exit strategy",
       "shows": 11,
-      "note": "winnable if anyone meant it, but Trump wavers between hoping sanctions topple the regime and declaring victory and leaving, while Iran rearms and oil and diesel stay disrupted"
+      "note": "winnable if fought seriously, but Trump has no plan and sanctions alone will never break the regime"
     },
     {
       "rank": 2,
-      "name": "The $40 trillion debt showing up in long-term bond yields",
+      "name": "$40 trillion debt and the long end of the bond market",
       "shows": 8,
-      "note": "markets are pricing in default or inflation, only spending cuts fix it, and Bessent's buybacks and yield-curve tricks are central planning that touches nothing real"
+      "note": "rising 10- and 30-year yields are the market pricing default risk, and only spending cuts fix it"
     },
     {
       "rank": 3,
       "name": "Trump's tariff war on Canada and China",
-      "shows": 8,
-      "note": "a tax Americans pay that has failed every stated goal, and Canada should go to zero unilaterally instead of retaliating"
+      "shows": 7,
+      "note": "a tax Americans pay, failing on every stated goal, and Canada should just go to zero unilaterally"
     },
     {
       "rank": 4,
-      "name": "Israel after October 7: Gaza stalemate, Turkey, and being undercut by Washington",
-      "shows": 7,
-      "note": "Hamas will never disarm so Israel should not withdraw first, Turkey is becoming the bigger flashpoint than Iran, and Israel is held to a standard Russia and Iran never are"
+      "name": "The 'Answering Capitalism's Critics' series (Benn Jordan, Cordelli, Hasan Piker)",
+      "shows": 3,
+      "note": "viral critics never define capitalism and always leave the entrepreneur out of the story"
     },
     {
       "rank": 5,
-      "name": "US military decline under Hegseth: Navy catapults, drone units, empty munitions stocks",
+      "name": "Military decline under Hegseth: munitions shortfalls, Navy catapults, killed drone units",
       "shows": 6,
-      "note": "self-inflicted erosion by unqualified appointees reverting to 'basics' while ignoring the drone and AI lessons of Ukraine and Israel"
+      "note": "unqualified appointees are reverting the military to 'basics' while ignoring the drone and AI lessons of Ukraine"
     },
     {
       "rank": 6,
-      "name": "Russia grinding down Ukraine while its own state rots",
+      "name": "Russia pounding Ukraine while Ukraine runs out of air defense",
       "shows": 6,
-      "note": "Ukraine is defenseless without Patriots, Russia jails dissenters and fires the economists who warn about the war economy, and Trump calls Putin an ally"
+      "note": "let Ukraine build its own Patriots instead of protecting Raytheon and Lockheed from competition"
     },
     {
       "rank": 7,
-      "name": "AI data centers turned into a bipartisan political target",
+      "name": "AI data centers as the thing both parties now run against",
       "shows": 5,
-      "note": "the least wanted thing in America now, and the AI industry's own leaders fed the fear instead of making the case"
+      "note": "the least wanted building in America, and the AI companies themselves fed the fear instead of making the case"
     },
     {
       "rank": 8,
-      "name": "Trump turning state power on critics, media and elections",
+      "name": "Trump courting dictators and treating allies as adversaries",
       "shows": 5,
-      "note": "FCC license threats, a DOJ run by his former defense lawyer, a mail-ballot order the courts blocked, and selling early access to market-moving posts"
+      "note": "he says he underestimated how bad this would be; foreign policy is now the administration's worst area"
     },
     {
       "rank": 9,
-      "name": "Open antisemitism and racial tribalism moving onto the right",
-      "shows": 4,
-      "note": "the mirror image of left identity politics he says he predicted in 2015, now in Tucker's Shapiro monologue, campus chants and Republican primary votes"
+      "name": "DSA candidates winning Democratic primaries; Mamdani's New York",
+      "shows": 5,
+      "note": "more honest than mainstream Democrats about abolishing capitalism, and closer to East Germany than Scandinavia"
     },
     {
       "rank": 10,
-      "name": "DSA-aligned socialists winning Democratic nominations",
+      "name": "Antisemitism and tribalism on the right: Tucker, Fuentes, campus and primary incidents",
       "shows": 4,
-      "note": "more honest than mainstream Democrats about abolishing capitalism, closer to East Germany than Scandinavia, and Mamdani's rent freeze is already raising rents"
+      "note": "the mirror image of left identity politics he predicted in 2015, and engaging with it is itself a sanction"
     },
     {
       "rank": 11,
-      "name": "Trump courting dictators while treating allies as adversaries",
-      "shows": 4,
-      "note": "Kim, Putin and a Venezuela oil deal on one side, Canada, South Korea, Europe and Israel on the other, which he calls the worst-performing part of the administration"
-    },
-    {
-      "rank": 12,
       "name": "Government equity stakes in private companies",
       "shows": 3,
-      "note": "roughly thirty deals and $30 billion of ownership done without a congressional vote, industrial policy dressed as privatization, and a tool the next Democrats will use for ESG"
-    },
-    {
-      "rank": 13,
-      "name": "JD Vance's mysticism as a disqualification file",
-      "shows": 3,
-      "note": "he is deliberately collecting the clips about dark energy, providence and the Antichrist to preempt any lesser-evil case for voting for him"
+      "note": "cronyism with no congressional vote, and a tool the next administration will happily use for ESG"
     }
   ],
   "themes": [
     {
       "rank": 1,
-      "name": "The Trump administration",
-      "angle": "judged on results and on economic literacy, not on which team it is on"
+      "name": "Capitalism as the undefended ideal",
+      "angle": "we have never had it, only a mixed economy drifting toward statism, and nobody is making the moral case"
     },
     {
       "rank": 2,
-      "name": "Capitalism versus the mixed economy",
-      "angle": "we have never had capitalism, so the problems people blame on markets are the government's"
+      "name": "The Trump administration",
+      "angle": "judged on results and on economic literacy, not on which team it plays for"
     },
     {
       "rank": 3,
-      "name": "Government intervention as cronyism and central planning",
-      "angle": "tariffs, subsidies, equity stakes and liability threats serve pressure groups, never a principle"
+      "name": "Government intervention in the economy",
+      "angle": "separation of state and economics; tariffs, subsidies, price-setting and equity stakes are all central planning"
     },
     {
       "rank": 4,
-      "name": "Human achievement and technology, AI above all",
-      "angle": "presumptively good, worth awe, and opposition to it is fear that has not earned itself"
+      "name": "Technology and human achievement",
+      "angle": "presumptively good, celebrated in a standing segment, and opposition to it is fear that has not been earned"
     },
     {
       "rank": 5,
-      "name": "Tribalism and indifference to truth on left and right",
-      "angle": "woke never went away, it changed target, and the same anti-truth epistemology now runs the right"
+      "name": "Israel, Gaza and Islamic totalitarianism",
+      "angle": "name the ideology, hold Israel to the same standard as everyone else, and stop the double standard"
     },
     {
       "rank": 6,
-      "name": "Israel, antisemitism and the double standard",
-      "angle": "criticism of Israel is measured against how Russia and Iran are treated for the same acts"
+      "name": "Altruism as the corrosive moral premise",
+      "angle": "it is what keeps a country from asserting its own self-interest, in foreign policy and in economics alike"
     },
     {
       "rank": 7,
-      "name": "Altruism versus rational self-interest",
-      "angle": "the moral premise a culture accepts is what finally explains its foreign policy and its politics"
+      "name": "Entitlements and the transfer from young to old",
+      "angle": "the deficit is a spending problem; taxing the rich cannot touch the arithmetic"
     },
     {
       "rank": 8,
-      "name": "Individual and parental responsibility instead of corporate liability",
-      "angle": "a product is only blameworthy when it uses force or fraud, never when people choose to overuse it"
+      "name": "Personal responsibility versus corporate liability",
+      "angle": "parents, not platforms; no liability without force or fraud"
     },
     {
       "rank": 9,
-      "name": "Islamic totalitarianism and the refusal to name the enemy",
-      "angle": "twenty-five years of not naming it is why 1979, 9/11, Gaza and the current war are one story"
+      "name": "Immigration, especially skilled immigration",
+      "angle": "immigrants found the companies; the fixed-number-of-jobs premise is false"
     },
     {
       "rank": 10,
-      "name": "Immigration, especially the high-skilled kind",
-      "angle": "immigrants founded the companies, so restricting legal immigration is self-harm, not protection"
-    },
-    {
-      "rank": 11,
       "name": "Free speech, cancellation and the sanction of evil",
-      "angle": "he is not against cancelling, only against cancelling for unjust or trivial reasons"
+      "angle": "cancel for real reasons, never for trivial ones, and never lend a bad actor your platform"
     },
     {
-      "name": "Art, culture and Objectivism",
-      "angle": "he judges a work by whether reason and human agency drive it, and notes how completely Rand is left out of serious treatments of capitalism.",
+      "name": "Altruism versus rational self-interest",
+      "angle": "the moral premise a culture accepts is what finally explains its foreign policy and its politics",
+      "fading": true,
+      "missed_runs": 1,
+      "rank": 11
+    },
+    {
+      "name": "Capitalism versus the mixed economy",
+      "angle": "we have never had capitalism, so the problems people blame on markets are the government's",
       "fading": true,
       "missed_runs": 1,
       "rank": 12
     },
     {
-      "name": "Free trade",
-      "angle": "a tariff is a tax paid at home, and unilateral free trade benefits whoever adopts it no matter what the other side does.",
+      "name": "Government intervention as cronyism and central planning",
+      "angle": "tariffs, subsidies, equity stakes and liability threats serve pressure groups, never a principle",
       "fading": true,
       "missed_runs": 1,
       "rank": 13
     },
     {
-      "name": "Ideas drive history",
-      "angle": "Marx is the unacknowledged foundation of almost all talk about capitalism, and bad philosophy travels from journals to podcasts to policy.",
+      "name": "Islamic totalitarianism and the refusal to name the enemy",
+      "angle": "twenty-five years of not naming it is why 1979, 9/11, Gaza and the current war are one story",
       "fading": true,
       "missed_runs": 1,
       "rank": 14
     },
     {
-      "name": "Nobody is defending capitalism",
-      "angle": "the DSA left and the Vance/Tucker right are both statist, so the moral case for markets goes unmade on every platform that matters.",
+      "name": "Israel, antisemitism and the double standard",
+      "angle": "criticism of Israel is measured against how Russia and Iran are treated for the same acts",
       "fading": true,
       "missed_runs": 1,
       "rank": 15
     },
     {
-      "name": "Spending, entitlements and the fiscal arithmetic",
-      "angle": "the deficit is a spending problem, taxes cannot close it, and the gerontocracy transfers wealth from the young because old people vote.",
+      "name": "Tribalism and indifference to truth on left and right",
+      "angle": "woke never went away, it changed target, and the same anti-truth epistemology now runs the right",
       "fading": true,
       "missed_runs": 1,
       "rank": 16
     },
     {
-      "name": "Art and aesthetics",
-      "angle": "judge a work on its own terms and by whether reason is the source of the hero's power, not by fidelity or casting rows",
+      "name": "Art, culture and Objectivism",
+      "angle": "he judges a work by whether reason and human agency drive it, and notes how completely Rand is left out of serious treatments of capitalism.",
       "fading": true,
       "missed_runs": 2,
       "rank": 17
     },
     {
-      "name": "Debt, deficits, inflation and the Fed",
-      "angle": "spending is the disease, price rises from supply shocks are not monetary inflation, and stagnation is the likeliest ending",
+      "name": "Free trade",
+      "angle": "a tariff is a tax paid at home, and unilateral free trade benefits whoever adopts it no matter what the other side does.",
       "fading": true,
       "missed_runs": 2,
       "rank": 18
     },
     {
-      "name": "Defending capitalism against its critics",
-      "angle": "the critics never define the word, they leave the entrepreneur out of the picture, and Marx's exploitation story still sits under nearly all of it",
+      "name": "Ideas drive history",
+      "angle": "Marx is the unacknowledged foundation of almost all talk about capitalism, and bad philosophy travels from journals to podcasts to policy.",
       "fading": true,
       "missed_runs": 2,
       "rank": 19
     },
     {
-      "name": "Technology and AI as human progress",
-      "angle": "presumptively good and worth defending out loud; the fear is unearned and deregulation, not permission, is the answer",
+      "name": "Nobody is defending capitalism",
+      "angle": "the DSA left and the Vance/Tucker right are both statist, so the moral case for markets goes unmade on every platform that matters.",
       "fading": true,
       "missed_runs": 2,
       "rank": 20
     },
     {
-      "name": "The human achievement roundup",
-      "angle": "rockets, mRNA vaccines, drones and falling battery prices as the standing evidence that free people and markets deliver",
+      "name": "Spending, entitlements and the fiscal arithmetic",
+      "angle": "the deficit is a spending problem, taxes cannot close it, and the gerontocracy transfers wealth from the young because old people vote.",
       "fading": true,
       "missed_runs": 2,
       "rank": 21
-    },
-    {
-      "name": "Tribalism and the crisis of reason on both left and right",
-      "angle": "woke never left, it changed targets; the vice is caring about loyalty rather than truth, and the right has it too",
-      "fading": true,
-      "missed_runs": 2,
-      "rank": 22
     }
   ],
   "moves": {
-    "main": "trace the problem to the specific government policy that caused it instead of letting it be blamed on markets in general",
+    "main": "take the problem people blame on capitalism and trace it to the specific government policy that caused it",
     "secondary": [
       "economic power is a trade you can walk away from; political power is the gun",
-      "hold a politician to his own stated goal and show every action contradicts it",
-      "no collectivizing blame or credit onto a group, a nationality or a company's employees",
-      "engaging with or excusing a bad actor is itself a sanction that empowers him",
-      "count the unseen cost, not just the visible gain the government points at",
-      "judge a leader by whether there is long-term strategy behind the move or only personality",
-      "any account of capitalism that leaves out the entrepreneur is broken before it starts",
-      "do the arithmetic first: show a program is unaffordable before arguing it is also immoral",
-      "prices carry real information, and a planner overriding them is not smarter than the market",
-      "define the term before arguing about it, especially 'capitalism'",
-      "treat an official justification as a claim to verify, not as a reason",
-      "mysticism in a ruler is pre-Enlightenment and disqualifying, whatever else he gets right"
+      "go look at what happened every time it was tried: the USSR, Mao, Venezuela",
+      "ask who bears the risk and who pays the wages before any profit exists",
+      "make the critic define his terms before arguing about them",
+      "any account of the economy that leaves out the entrepreneur is broken",
+      "hold the policy against its own stated goal and watch it contradict itself",
+      "count the unseen cost, not just the visible gain",
+      "apply the standard evenly to left and right, to Israel and to Russia",
+      "let prices carry the information; central planning has no feedback"
     ]
   },
-  "built_utc": "2026-09-05T14:35:01Z",
-  "built_local_date": "2026-09-05",
+  "built_utc": "2026-09-07T20:49:57Z",
+  "built_local_date": "2026-09-07",
   "shows": [
+    "HgG_a5U8Efk",
     "6wl6hRa5nt0",
     "e3TlpsJo4K4",
     "FuMxHBFkwH8",
@@ -246,12 +227,11 @@
     "oj4Aj7jEJJA",
     "9JkNes9Te6M",
     "fVGsHVEbtSM",
-    "A4FIB98E2dU",
-    "qp8JLCXYjyM"
+    "A4FIB98E2dU"
   ],
   "range": {
-    "first": "2026-08-08",
-    "last": "2026-09-05",
+    "first": "2026-08-11",
+    "last": "2026-09-06",
     "undated": 0
   }
 }

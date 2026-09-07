@@ -1,6 +1,27 @@
 {
   "shows": [
     {
+      "id": "WRyx6p9ttZE",
+      "title": "Labor Day; Afd; 9/11; Civilian Casualties; Gas Prices; VW; Iran; Achievements | Yaron Brook Show",
+      "url": "https://www.youtube.com/watch?v=WRyx6p9ttZE",
+      "date": "2026-09-07",
+      "file": "",
+      "words": 0,
+      "excluded": false,
+      "digest": "",
+      "no_transcript": "2026-09-07"
+    },
+    {
+      "id": "HgG_a5U8Efk",
+      "title": "Answering Capitalism’s Critics #3: Hasan Piker — “Technofeudalism” | Yaron Brook Show",
+      "url": "https://www.youtube.com/watch?v=HgG_a5U8Efk",
+      "date": "2026-09-06",
+      "file": "transcripts/HgG_a5U8Efk.md",
+      "words": 17700,
+      "excluded": false,
+      "digest": "digests/HgG_a5U8Efk.md"
+    },
+    {
       "id": "6wl6hRa5nt0",
       "title": "Economy; Meta; Galliano; Clancy; Piacenti; Volkswagen; Falkland; Achievement | Yaron Brook Show",
       "url": "https://www.youtube.com/watch?v=6wl6hRa5nt0",
@@ -318,16 +339,6 @@
       "file": "",
       "words": 0,
       "excluded": true,
-      "digest": ""
-    },
-    {
-      "id": "HgG_a5U8Efk",
-      "title": "Answering Capitalism’s Critics #3: Hasan Piker — “Technofeudalism” | Yaron Brook Show",
-      "url": "https://www.youtube.com/watch?v=HgG_a5U8Efk",
-      "date": "",
-      "file": "",
-      "words": 0,
-      "excluded": false,
       "digest": ""
     },
     {

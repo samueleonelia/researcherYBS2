@@ -1,36 +1,40 @@
 # STATUS: researcherYBS2
 
-_Updated: 2026-09-07 · X list merged into main_
+_Updated: 2026-09-07 · one settings.md, models live, GOAL.md retired_
 
 <!-- Rewrite this file in place. Never append. History belongs in DEVLOG.md. Keep under 60 lines. -->
 
-**What this is:** A Claude Code skill (`/ybs-brief`) that builds a morning news brief for Yaron Brook from six sources plus one X list, and `/ybs-shows` which keeps his show profile current.
+**What this is:** A Claude Code skill (`/ybs-brief`) that builds a morning news brief for Yaron Brook from six sources plus two X lists, and `/ybs-shows` which keeps his show profile current.
 
-**Right now:** `main` carries everything. The X pipeline runs in parallel with the articles and appends its section; live test 36.5 minutes, both parts present, every ceiling respected. Merged and pushed 2026-09-07 (tag `x-in-brief-merged`).
+**Right now:** branch `one-settings`, three commits ahead of `main`, tests at baseline, live `/ybs-shows` passed. Ready to merge and push.
 
 ## Feature areas
 | Area | State | Note |
 |---|---|---|
 | Screen sources (ego browser) | ✅ working | 6 sources, ~7 min |
-| Triage (keep/drop) | ✅ working | batch 10, two live runs clean |
+| Triage (keep/drop) | ✅ working | batch 10 |
 | Cluster + pick | ✅ working | |
 | Read + figure check | ✅ working | |
 | Counterpoints (leads only) | ✅ working | |
 | Write the brief | ✅ working | template = shape, write.md = sentences |
-| X list (`x-lists/`) | ✅ working | all 10 checks pass; ~6 min on its own |
-| X inside `/ybs-brief` | ✅ working | `x-start` / `x-wait` / `x-merge`, section under Worth Yaron's attention |
-| Show profile (`/ybs-shows`) | ✅ working | |
-| Test suite | ⚠️ partial | 4 failures predate this repo, see bugs |
+| X lists (`x-lists/`) | ✅ working | FP and Economists, listed in `sources.md`; ~6 min on its own |
+| Two-list scrape | ⚠️ untested live | the browser loop over two lists needs one real run |
+| X inside `/ybs-brief` | ✅ working | `x-start` / `x-wait` / `x-merge`; effort now reaches the X agents |
+| X login-wall stop | ✅ new, unit-tested | scraper dies with a named reason; never seen on real data yet |
+| Show profile (`/ybs-shows`) | ✅ working | agents generated from templates, step 0 rebuilds |
+| Settings | ✅ working | one root `settings.md`: brief, X, shows; numbers and models; live on next run |
+| Test suite | ⚠️ partial | 4 failures predate this branch, see bugs |
 | Git remote | ✅ working | github.com/samueleonelia/researcherYBS2 (private) |
 | Install on another Mac (`/setup`) | ✅ working | |
-| Update in place (`/update`) | ✅ working | keeps runs/, shows/, preferences.md, three settings.md |
+| Update in place (`/update`) | ✅ working | keeps runs/, shows/, preferences.md; backs up settings.md, sources.md; retires old files |
 | His standing instructions | ✅ working | `preferences.md`, read by pick, write and the X judge/write |
 
 ## Next up
-1. Watch the seam between an article figure and a tweet figure on the same story (AfD 43.8% vs 44.5% on 09-07)
-2. Decide whether `world news` and `u.s. news` join `_sections.md`
-3. Fix the 4 old test failures and make `run-all.sh` run every file
-4. Add a `templates/midday.md` when the midday brief starts
+1. Merge `one-settings` into `main`, push, tag `one-settings-merged`
+2. Live `/ybs-brief morning` (proves `--effort` on X agents and the two-list scrape)
+3. Watch the seam between an article figure and a tweet figure on the same story
+4. Decide whether `world news` and `u.s. news` join `_sections.md`
+5. Fix the 4 old test failures and make `run-all.sh` run every file
 
 ## Known bugs
 - `picks-sync` does not refuse more than 15 picks (2 tests fail)
@@ -39,4 +43,5 @@ _Updated: 2026-09-07 · X list merged into main_
 - X: the promoted-tweet rule has never fired on real data; `x_views_per_hour` is loose on purpose and unwatched
 
 ## Blocked on you
-- Nothing right now.
+- Say when to merge and push `one-settings`.
+- Say when to run the next live brief (it drives your browser).

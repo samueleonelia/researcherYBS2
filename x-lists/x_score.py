@@ -16,7 +16,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from x_settings import load_settings
+from x_settings import load_settings, default_settings_path
 
 FLAG_NAMES = ("CONVERGENCE", "ENDORSEMENT", "VELOCITY")
 
@@ -110,8 +110,14 @@ def score_subjects(kept: list, subjects: list, settings: dict, scraped_at: str):
             if rb:
                 authors.add(rb)
 
-        # lists: how many of A, B appear among this subject's tweets.
-        lists_seen = {t.get("list") for t in tws if t.get("list")}
+        # lists: how many of the lists in sources.md this subject appears in.
+        # A tweet carries every list that showed it, so one tweet in two lists
+        # counts as two -- which is the point of the measure.
+        lists_seen = set()
+        for t in tws:
+            for name in (t.get("lists") or ([t["list"]] if t.get("list") else [])):
+                if name:
+                    lists_seen.add(name)
         lists_count = len(lists_seen)
 
         # endorsements: max over tweets of (reposts by list members inside
@@ -178,7 +184,9 @@ def score_subjects(kept: list, subjects: list, settings: dict, scraped_at: str):
     all_velocities = [p["velocity"] for p in prepared]
     for p in prepared:
         p["velocity_rank"] = percentile_rank(all_velocities, p["velocity"])
-        p["cross_list"] = (p["lists"] == 2)
+        # True when a subject was carried by more than one list, however many
+        # lists sources.md names (it was written when there were exactly two).
+        p["cross_list"] = (p["lists"] >= 2)
 
         flags = []
         if p["authors"] >= conv_n:
@@ -196,11 +204,11 @@ def score_subjects(kept: list, subjects: list, settings: dict, scraped_at: str):
 def main():
     ap = argparse.ArgumentParser(description="Score subjects.json in place.")
     ap.add_argument("--run-dir", required=True, help="run folder holding kept.json and subjects.json")
-    ap.add_argument("--settings", default=None, help="path to settings.md (default: x-lists/settings.md next to this script)")
+    ap.add_argument("--settings", default=None, help="path to settings.md (default: the root settings.md, one folder up)")
     args = ap.parse_args()
 
     run_dir = Path(args.run_dir).resolve()
-    settings_path = Path(args.settings).resolve() if args.settings else (Path(__file__).resolve().parent / "settings.md")
+    settings_path = Path(args.settings).resolve() if args.settings else default_settings_path()
 
     kept_path = run_dir / "kept.json"
     subjects_path = run_dir / "subjects.json"

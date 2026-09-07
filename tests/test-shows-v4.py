@@ -46,6 +46,34 @@ def test_settings():
     check("shows_for_profile is a number", isinstance(s["shows_for_profile"], int))
     check("the exclusions are a list of phrases",
           isinstance(s["excluded_titles"], list) and len(s["excluded_titles"]) >= 2)
+    # The one settings.md at the project root is the only home for these.
+    check("the settings come from the project's own settings.md",
+          (ROOT / "settings.md").exists() and
+          not (SKILL / "settings.md").exists())
+    for step in ("list", "digest", "profile"):
+        check(f"{step} has a model", bool(s.get(f"{step}_model")))
+        check(f"{step} has an effort", bool(s.get(f"{step}_effort")))
+
+
+def test_agent_files_are_generated(tmp):
+    """The three agent files are rendered from the templates plus the
+    `## Shows models` table, so editing the table is the whole job."""
+    print("\nagent files are rendered, not written twice")
+    out, code = run(tmp, "build", "--check")
+    check("every ybs4-shows-*.md matches its template", code == 0,
+          f"stale: {out.get('stale') if isinstance(out, dict) else out}")
+
+    # Settings load at import, so the only honest way to prove a table edit
+    # reaches the agent file is to render one template with a changed value.
+    tmpl = (SKILL / "agents" / "shows-digest.md.tmpl").read_text()
+    ns = dict(S.namespace())
+    ns["settings.digest_model"] = "haiku-test"
+    text, missing = S.render(tmpl, ns)
+    check("the template asks for nothing the settings do not have", not missing,
+          str(missing))
+    check("a changed digest_model reaches the model: line",
+          "\nmodel: haiku-test\n" in text)
+    check("the frontmatter still opens the file", text.startswith("---\n"))
 
 
 def test_exclusions():
@@ -528,6 +556,7 @@ def main():
         finally:
             shutil.rmtree(caps_tmp, ignore_errors=True)
         test_profile_sync(tmp)
+        test_agent_files_are_generated(tmp)
         test_fetch_plan(tmp)
         test_transcript_guards()
         test_captions_verdict()

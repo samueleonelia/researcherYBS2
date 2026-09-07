@@ -31,18 +31,44 @@ Step 7 is also new on 2026-09-06: it takes picks.md and the picked tweets'
 notes and writes the finished, show-ready brief.md -- the last step before
 the checks in x_checks.py.
 
-Every number this script obeys comes from settings.md at run time --
-nothing here is hard-coded. If a step's script does not exist yet, the
-chain stops with a clear message naming that step; it never lets the
-missing file surface as a traceback.
+Every number and every model this script obeys comes from settings.md at
+run time -- nothing here is hard-coded, and nothing here has a fallback: a
+missing or misspelled `## X models` row stops the run by name rather than
+quietly running the step at some other model. If a step's script does not
+exist yet, the chain stops with a clear message naming that step; it never
+lets the missing file surface as a traceback.
+
+The ten finish-line checks, and where each one lives:
+
+    check | What it checks                         | Enforced by
+    ------|----------------------------------------|-------------------------
+     1.   | tweets.json schema + x_tweets_min      | x_checks.check1_schema
+     2.   | the scrape window rule                 | x_checks.check2_window
+     3.   | kept.json = the six filter rules       | x_checks.check3_kept
+     4.   | every kept id in exactly one subject   | x_checks.check4_subject_coverage
+          |                                        | + validate_cluster_coverage below
+     5.   | every subject carries its score fields | x_checks.check5_subject_fields
+     6.   | picks.md within the x_picks_max        | merge_judge_verdicts below
+          | ceiling, each pick tagged              | (the ceiling) + prompts/judge.md
+     7.   | the tests pass                         | x-lists/tests/
+     8.   | links.md = the survivors, POST/REPOST  | x_checks.check8_links
+     9.   | every link has a note with FULL text   | validate_notes below
+          |                                        | + prompts/read.md
+    10.   | brief.md follows the template, quotes  | x_checks.check10_mechanical
+          | only what the notes say                | + prompts/write.md (reader half)
+
+`x_checks.py` is run by `x-lists/tests/` and by a verifier agent. A run
+never calls it: the chain enforces only the three checks written into it
+here (4, 6's ceiling and 9), so a bad agent output stops the run instead
+of drifting downstream.
 
 Flags beyond the bare `python3 x_run.py` contract exist only to make the
-chain testable and resumable, per GOAL.md's instruction to test the chain's
-plumbing against the fixture:
+chain testable and resumable -- they let the tests drive the chain's
+plumbing against the fixture without a browser or a real agent:
 
     --run-dir DIR     use this folder instead of creating a fresh one
                        (e.g. one seeded with the fixture as tweets.json)
-    --settings PATH   defaults to x-lists/settings.md
+    --settings PATH   defaults to the root settings.md
     --from STEP       start at this step (1-7), skipping earlier ones
                        because their output is already in --run-dir
     --only STEP       run just this one step
@@ -75,19 +101,36 @@ STEP_NAMES = {
 
 # The old rule here read "the browser is the one serial thing: never two
 # agents on it at once" and forced the read step to run its batches one
-# after another. Samuele replaced that rule on 2026-09-06 (GOAL.md, quoted
-# in x-lists/GOAL.md): many read sub-agents now run at the same time, each
-# in its own ego task space; the constraint that survives is *inside* one
-# sub-agent -- it opens one link at a time, finishes its note, then opens
-# the next of its own batch. Never two tabs in one task space. So the read
-# step is now pooled exactly like cluster and judge: up to
-# `x_agents_active_max` batches in flight at once, read from settings.md at
-# run time, never hard-coded here.
+# after another. Samuele replaced that rule on 2026-09-06: many read
+# sub-agents now run at the same time, each in its OWN ego task space,
+# working only in it. Two agents in one task space, or two agents doing the
+# same job, is the thing that must never happen. The constraint that
+# survives is *inside* one sub-agent -- it opens one link at a time,
+# finishes its note, then opens the next of its own batch. Never two tabs in
+# one task space. So the read step is now pooled exactly like cluster and
+# judge: up to `x_agents_active_max` batches in flight at once, read from
+# settings.md at run time, never hard-coded here.
 
 
 def die(msg: str, code: int = 1):
     print(f"ERROR: {msg}", file=sys.stderr)
     sys.exit(code)
+
+
+def agent_settings(settings: dict, step: str):
+    """(model, effort) for one agent step, from settings.md's `## X models`.
+
+    No fallback on purpose: a row Yaron misspelled, or deleted, must stop
+    the run by name -- the same hard failure the two settings loaders give
+    for a missing number -- rather than silently running the step at some
+    model he never chose."""
+    missing = [k for k in (f"{step}_model", f"{step}_effort") if k not in settings]
+    if missing:
+        die(
+            f"settings.md's `## X models` table has no {' and no '.join(missing)}: "
+            f"the {step} step cannot run. Add or fix the `{step}` row."
+        )
+    return settings[f"{step}_model"], settings[f"{step}_effort"]
 
 
 def load_json(path: Path):
@@ -182,12 +225,15 @@ def fill_template(template: str, values: dict) -> str:
     return PLACEHOLDER_RE.sub(_sub, template)
 
 
-def call_claude(prompt_text: str, model: str, cwd: Path, timeout: int = 1800) -> str:
-    """Shell out to `claude -p` headless, prompt on stdin, at `model`.
-    Returns the agent's stdout (its one-line summary); dies clearly on a
+def call_claude(prompt_text: str, model: str, effort: str, cwd: Path,
+                timeout: int = 1800) -> str:
+    """Shell out to `claude -p` headless, prompt on stdin, at `model` and
+    `effort`. Both come from settings.md's `## X models` row for the step,
+    so an edit there reaches the agent on the next run with nothing else to
+    do. Returns the agent's stdout (its one-line summary); dies clearly on a
     non-zero exit or a missing `claude` binary.
     """
-    cmd = ["claude", "-p", "--model", model]
+    cmd = ["claude", "-p", "--model", model, "--effort", effort]
     try:
         result = subprocess.run(
             cmd, input=prompt_text, capture_output=True, text=True,
@@ -382,14 +428,14 @@ def step_read(run_dir: Path, settings: dict):
         return
 
     batch_size = settings["x_read_batch"]
-    model = settings.get("read_model", "sonnet")
+    model, effort = agent_settings(settings, "read")
     max_workers = settings.get("x_agents_active_max", 1)
     batches = list(chunked(links, batch_size))
     template = load_prompt_template("read.md", 3, "read")
 
     def make_job(i, batch):
         def job():
-            # One ego task space per batch, per GOAL.md's 2026-09-06 rule:
+            # One ego task space per batch (Samuele's rule, 2026-09-06):
             # many read sub-agents run at the same time, each in its own
             # task space, working only in it. Never two batches sharing one
             # space -- that would be two agents in one task space, which is
@@ -409,12 +455,12 @@ def step_read(run_dir: Path, settings: dict):
                 "ALLOWED_URLS": "\n".join(l["url"] for l in batch),
             }
             prompt = fill_template(template, values)
-            call_claude(prompt, model, HERE)
+            call_claude(prompt, model, effort, HERE)
         return job
 
     print(
         f"-- step 3 (read): {len(links)} link(s) in {len(batches)} batch(es) of "
-        f"{batch_size}, model={model}, up to {max_workers} at once, each batch "
+        f"{batch_size}, model={model}/{effort}, up to {max_workers} at once, each batch "
         f"in its own ego task space"
     )
     run_pool([make_job(i, b) for i, b in enumerate(batches)], max_workers)
@@ -423,8 +469,14 @@ def step_read(run_dir: Path, settings: dict):
 
 
 def validate_notes(links: list, notes_dir: Path):
-    """Check 9, enforced in code: every link in links.md has a note, and that
-    note actually says something. Fails loudly naming the ids."""
+    """Check 9's countable half, enforced in code: every link in links.md has
+    a note in notes/, and that note actually says something. Fails loudly
+    naming the ids.
+
+    The rest of check 9 -- that the note was written from the tweet's OWN
+    page by a read sub-agent, and holds the tweet's FULL text rather than the
+    feed's collapsed ~280-character preview -- is prompts/read.md's job; no
+    code here can tell one text from the other."""
     missing = []
     empty = []
     for link in links:
@@ -458,7 +510,7 @@ def step_cluster(run_dir: Path, settings: dict):
     # The read step's full text, where it exists; tweet_block prefers it.
     notes = load_notes(run_dir)
     chunk_size = settings["x_cluster_chunk"]
-    model = settings.get("cluster_model", "opus")
+    model, effort = agent_settings(settings, "cluster")
     max_workers = settings.get("x_agents_active_max", 1)
     subjects_path = run_dir / "subjects.json"
 
@@ -473,9 +525,9 @@ def step_cluster(run_dir: Path, settings: dict):
             "OUTPUT_PATH": str(subjects_path),
         }
         prompt = fill_template(template, values)
-        print(f"-- step 4 (cluster): 1 agent, {len(kept)} tweet(s), model={model}, "
+        print(f"-- step 4 (cluster): 1 agent, {len(kept)} tweet(s), model={model}/{effort}, "
               f"{len(notes)} note(s) available")
-        call_claude(prompt, model, HERE)
+        call_claude(prompt, model, effort, HERE)
     else:
         part_template = load_prompt_template("cluster.md", 4, "cluster")
         part_paths = [run_dir / f"cluster_part_{i+1}.json" for i in range(len(parts))]
@@ -491,10 +543,10 @@ def step_cluster(run_dir: Path, settings: dict):
                     "OUTPUT_PATH": str(part_paths[i]),
                 }
                 prompt = fill_template(part_template, values)
-                call_claude(prompt, model, HERE)
+                call_claude(prompt, model, effort, HERE)
             return job
 
-        print(f"-- step 4 (cluster): {len(parts)} part(s), model={model}, up to {max_workers} at once, "
+        print(f"-- step 4 (cluster): {len(parts)} part(s), model={model}/{effort}, up to {max_workers} at once, "
               f"{len(notes)} note(s) available")
         run_pool([make_job(i, p) for i, p in enumerate(parts)], max_workers)
 
@@ -519,8 +571,8 @@ def step_cluster(run_dir: Path, settings: dict):
             "OUTPUT_PATH": str(subjects_path),
         }
         merge_prompt = fill_template(merge_template, merge_values)
-        print("-- step 4 (cluster): merging parts, model=" + model)
-        call_claude(merge_prompt, model, HERE)
+        print(f"-- step 4 (cluster): merging parts, model={model}/{effort}")
+        call_claude(merge_prompt, model, effort, HERE)
 
     if not subjects_path.exists():
         die("step 4 (cluster) finished but subjects.json was not written")
@@ -572,9 +624,11 @@ def format_profile(profile: dict) -> str:
 
 
 def find_lens_and_profile(root: Path):
-    """Read-only lookups outside x-lists/, per GOAL.md step 5 ('profile,
-    lens, preferences in, read from the root'). Missing files degrade to an
-    empty block, matching judge.md's own "empty block" convention."""
+    """Read-only lookups outside x-lists/. The judge and write steps need
+    the show profile, Yaron's lens and his preferences, and all three live at
+    the repo root: this pipeline reads outside its own folder but never
+    writes there. Missing files degrade to an empty block, matching judge.md's
+    own "empty block" convention."""
     profile_path = root / "shows" / "profile.json"
     prefs_path = root / "preferences.md"
     lens_path = root / ".claude" / "skills" / "ybs-brief" / "prompts" / "_lens.md"
@@ -600,7 +654,7 @@ def step_judge(run_dir: Path, settings: dict, root: Path):
     kept_doc = load_json(run_dir / "kept.json")
     by_id = {t["id"]: t for t in kept_doc.get("kept") or []}
     notes = load_notes(run_dir)
-    model = settings.get("judge_model", "opus")
+    model, effort = agent_settings(settings, "judge")
     max_workers = settings.get("x_agents_active_max", 1)
     curious_percentile = settings["x_curious_percentile"]
 
@@ -630,10 +684,10 @@ def step_judge(run_dir: Path, settings: dict, root: Path):
                 "OUTPUT_PATH": str(verdict_paths[i]),
             }
             prompt = fill_template(template, values)
-            call_claude(prompt, model, HERE)
+            call_claude(prompt, model, effort, HERE)
         return job
 
-    print(f"-- step 6 (judge): {len(subjects)} subject(s), model={model}, up to {max_workers} at once, "
+    print(f"-- step 6 (judge): {len(subjects)} subject(s), model={model}/{effort}, up to {max_workers} at once, "
           f"{len(notes)} note(s) available")
     run_pool([make_job(i, s) for i, s in enumerate(subjects)], max_workers)
 
@@ -644,15 +698,22 @@ def step_judge(run_dir: Path, settings: dict, root: Path):
         verdict_texts.append(path.read_text(encoding="utf-8"))
         load_json(path)  # dies clearly if a verdict file is not valid JSON
 
-    merge_judge_verdicts(run_dir, verdict_texts, settings, model)
+    merge_judge_verdicts(run_dir, verdict_texts, settings, model, effort)
 
 
-def merge_judge_verdicts(run_dir: Path, verdict_texts: list, settings: dict, model: str):
+def merge_judge_verdicts(run_dir: Path, verdict_texts: list, settings: dict,
+                          model: str, effort: str):
     """Step 6's second agent: judge-merge.md turns every per-subject verdict
     into picks.md, applying the x_picks_max ceiling. This is the only
     "judgment" left after each subject was judged alone -- which kept
     subjects the ceiling cuts -- so it is an agent call, not code, per
-    prompts/judge-merge.md."""
+    prompts/judge-merge.md.
+
+    This is where check 6's ceiling lives: picks.md holds at most
+    `x_picks_max` subjects. The rest of check 6 -- each pick tagged TRENDING
+    or CURIOUS, with the tweet that states it best and the storyline it
+    touches -- is prompts/judge.md's and judge-merge.md's job; no function
+    here checks it."""
     picks_max = settings["x_picks_max"]
     picks_path = run_dir / "picks.md"
     template = load_prompt_template("judge-merge.md", 6, "judge (merge)")
@@ -663,8 +724,9 @@ def merge_judge_verdicts(run_dir: Path, verdict_texts: list, settings: dict, mod
         "OUTPUT_PATH": str(picks_path),
     }
     prompt = fill_template(template, values)
-    print(f"-- step 6 (judge): merging {len(verdict_texts)} verdict(s), ceiling {picks_max}, model={model}")
-    call_claude(prompt, model, HERE)
+    print(f"-- step 6 (judge): merging {len(verdict_texts)} verdict(s), ceiling {picks_max}, "
+          f"model={model}/{effort}")
+    call_claude(prompt, model, effort, HERE)
 
     if not picks_path.exists():
         die("step 6 (judge) finished but picks.md was not written")
@@ -771,7 +833,7 @@ def step_write(run_dir: Path, settings: dict, root: Path):
     _, _, preferences_text, lens_text = find_lens_and_profile(root)
 
     output_path = run_dir / "brief.md"
-    model = settings.get("write_model", "opus")
+    model, effort = agent_settings(settings, "write")
     values = {
         "RUN_DIR": str(run_dir),
         "RUN_NAME": run_dir.name,
@@ -787,8 +849,8 @@ def step_write(run_dir: Path, settings: dict, root: Path):
         "PREFERENCES": preferences_text,
     }
     prompt = fill_template(prompt_template, values)
-    print(f"-- step 7 (write): {len(picks)} pick(s), model={model}")
-    call_claude(prompt, model, HERE)
+    print(f"-- step 7 (write): {len(picks)} pick(s), model={model}/{effort}")
+    call_claude(prompt, model, effort, HERE)
 
     if not output_path.exists():
         die("step 7 (write) finished but brief.md was not written")
@@ -822,7 +884,7 @@ def main():
     ap.add_argument("--run-dir", default=None,
                      help="use this folder instead of creating a fresh one")
     ap.add_argument("--settings", default=None,
-                     help="path to settings.md (default: x-lists/settings.md)")
+                     help="path to settings.md (default: the root settings.md)")
     ap.add_argument("--from", dest="from_step", type=int, default=1, choices=range(1, 8),
                      help="start at this step, skipping earlier ones")
     ap.add_argument("--only", type=int, default=0, choices=range(0, 8),

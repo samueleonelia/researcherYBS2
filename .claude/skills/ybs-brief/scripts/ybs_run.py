@@ -227,7 +227,11 @@ def skill_dir() -> Path:
 
 
 def load_settings(path: Path = None) -> dict:
-    """Read the settings.md tables.
+    """Read the article brief's tables out of the root settings.md.
+
+    The file holds the X list's tables too. Only two headings belong to this
+    half, and every other section is skipped, which is why both halves may
+    name a step `cluster` without clashing:
 
     Under `## Numbers` a row is `| key | value | meaning |`. Values: digits are
     ints, `50%` is the int 50, `"a", "b"` is a list of strings, anything else is
@@ -236,7 +240,7 @@ def load_settings(path: Path = None) -> dict:
     Under `## Models` a row is `| step | model | effort | ... |`, and gives two
     keys, `<step>_model` and `<step>_effort`, so a template can ask for either.
     """
-    path = path or (skill_dir() / "settings.md")
+    path = path or (project_root() / "settings.md")
     if not path.exists():
         die(f"no settings file at {path}")
     out, section = {}, ""
@@ -253,6 +257,8 @@ def load_settings(path: Path = None) -> dict:
         key, raw = cells[0], cells[1]
         if key.lower() in ("setting", "step") or set(key) <= set("-: "):
             continue
+        if section not in ("numbers", "models"):
+            continue  # the X list's own sections; x_settings.py reads those
         if section == "models":
             if len(cells) < 3 or not cells[2]:
                 die(f"settings.md: {key} has no effort")
@@ -933,6 +939,11 @@ X_WAIT_MINUTES = SETTINGS["x_wait_minutes_max"]
 
 # ---------------------------------------------------------------- sources
 
+# The heading in sources.md that divides the two halves. Everything under it is
+# an X list; everything else is a news front page.
+X_LISTS_HEADING = "x lists"
+
+
 def read_sources(root: Path) -> list:
     """Read sources.md. One source per line, in any of these shapes:
 
@@ -944,13 +955,24 @@ def read_sources(root: Path) -> list:
     A third part is the logged-in marker for a paid site: text that only appears
     on the page when the session is alive. Lines without a link are ignored,
     which is why the notes at the top of the file are harmless.
+
+    Lines under the `## X lists` heading are NOT news sources: they belong to
+    the X half of the run and are read by `read_x_lists` instead. A front page
+    is screened by an agent; an X list is scrolled by `x-lists/x_scrape.py`,
+    and mixing the two would send a screener to x.com.
     """
     f = root / "sources.md"
     if not f.exists():
         die("sources.md not found at " + str(f))
     rows = []
+    section = ""
     for line in f.read_text(encoding="utf-8").splitlines():
         if line.startswith("    ") or line.startswith("\t"):
+            continue
+        if line.strip().startswith("#"):
+            section = line.strip().lstrip("#").strip().lower()
+            continue
+        if section == X_LISTS_HEADING:
             continue
         s = re.sub(r"^\s*(\d+[.)]|[-*+])\s+", "", line.strip())
         if not s or s.startswith("#") or "http" not in s:
@@ -971,8 +993,42 @@ def read_sources(root: Path) -> list:
     return rows
 
 
+def read_x_lists(root: Path) -> list:
+    """Read the `## X lists` section of sources.md: `1. Name - https://x.com/...`.
+
+    Same forgiving line shape as a news source, minus the logged-in marker (the
+    X half checks the logged-in handle itself). An empty or absent section is
+    not an error: the X half then has nothing to read and says so.
+    """
+    f = root / "sources.md"
+    if not f.exists():
+        die("sources.md not found at " + str(f))
+    rows, section = [], ""
+    for line in f.read_text(encoding="utf-8").splitlines():
+        if line.startswith("    ") or line.startswith("\t"):
+            continue
+        if line.strip().startswith("#"):
+            section = line.strip().lstrip("#").strip().lower()
+            continue
+        if section != X_LISTS_HEADING:
+            continue
+        s = re.sub(r"^\s*(\d+[.)]|[-*+])\s+", "", line.strip())
+        if not s or "http" not in s:
+            continue
+        parts = [p.strip() for p in re.split(r"\s+[-–—]\s+", s) if p.strip()]
+        url = next((p for p in parts if p.startswith("http")), None)
+        if not url or parts[0] == url:
+            continue
+        i = parts.index(url)
+        name = " - ".join(parts[:i])
+        rows.append({"name": name, "slug": slugify(name), "url": url})
+    return rows
+
+
 def cmd_sources(args):
-    print(json.dumps(read_sources(project_root()), indent=2, ensure_ascii=False))
+    print(json.dumps({"sources": read_sources(project_root()),
+                       "x_lists": read_x_lists(project_root())},
+                      indent=2, ensure_ascii=False))
     return 0
 
 
@@ -1676,7 +1732,8 @@ def cmd_picks_sync(args):
 # The X-list pipeline is one command of its own, `x-lists/x_run.py`, and nothing
 # here reaches inside it: this launches it, waits for it, and copies the brief it
 # wrote under the article brief. Every number it obeys lives in
-# `x-lists/settings.md`; the only number here is how long step 10 waits.
+# `settings.md` under `## X numbers`; the only number here is how long step 10
+# waits.
 
 X_POLL_SECONDS = 2          # how often x-wait looks; the run takes minutes
 X_KILL_GRACE_SECONDS = 5    # between SIGTERM and SIGKILL on a timeout

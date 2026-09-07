@@ -226,3 +226,95 @@ Neither branch is merged to `main` yet.
 **Next**
 - Watch `x_views_per_hour` and the AfD-style seam over a few real mornings.
 - Fix the 4 old test failures and make `tests/run-all.sh` run every file.
+
+## 2026-09-07 — one `settings.md`, at the project root
+
+**Done**
+- The article brief's `settings.md` and `x-lists/settings.md` are one file at
+  the project root. Samuele asked for it: two files meant knowing which of two
+  places to open to change a number.
+- No setting renamed. Each half reads only its own `##` headings: `Numbers`
+  and `Models` for the article brief, `X numbers`, `X fixed` and `X models`
+  for the X list. `#` headings divide the file for the reader and are ignored
+  by the loaders.
+- `ybs_run.py` and `x_settings.py` default to `<root>/settings.md` and skip the
+  other half's sections. `x_scrape.py` dropped its own table parser and goes
+  through `x_settings.py` like every other X script.
+- `update.sh` backs up one file instead of two; README, both SKILL.md files and
+  `x-lists/GOAL.md` say where a number lives now.
+- New tests on both sides that the halves stay apart. All x-lists tests pass;
+  the main suite keeps the same 4 pre-existing failures and gains none.
+
+**Decisions**
+- Section-scoped reading instead of renaming keys. Both halves name a step
+  `cluster`, `read` and `write`; renaming them would have touched every prompt
+  and template. Filtering by heading touched two loaders.
+- `/ybs-shows` keeps its own `settings.md`. It is a separate job, run on its
+  own; Samuele reversed an earlier "merge all three" answer.
+
+**Next**
+- Decide whether the X list URL moves into `sources.md` (see the note below).
+
+## 2026-09-07 — more than one X list
+
+**Done, not yet proven live**
+- The X lists live in `sources.md` now, under `## X lists`, one line each, the
+  same shape as a news source. `x_list_url` left `settings.md`. Two lists are
+  configured: the original one and `2091829768081506382` (names are placeholder
+  labels, "List one" and "List two", until Samuele renames them).
+- `x_scrape.py` reads them one after the other in the same browser, checking the
+  handle and the landed URL per list and closing each tab before the next.
+- A tweet in two lists is one record: `list` keeps the first list that showed
+  it, the new `lists` field carries every one. `cross_list` is `>= 2`, not `== 2`.
+- `tweets.json` head: `lists` (name, url, tweets) replaces `list_url`. Check 1
+  validates it and refuses a tweet naming a list nothing scraped; check 2
+  applies the window rule per list, so an old run at the end of one list cannot
+  cut the next one short.
+- `x_wait_minutes_max` is a safety timeout now, not a speed target: 30 minutes.
+  Samuele's ruling: the 9-minute target was a goal given to the builder, not a
+  rule of the skill.
+
+**Open**
+- **The acceptance test is a live run.** Nothing here proves the browser loop:
+  two lists opened in sequence, the guardrail firing on the second, the tabs
+  closing. Run `python3 x-lists/x_run.py --only 1` with ego open and X logged in.
+- The section title is still "What the list is moving on", singular, and check
+  10 enforces it. Worth deciding whether it becomes "the lists".
+
+## 2026-09-07 — one settings.md, models live, GOAL.md retired
+
+Branch `one-settings`. Plan: `plans/settings-live-and-goal-retired.md`, verified
+ALL GOOD after four verifier rounds, then carried out by agents, one per item.
+
+**Done**
+- `/ybs-shows` numbers and a new models table live in the root `settings.md`
+  under `# The shows`; the skill-local `settings.md` is gone. `ybs_shows.py`
+  reads only its two headings, dies on a missing heading or duplicate key.
+- Shows agents are generated: `.claude/skills/ybs-shows/agents/shows-*.md.tmpl`
+  plus `ybs_shows.py build [--check]`. Step 0 of both skills runs `build`
+  unconditionally, so a model edit is live on the next run with nothing else.
+- `x_run.py` passes `--effort` to `claude -p` (it never did) and fails loudly
+  on a missing `*_model` / `*_effort` row instead of a silent default.
+- `x_scrape.py` stops with a named reason when a scroll round adds nothing and
+  the page shows a login wall, captcha, rate limit or "Something went wrong".
+- `update.sh` retires files a new version no longer ships: the old shows
+  settings file is renamed `.backup`, `GOAL.md` and `RUNLOG.md` are deleted.
+- `x-lists/GOAL.md` and `RUNLOG.md` removed. Every citation now states the
+  rule in place: `x_scrape.py` docstring, `read.md` rule 5, `x_checks.py`
+  per-check docstrings, `x_run.py` header table of the ten checks, the X
+  models intro in `settings.md`. Build-time and verify rows deleted.
+- Tests: same 4 known failures, none new; all x-lists tests green; both
+  `build --check` clean. Live `/ybs-shows` (sonnet, headless): 2 new shows,
+  1 digested, profile rebuilt from 15 shows.
+
+**Decisions**
+- Templates named `shows-*.md.tmpl` so the copied `cmd_build` writes
+  `ybs4-shows-*.md` under the existing names.
+- `x-lists/plans/` kept: the only account of why the field table and the
+  window rule look as they do. Old plan docs may still mention GOAL.md.
+- Scheduling and more than one brief a day are future work; nothing in the
+  tree blocks them now.
+
+**Next**
+- Merge `one-settings` into `main`, push, tag.
+- One live `/ybs-brief morning` to see `--effort` reach the X agents.

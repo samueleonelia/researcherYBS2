@@ -53,7 +53,7 @@ Forbidden, without exception:
 
 - any profile page, including the author's own
 - any X search, explore, notifications, home or bookmarks page
-- any list page, including the list this run scraped
+- any list page, including the lists this run scraped
 - **the quoted tweet's own page** — read the quoted text from the card shown
   inside the tweet you are on, and if it is truncated there, write down what is
   shown and note that it was truncated. Do not click through to it.
@@ -224,9 +224,9 @@ id in your batch.** Code checks this and the run fails, naming the missing ids.
 2. **Never write the collapsed preview.** Expand it or say you could not.
 3. **One tweet at a time**, in the order given.
 4. **Only the permalinks above**, reading only, no clicks that change anything.
-5. **One file per id, and no other file.** Do not edit `links.md`,
-   `kept.json`, or anything else in the run folder. Do not create a summary
-   file, an index, or a log.
+5. **One file per id, and no other file.** Do not edit or delete `links.md`,
+   `kept.json`, or anything else in the run folder, and never delete the run
+   folder itself. Do not create a summary file, an index, or a log.
 6. **Do not judge.** No ranking, no grouping, no relevance, no opinion, no
    "this one is the best". Not in the note, not in your final line.
 

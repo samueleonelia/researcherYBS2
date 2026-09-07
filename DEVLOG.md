@@ -254,3 +254,29 @@ Neither branch is merged to `main` yet.
 
 **Next**
 - Decide whether the X list URL moves into `sources.md` (see the note below).
+
+## 2026-09-07 — more than one X list
+
+**Done, not yet proven live**
+- The X lists live in `sources.md` now, under `## X lists`, one line each, the
+  same shape as a news source. `x_list_url` left `settings.md`. Two lists are
+  configured: the original one and `2091829768081506382` (names are placeholder
+  labels, "List one" and "List two", until Samuele renames them).
+- `x_scrape.py` reads them one after the other in the same browser, checking the
+  handle and the landed URL per list and closing each tab before the next.
+- A tweet in two lists is one record: `list` keeps the first list that showed
+  it, the new `lists` field carries every one. `cross_list` is `>= 2`, not `== 2`.
+- `tweets.json` head: `lists` (name, url, tweets) replaces `list_url`. Check 1
+  validates it and refuses a tweet naming a list nothing scraped; check 2
+  applies the window rule per list, so an old run at the end of one list cannot
+  cut the next one short.
+- `x_wait_minutes_max` is a safety timeout now, not a speed target: 30 minutes.
+  Samuele's ruling: the 9-minute target was a goal given to the builder, not a
+  rule of the skill.
+
+**Open**
+- **The acceptance test is a live run.** Nothing here proves the browser loop:
+  two lists opened in sequence, the guardrail firing on the second, the tabs
+  closing. Run `python3 x-lists/x_run.py --only 1` with ego open and X logged in.
+- The section title is still "What the list is moving on", singular, and check
+  10 enforces it. Worth deciding whether it becomes "the lists".

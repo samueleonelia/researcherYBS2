@@ -1,12 +1,12 @@
 # STATUS: researcherYBS2
 
-_Updated: 2026-09-07 · one settings.md, models live, GOAL.md retired_
+_Updated: 2026-09-08 · preferences.md readable in preview, X reader strips notes_
 
 <!-- Rewrite this file in place. Never append. History belongs in DEVLOG.md. Keep under 60 lines. -->
 
 **What this is:** A Claude Code skill (`/ybs-brief`) that builds a morning news brief for Yaron Brook from six sources plus two X lists, and `/ybs-shows` which keeps his show profile current.
 
-**Right now:** branch `one-settings`, three commits ahead of `main`, tests at baseline, live `/ybs-shows` passed. Ready to merge and push.
+**Right now:** on `main`, pushed. Tests at baseline. Next live `/ybs-brief morning` still pending.
 
 ## Feature areas
 | Area | State | Note |
@@ -27,14 +27,13 @@ _Updated: 2026-09-07 · one settings.md, models live, GOAL.md retired_
 | Git remote | ✅ working | github.com/samueleonelia/researcherYBS2 (private) |
 | Install on another Mac (`/setup`) | ✅ working | |
 | Update in place (`/update`) | ✅ working | keeps runs/, shows/, preferences.md; backs up settings.md, sources.md; retires old files |
-| His standing instructions | ✅ working | `preferences.md`, read by pick, write and the X judge/write |
+| His standing instructions | ✅ working | `preferences.md`, one shared reader for pick, write and the X judge/write; help block hidden in preview |
 
 ## Next up
-1. Merge `one-settings` into `main`, push, tag `one-settings-merged`
-2. Live `/ybs-brief morning` (proves `--effort` on X agents and the two-list scrape)
-3. Watch the seam between an article figure and a tweet figure on the same story
-4. Decide whether `world news` and `u.s. news` join `_sections.md`
-5. Fix the 4 old test failures and make `run-all.sh` run every file
+1. Live `/ybs-brief morning` (proves `--effort` on X agents and the two-list scrape)
+2. Watch the seam between an article figure and a tweet figure on the same story
+3. Decide whether `world news` and `u.s. news` join `_sections.md`
+4. Fix the 4 old test failures and make `run-all.sh` run every file
 
 ## Known bugs
 - `picks-sync` does not refuse more than 15 picks (2 tests fail)
@@ -43,5 +42,4 @@ _Updated: 2026-09-07 · one settings.md, models live, GOAL.md retired_
 - X: the promoted-tweet rule has never fired on real data; `x_views_per_hour` is loose on purpose and unwatched
 
 ## Blocked on you
-- Say when to merge and push `one-settings`.
 - Say when to run the next live brief (it drives your browser).

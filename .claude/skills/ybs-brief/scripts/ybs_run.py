@@ -355,19 +355,33 @@ def profile_text(profile: dict) -> str:
     return "\n".join(lines)
 
 
+def preference_lines(text: str) -> list:
+    """The instruction lines of preferences.md, and nothing else.
+
+    Two kinds of line are his notes to himself and never reach a prompt: any
+    line starting with #, and anything inside an HTML comment (<!-- ... -->),
+    which is how the help block at the top of the file stays invisible when
+    the file is previewed. The same function, character for character, lives
+    in x-lists/x_run.py; a test keeps the two identical.
+    """
+    text = re.sub(r"<!--.*?-->", "", text, flags=re.S)
+    lines = [ln.strip() for ln in text.splitlines()]
+    return [ln for ln in lines if ln and not ln.startswith("#")]
+
+
 def preferences() -> str:
     """His own standing instructions, from preferences.md at the project root.
 
     His file, not the pipeline's, so every failure mode here is silence: it may
     be missing, it may be all comments, it may be empty. Any of those means he
     has asked for nothing in particular, and the brief runs the way it always
-    has. Lines starting with # are his own notes and never reach a prompt.
+    has. What counts as a note and what counts as an instruction is decided
+    by preference_lines, and nowhere else.
     """
     path = project_root() / "preferences.md"
     if not path.exists():
         return "He has not written any standing instructions."
-    lines = [ln.strip() for ln in path.read_text(encoding="utf-8").splitlines()]
-    lines = [ln for ln in lines if ln and not ln.startswith("#")]
+    lines = preference_lines(path.read_text(encoding="utf-8"))
     if not lines:
         return "He has not written any standing instructions."
     return "\n".join("- " + ln.lstrip("-* ").strip() for ln in lines)

@@ -10,6 +10,7 @@ tests=(
   tests/test_scrape_lists.py
   tests/test_chain.py
   tests/test_check10.py
+  tests/test_preferences.py
 )
 
 failed=0

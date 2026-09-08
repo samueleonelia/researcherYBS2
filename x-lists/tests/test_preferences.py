@@ -19,10 +19,12 @@ spec = importlib.util.spec_from_file_location(
 ybs_run = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(ybs_run)
 
-SAMPLE = """<!--
-help text
-  Never lead with a celebrity story.
--->
+SAMPLE = """# The note
+Never lead with a celebrity story.
+
+- I don't use the crime ones.
+
+---
 # a note
 Keep the leads shorter.
 
@@ -40,6 +42,10 @@ class TestPreferenceReaders(unittest.TestCase):
     def test_notes_never_reach_a_prompt(self):
         self.assertEqual(x_run.preference_lines(SAMPLE), WANT)
         self.assertEqual(ybs_run.preference_lines(SAMPLE), WANT)
+
+    def test_a_file_with_no_rule_is_read_whole(self):
+        self.assertEqual(x_run.preference_lines("Keep it short.\n# note\n"), ["Keep it short."])
+        self.assertEqual(x_run.preference_lines("---\nKeep it short.\n"), ["Keep it short."])
 
     def test_the_real_file_holds_no_hidden_instruction(self):
         text = (ROOT / "preferences.md").read_text(encoding="utf-8")

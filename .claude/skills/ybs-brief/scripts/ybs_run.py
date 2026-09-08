@@ -358,12 +358,14 @@ def profile_text(profile: dict) -> str:
 def preference_lines(text: str) -> list:
     """The instruction lines of preferences.md, and nothing else.
 
-    Two kinds of line are his notes to himself and never reach a prompt: any
-    line starting with #, and anything inside an HTML comment (<!-- ... -->),
-    which is how the help block at the top of the file stays invisible when
-    the file is previewed. The same function, character for character, lives
-    in x-lists/x_run.py; a test keeps the two identical.
+    The file is a readable note to him above a `---` line, and his
+    instructions below it. Only what is below the first `---` counts. Inside
+    that, a line starting with # and anything in an HTML comment are notes
+    too. A file with no `---` is read whole. The same function, character for
+    character, lives in x-lists/x_run.py; a test keeps the two identical.
     """
+    parts = re.split(r"^---\s*$", text, maxsplit=1, flags=re.M)
+    text = parts[1] if len(parts) == 2 else parts[0]
     text = re.sub(r"<!--.*?-->", "", text, flags=re.S)
     lines = [ln.strip() for ln in text.splitlines()]
     return [ln for ln in lines if ln and not ln.startswith("#")]

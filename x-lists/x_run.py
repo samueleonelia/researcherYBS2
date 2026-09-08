@@ -609,6 +609,28 @@ def read_optional(path: Path, empty_note: str) -> str:
     return empty_note
 
 
+def preference_lines(text: str) -> list:
+    """The instruction lines of preferences.md, and nothing else.
+
+    Two kinds of line are his notes to himself and never reach a prompt: any
+    line starting with #, and anything inside an HTML comment (<!-- ... -->),
+    which is how the help block at the top of the file stays invisible when
+    the file is previewed. The same function, character for character, lives
+    in x-lists/x_run.py; a test keeps the two identical.
+    """
+    text = re.sub(r"<!--.*?-->", "", text, flags=re.S)
+    lines = [ln.strip() for ln in text.splitlines()]
+    return [ln for ln in lines if ln and not ln.startswith("#")]
+
+
+def read_preferences(path: Path, empty_note: str) -> str:
+    """preferences.md with his notes stripped, so only instructions reach a
+    prompt. Missing, unreadable or all-notes all mean the same thing: he has
+    asked for nothing in particular."""
+    lines = preference_lines(read_optional(path, ""))
+    return "\n".join(lines) or empty_note
+
+
 def format_profile(profile: dict) -> str:
     lines = []
     for section, label in (("storylines", "Storylines"), ("themes", "Themes")):
@@ -643,7 +665,7 @@ def find_lens_and_profile(root: Path):
         except (json.JSONDecodeError, OSError):
             pass
 
-    preferences_text = read_optional(prefs_path, "(none)")
+    preferences_text = read_preferences(prefs_path, "(none)")
     lens_text = read_optional(lens_path, "(no lens available)")
     return profile_date, profile_text, preferences_text, lens_text
 

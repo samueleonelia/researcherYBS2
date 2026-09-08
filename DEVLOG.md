@@ -318,3 +318,22 @@ ALL GOOD after four verifier rounds, then carried out by agents, one per item.
 **Next**
 - Merge `one-settings` into `main`, push, tag.
 - One live `/ybs-brief morning` to see `--effort` reach the X agents.
+
+## 2026-09-08 · preferences.md readable in preview, X reader fixed
+
+**Branch** `preferences-comments`, merged into `main`.
+
+**Done**
+- `preferences.md` help block moved into one `<!-- -->` comment, so a
+  markdown preview shows only Yaron's instructions instead of a wall of
+  `#` headings. `#` lines still count as notes.
+- Bug: `x_run.py` pasted the whole file, help block included, into the X
+  judge and X write prompts. The article reader stripped `#` lines, the X
+  reader stripped nothing. Both now call the same `preference_lines`.
+- `x-lists/tests/test_preferences.py` pins the two copies to identical
+  source and checks the real file leaks no example as an instruction.
+- Tests: x-lists all green; root suite same 4 known failures.
+
+**Decision**
+- The learning loop stays `preferences.md`: one sentence per correction,
+  written by a person. No CLAUDE.md, no self-editing prompts.

@@ -324,9 +324,10 @@ ALL GOOD after four verifier rounds, then carried out by agents, one per item.
 **Branch** `preferences-comments`, merged into `main`.
 
 **Done**
-- `preferences.md` help block moved into one `<!-- -->` comment, so a
-  markdown preview shows only Yaron's instructions instead of a wall of
-  `#` headings. `#` lines still count as notes.
+- `preferences.md` is now a readable note above a `---` rule, with his
+  instructions below it. Only what is under the first `---` reaches a
+  prompt; `#` lines and `<!-- -->` comments stay notes. (A first pass hid
+  the help in one HTML comment; unreadable in source view, replaced.)
 - Bug: `x_run.py` pasted the whole file, help block included, into the X
   judge and X write prompts. The article reader stripped `#` lines, the X
   reader stripped nothing. Both now call the same `preference_lines`.

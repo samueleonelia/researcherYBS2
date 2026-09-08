@@ -1,6 +1,6 @@
 # STATUS: researcherYBS2
 
-_Updated: 2026-09-08 · preferences.md readable in preview, X reader strips notes_
+_Updated: 2026-09-08 · preferences.md readable, instructions below the rule_
 
 <!-- Rewrite this file in place. Never append. History belongs in DEVLOG.md. Keep under 60 lines. -->
 
@@ -27,7 +27,7 @@ _Updated: 2026-09-08 · preferences.md readable in preview, X reader strips note
 | Git remote | ✅ working | github.com/samueleonelia/researcherYBS2 (private) |
 | Install on another Mac (`/setup`) | ✅ working | |
 | Update in place (`/update`) | ✅ working | keeps runs/, shows/, preferences.md; backs up settings.md, sources.md; retires old files |
-| His standing instructions | ✅ working | `preferences.md`, one shared reader for pick, write and the X judge/write; help block hidden in preview |
+| His standing instructions | ✅ working | `preferences.md`, one shared reader for pick, write and the X judge/write; instructions go below the `---` rule |
 
 ## Next up
 1. Live `/ybs-brief morning` (proves `--effort` on X agents and the two-list scrape)

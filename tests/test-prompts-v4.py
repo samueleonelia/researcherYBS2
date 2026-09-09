@@ -16,6 +16,7 @@ import json
 import re
 import shutil
 import subprocess
+import tempfile
 import sys
 import time
 from datetime import datetime, timedelta, timezone
@@ -78,7 +79,7 @@ def fenced_block(text):
 # asks for must be a fragment, a setting or a schema name.
 RUN_VARS = {
     "DATE", "SLOT", "RUN_DIR", "WINDOW_START", "WINDOW_END",
-    "SOURCE_NAME", "SLUG", "SOURCE_URL", "MARKER", "MARKER_JSON", "SOURCE_JSON",
+    "SOURCE_NAME", "SLUG", "SOURCE_URL", "SOURCE_JSON",
     "ATTEMPT", "TASK_SPACE",
     "ARTICLES", "NOTES", "NOTE_IDS", "NOTE_COUNT",
     "PICKS", "COUNTERPOINTS", "TEMPLATE", "SECTION_JOB",
@@ -151,6 +152,59 @@ def test_placeholders():
     for s in ("What leads", "Secondary Topics", "Worth Yaron", "COUNTERPOINT -",
               "AUDIT_LINE"):
         check(f"write.md does not restate the shape ({s})", s not in wr)
+
+
+def test_screen_prompt_has_no_login_check():
+    """A source line is a name and a link. The screener runs one command for
+    every source and never judges whether a login is alive, so neither the word
+    that used to prove it nor the sentinel it raised may survive rendering."""
+    print("\nthe rendered screen prompt asks nothing about a login")
+    rd = fresh_run()
+    try:
+        out, code = run("fill", "screen", "--run", rd, "--source", "bbc")
+        check("fill screen renders", code == 0, str(out)[:200])
+        text = Path(out["file"]).read_text() if code == 0 else ""
+        for word in ("SESSION_DOWN", "marker", "MARKER"):
+            check(f"the rendered prompt does not mention {word!r}",
+                  word not in text)
+    finally:
+        shutil.rmtree(rd, ignore_errors=True)
+
+
+def test_reader_waits_for_text():
+    """A page that says "loaded" is not always a page showing text. The built
+    reader carries the ceiling it waits to, and the word it replies with when
+    the wait runs out."""
+    print("\nthe reader waits for text")
+    settings, _ = run("settings")
+    agent = (ROOT / ".claude" / "agents" / "ybs4-reader.md").read_text()
+    check("read_wait_seconds is a setting", "read_wait_seconds" in settings,
+          str(sorted(settings)[:5]))
+    check("the built reader carries its value",
+          str(settings.get("read_wait_seconds")) in agent)
+    check("the built reader names the blank page", "PAGE_BLANK" in agent)
+    check("the sentinel has one home", run("schema", "--key", "sentinel.blank")[0]
+          .strip() == "PAGE_BLANK")
+
+    # `build` renders the reader from that key, so a settings file without it
+    # must stop the build by name rather than ship an agent with a hole in it.
+    tmp = Path(tempfile.mkdtemp(prefix="ybs-no-wait-"))
+    try:
+        shutil.copytree(SKILL, tmp / ".claude" / "skills" / "ybs-brief")
+        (tmp / ".claude" / "agents").mkdir(parents=True, exist_ok=True)
+        stripped = [l for l in (ROOT / "settings.md").read_text().splitlines()
+                    if not l.startswith("| read_wait_seconds ")]
+        (tmp / "settings.md").write_text("\n".join(stripped) + "\n")
+        r = subprocess.run(
+            [sys.executable,
+             str(tmp / ".claude" / "skills" / "ybs-brief" / "scripts" / "ybs_run.py"),
+             "build"], capture_output=True, text=True, cwd=tmp)
+        check("build without read_wait_seconds fails", r.returncode != 0,
+              f"exit {r.returncode}")
+        check("and the message names the key",
+              "read_wait_seconds" in r.stderr, r.stderr.strip()[:200])
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 def test_pass_through():
@@ -451,6 +505,8 @@ def main():
     test_nothing_is_said_twice()
     test_numbers_live_in_settings()
     test_pass_through()
+    test_reader_waits_for_text()
+    test_screen_prompt_has_no_login_check()
     test_agent_files_are_generated()
     test_agents_match_skill()
     test_examples_are_valid_json()

@@ -102,7 +102,7 @@ def test_screen_sync(rd):
         link("https://reason.com/2026/x/c", "C", cat="policy"),
     ]})
     write(rd / "screen" / "ap-news.json", {"source": "AP News", "ok": False,
-                                           "error": "SESSION_DOWN", "links": []})
+                                           "error": "TIMEOUT", "links": []})
     out, _ = run("screen-sync", "--run", rd)
     check("keeps in-window, drops stale and undated", out["articles"] == 4,
           f"got {out['articles']}")
@@ -1584,9 +1584,9 @@ def test_audit_and_close(rd):
           repr(line)[:300])
     check("reports the undated links it dropped",
           "1 undated links dropped (Guardian 1)" in line, repr(line)[:200])
-    run("event", "--run", rd, "--type", "SESSION_DOWN", "--source", "guardian", expect=0)
+    run("event", "--run", rd, "--type", "screen_failed", "--source", "guardian", expect=0)
     line, _ = run("audit-line", "--run", rd, expect=0)
-    check("a dead login counts as a failure however the type was spelled",
+    check("a failed screen counts as a failure",
           "3 failures" in line, repr(line)[:300])
     (rd / "brief.md").write_text("# Brief\n\nsome text\n\n{{AUDIT_LINE}}\n")
     run("audit-line", "--run", rd, "--append", expect=0)
@@ -2077,6 +2077,44 @@ def test_sources_halves():
         check(f"{row['name']} has a slug", bool(row["slug"]), str(row))
 
 
+def load_script():
+    """Import ybs_run itself. `read_sources` takes a root, so a scratch
+    sources.md can be read without a scratch copy of the whole project."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("ybs_run_under_test", SCRIPT)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_sources_third_part():
+    """An older sources.md ended a paid site's line with a word that proved the
+    login was alive. Nothing reads it any more. The line still works, the extra
+    part is dropped, and the reader of the file is told once to delete it."""
+    print("\nsources: a stale third part is dropped and named")
+    mod = load_script()
+    tmp = Path(tempfile.mkdtemp(prefix="ybs-sources-"))
+    try:
+        (tmp / "sources.md").write_text(
+            "# Sources\n\n1. Guardian - https://www.theguardian.com/\n"
+            "2. Paper - https://example.com/news/ - Sign Out\n", encoding="utf-8")
+        rows, notices = mod.read_sources(tmp)
+        check("both lines are read", len(rows) == 2, str(rows))
+        check("no row carries a marker",
+              not [r for r in rows if "marker" in r], str(rows))
+        check("the third part is not part of the link",
+              rows[1]["front_page"] == "https://example.com/news/", str(rows[1]))
+        check("the third part is not part of the name",
+              rows[1]["name"] == "Paper", str(rows[1]))
+        check("one notice, naming the source", len(notices) == 1
+              and '"Paper"' in notices[0] and "delete it" in notices[0],
+              str(notices))
+        check("a two-part line earns no notice",
+              "Guardian" not in " ".join(notices), str(notices))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def test_settings_halves():
     """One settings.md holds both halves of the run. This script must read the
     article brief's `## Numbers` and `## Models` and nothing else: the X list
@@ -2102,6 +2140,7 @@ def main():
     try:
         test_settings_halves()
         test_sources_halves()
+        test_sources_third_part()
         test_screen_sync(rd)
         test_afternoon_base()
         test_screen_attempts()

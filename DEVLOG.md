@@ -512,3 +512,62 @@ and this one). Plan: `plans/afternoon-update.md`, implemented as written.
 - One live `/ybs-brief afternoon` against a real morning run, timed. Expected
   20 to 25 minutes: most of the day's articles are already seen and dropped at
   `screen-sync`.
+
+## 2026-09-09 · No login marker, and a reader that waits for text
+
+**Status:** branch `no-marker-wait-for-text`, two commits (`d38f6b3`,
+`cb9a3b4`) plus this one. Plan: `plans/no-marker-wait-for-text.md`, implemented
+as written.
+
+**Why**
+- Seven NYTimes reads saved 0 characters twice each: the reader copied
+  `document.body.innerText` the moment the browser said "loaded", and the site
+  runs an access check before it draws the article.
+- WSJ was stopped by a logged-in marker word that was never on its page. The
+  marker was a guess about a site, and it was wrong.
+
+**Done**
+- **The marker goes.** A `sources.md` line is a name and a link. `read_sources`
+  returns `(rows, notices)`; a line that still carries a third part is read all
+  the same, the part is dropped, and `start` prints one notice per stale line
+  to stderr (stdout stays the JSON the skill parses). No `marker` in
+  `run.json`, no `MARKER`/`MARKER_JSON` in `fill screen`, no login check and no
+  `SESSION_DOWN` branch in `prompts/screen.md`, no `session_down` sentinel, and
+  `build_audit_line` counts a failure as a type with `fail` in it and nothing
+  else.
+- **The reader waits.** New setting `read_wait_seconds` (10). The command polls
+  `document.body.innerText` once a second until the page holds 800 characters —
+  the same threshold step 2 already calls too short — then copies. A page with
+  text at load costs zero extra seconds. Still short at the ceiling: the reader
+  replies `PAGE_BLANK: <title>`, writes no note, and `read-list` offers the id
+  again for its one retry, exactly as for `PAGE_TRUNCATED`. The command now
+  logs `waited` and `title` beside `chars`.
+
+**Decisions**
+- Notices go to stderr. `start`'s stdout is JSON the skill reads; a line of
+  prose in the middle of it would break a run rather than warn about one.
+- `PAGE_BLANK` is a second name, not a second mechanism. Same family as
+  `PAGE_TRUNCATED` (no note, one retry through `read-list`); the only thing it
+  buys is that the log tells a page that showed nothing from one that showed
+  too little.
+- No login check anywhere. A dead login still shows up, as a run whose reads of
+  that source all report a truncated page. That is how the NYTimes problem was
+  found in the first place.
+
+**Verified, without a full run**
+- `tests/run-all.sh`: the same 3 failures as before the branch (2 in
+  picks-sync, 1 beat-vs-topic), and `test-prompts-v4.py` still stops at the
+  rotted profile name in the cluster example. Nothing new fails. New checks all
+  pass: `read_sources` drops a third part and names it, the rendered screen
+  prompt mentions neither `SESSION_DOWN` nor `marker`, the built reader carries
+  `read_wait_seconds`'s value and `PAGE_BLANK`, and a settings file without the
+  key makes `build` fail by name.
+- Scratch `start` on a `sources.md` whose second line still ends `- Sign Out`:
+  the notice printed once, the run started, `run.json` holds no `marker`.
+- The new reader command by hand, via `ego-browser nodejs`: a Guardian article
+  gave `chars 6268, waited 0`; an NYT article gave `chars 2848, waited 0`. Both
+  reported their title; neither returned 0 characters silently.
+
+**Next**
+- One live `/ybs-brief morning` on this branch: the audit line should show no
+  `session_down`, and any blank page should be listed by name in the failures.

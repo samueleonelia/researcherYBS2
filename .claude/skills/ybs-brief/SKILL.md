@@ -54,9 +54,10 @@ receive, so a non-zero exit stops the step.
 
 The pooled steps take their instructions from the body of their agent file,
 loaded when the agent launches. For triage, read and figure check the launch
-line is the whole prompt you pass. For counterpoints the prompt is the text of
-the file `fill counterpoint` names for that story. Either way, pass it verbatim:
-do not add to it, do not explain it.
+line is the whole prompt you pass. For counterpoints the launch line is
+`Read <path> and follow it.`, where the path is the file `fill counterpoint`
+names for that story: the agent can read, so you never open that file. Either
+way, pass it verbatim: do not add to it, do not explain it.
 
 ## Concurrency
 
@@ -71,8 +72,8 @@ Used by triage, read, figure check and counterpoints.
 
 1. Run the step's list command, or build the list as the step says. Every entry
    has a `launch` value, and **that value is the agent's whole prompt** (for
-   triage it is a block of several lines, for a counterpoint the text of its
-   filled prompt file).
+   triage it is a block of several lines, for a counterpoint the one-line
+   `Read <path> and follow it.` naming its filled prompt file).
 2. Launch up to `agents_active_max` of them as `Agent` calls **in one message**:
    `subagent_type` is the step's agent, `prompt` is that line verbatim,
    `description` is `<step> <id>`, `run_in_background: true`.
@@ -311,9 +312,14 @@ Each agent looks in one place: the other articles of its lead's own news item.
 The question is whether those reports carry a positive element bearing on the
 lead's problem. Nowhere else in the day counts.
 
-For each lead, `fill counterpoint --run <run_dir> --article <id>` and read the
-file it names: that text is the story's launch line. Then **run the rolling
-pool** with `ybs4-counterpoint`. Each agent writes its own counterpoint file.
+Run `fill counterpoint --run <run_dir> --article <id>` for **every lead in one
+Bash call**, one command per lead. Each prints a path, and that story's launch
+line is `Read <path> and follow it.`: do not open the file, the agent reads it.
+Then **run the rolling pool** with `ybs4-counterpoint`: **all the leads' agents
+in one message**. Five leads is five `Agent` calls in the same message, never
+one per turn; a counterpoint agent runs for a minute, and launching them one
+at a time cost more than the agents did. Each agent writes its own
+counterpoint file.
 
 Two answers arrive without an agent. When the lead is alone in its item, `fill`
 prints `"alone_in_item": true` with `"launch": false` and no prompt file: it has

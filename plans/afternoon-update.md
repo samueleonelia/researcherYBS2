@@ -17,11 +17,11 @@ Samuele's own shape of it, in order:
    only when there is an actual development or new data. Nothing new, nothing
    written. Signal over noise.
 
-Plus, from the first description: it ends with the unresolved stories to watch
-and what would settle each one; every update is labelled as a development, a
-confirmation, a reversal or a correction; and the morning's rules hold: figures
-checked against the page, every ceiling a ceiling, nothing invented, nothing
-written by hand.
+Plus, from the first description: every update is labelled as a development,
+a confirmation, a reversal or a correction; and the morning's rules hold:
+figures checked against the page, every ceiling a ceiling, nothing invented,
+nothing written by hand. There is no "still open" list: what is relevant is
+only what moved (Samuele, 2026-09-09).
 
 ## 1. The one design decision
 
@@ -52,7 +52,7 @@ template title (`10:00`).
 
 **Base ids.** The morning and the afternoon both number their articles
 `a001…`, so a bare id is ambiguous. Everywhere the afternoon refers to a
-morning article, in a prompt, in `follows`, in a watch entry, in a count, it is
+morning article, in a prompt, in `follows`, in a count, it is
 written **`m:<id>`** (`m:a032`). Code strips the prefix to reach the base run's
 files and refuses a bare id where a base id is expected.
 
@@ -84,19 +84,18 @@ second version, if a live run shows it is needed.
 | 7 pick | `pick.md` | `pick-update.md`, chosen by `fill pick` from the slot; `picks-sync` checks the afternoon tags and ceilings |
 | 8 check | same | same |
 | 9 counterpoints | one per LEAD | nothing: there is no LEAD tag, and `picks-sync` lists no leads |
-| 10 write | three writers, `morning.md` | three writers, `afternoon.md`; `x-wait` and `x-merge` see `skipped` and do nothing; the audit line is the afternoon's |
+| 10 write | three writers, `morning.md` | two writers, `afternoon.md`; `x-wait` and `x-merge` see `skipped` and do nothing; the audit line is the afternoon's |
 
 ## 4. Changes, file by file
 
 ### 4.1 `settings.md`
 
-Three rows under `## Numbers`:
+Two rows under `## Numbers`:
 
 | Setting | Value | What it means |
 |---|---|---|
-| update_picks_max | 10 | stories that may reach the afternoon update, new and moved together |
-| watch_max | 5 | stories the afternoon update may list as still open |
-| new_item_articles_min | 3 | articles an afternoon item that follows no morning story must hold before it is read; the one floor in this table, and the note under it says so |
+| update_picks_max | 15 | stories that may reach the afternoon update, new and moved together |
+| new_item_articles_min | 10 | articles an afternoon item that follows no morning story must hold before it is read; the one floor in this table, and the note under it says so |
 
 The note: "`new_item_articles_min` is a floor, not a ceiling: it is the size
 at which a story the morning did not have counts as big enough to be new. A
@@ -132,10 +131,6 @@ so `template_head` reads `16:00` out of it as it reads `10:00` today.
 
 1. [<Article headline>](<url>) — <Source>
 
-## Still open
-
-1. **<the story, in a few words>.** <what is unresolved>. Settled by: <what would settle it>.
-
 {{X_SECTION}}
 {{AUDIT_LINE}}
 ```
@@ -145,7 +140,7 @@ Rules of the shape, in the template's own words, none of them copied from
 where a rule is the morning's, the template says "as `morning.md` says" and
 does not restate it):
 
-- The three sections are fixed and in this order. New first, because it is
+- The two sections are fixed and in this order. New first, because it is
   what he does not know yet. A section with nothing qualifying is omitted.
 - `NEW` picks go under New since the morning. `MOVED` picks go under What
   moved, **in the order the morning brief ran them**, which code fixes before
@@ -155,11 +150,10 @@ does not restate it):
 - Together the two sections hold at most `{{settings.update_picks_max}}`
   stories. A story's heading, body and sources take the three-part form
   `morning.md` gives, and nothing here repeats it.
-- Still open is a numbered list of at most `{{settings.watch_max}}` lines and
-  carries no source list: each entry names a story the reader already has.
-- When no section has anything, code writes the head and one line: `Nothing
-  has moved since the morning brief.` That sentence lives here and nowhere
-  else.
+- When no section has anything, code writes the head and one sentence
+  saying nothing has moved since the morning. The sentence is a constant in
+  `ybs_run.py` (`EMPTY_UPDATE_LINE`); the template does not quote it, so it
+  has one home.
 - `{{X_SECTION}}` and `{{AUDIT_LINE}}` as in the morning: code removes the
   first (the afternoon has no X section) and fills the second.
 
@@ -228,17 +222,10 @@ those sentences to the fragment and keeps only its own. The prompt's job:
   `NEW` only if the note shows it has moved past the reason it was dropped
   for; the dropped list is there so a deliberate morning decision is not
   undone by a second headline.
-- **Still open**: up to `{{settings.watch_max}}` entries, each `{"story":
-  "<m:<id> or an afternoon note id>", "open": "<one line>", "settles": "<one
-  line>"}`. `open` comes from what the notes leave unresolved (`WEAK SPOTS`,
-  `WHAT'S NOT HERE`, a contested claim); `settles` names the fact, statement,
-  ruling or figure that would close it. A story that moved may still be open.
-  An entry never retells a story: it names it in a few words and says what is
-  missing.
-- Ceilings: at most `{{settings.update_picks_max}}` picks across both tags,
-  `watch_max` entries. Every note picked once or dropped once, as today.
+- Ceilings: at most `{{settings.update_picks_max}}` picks across both tags.
+  Every note picked once or dropped once, as today.
 - Output: one JSON object: `picks` (`id`, `tag`, `kind` for MOVED, `why`),
-  `dropped` (with the fifth reason type), `watch`.
+  `dropped` (with the fifth reason type).
 
 `SCHEMA["reason_type"]` gains `unchanged`: "the morning brief already carries
 this, and the note adds nothing that moves it". `SCHEMA["tag"]` becomes
@@ -259,15 +246,8 @@ writers learn their job, and `section_job()` in code becomes slot-aware:
   morning, in one sentence; what that does to the morning's story; what is
   still not established. Never retell the morning's story: one clause saying
   what the morning had is the most it gets."
-- `watch`: "You write `## Still open`. Your input is the watch list, not
-  picks: each entry names a story, what is unresolved and what would settle
-  it, with the note it came from. One numbered line per entry: the story in a
-  few words in bold, the open question, then `Settled by:` and the fact that
-  would settle it. No sources, no new facts, nothing the notes do not say."
 
-`{{PICKS}}` for the `watch` writer is the watch block (each entry with the
-note it cites, the base note for an `m:` story); for `moved` it is the picks
-block in base order with, above each afternoon note, the morning's line (`THE
+`{{PICKS}}` for the `moved` writer is the picks block in base order with, above each afternoon note, the morning's line (`THE
 MORNING HAD:` headline, `WHAT HAPPENED`, `WHAT'S NEW`). `{{COUNTERPOINTS}}`
 says "None: the afternoon update carries no counterpoints."
 
@@ -291,7 +271,7 @@ which in the afternoon is every pick.
 
 **Sections and tags per slot.** `WRITE_SECTIONS` and `TAG_OF_SECTION` become
 one table keyed by slot: `morning: leads→LEAD, body→BODY, worth→WORTH`;
-`afternoon: new→NEW, moved→MOVED, watch→(the watch list)`. The argparse
+`afternoon: new→NEW, moved→MOVED`. The argparse
 `--section` choices are the union of both slots' names, evaluated before the
 run is known; `cmd_fill` rejects a section that is not in the run's slot.
 `template_headings`, `section_job` and `write-stitch` read the run's slot.
@@ -309,26 +289,20 @@ them as `small_new_items`. The read list carries `follows` on each entry, and
 
 **`picks-sync`**: tags from the slot. For an afternoon run: `MOVED` needs a
 `kind` from the four; a `MOVED` pick's item must `follows` a base id and a
-`NEW` pick's item must not; `watch` is at most `watch_max` entries, each with
-a `story` that is `m:<id>` for a base pick or an afternoon note id, and
-non-empty `open` and `settles`; over `update_picks_max` is trimmed fewest
-articles first, `NEW` before `MOVED`; `picks` may be empty when `watch` is
-not. `picks_mix` gains `follow`. Counts recorded: `new`, `moved` by kind,
-`watch`. `leads` in the output is empty, so step 9 has nothing to launch.
+`NEW` pick's item must not; over `update_picks_max` is trimmed fewest
+articles first, `NEW` before `MOVED`; `picks` may be empty, and that is not a
+failure. `picks_mix` gains `follow`. Counts recorded: `new`, `moved` by kind.
+`leads` in the output is empty, so step 9 has nothing to launch.
 The morning's `picks.json` is never written.
 
 **`picks_block`** for `moved` orders the picks by the base run's pick order,
 so the writer and the stitch agree on it.
 
-**`write-stitch`**: sections from the slot; the `watch` section is required
-when `watch` is non-empty and skipped when it is empty; the URL check runs
-for `new` and `moved` and not for `watch`; every `###` under What moved must
-start with one of the four kinds, and the `moved` URLs must appear in base
-order; with no picks and a watch list the brief is the head plus Still open;
-with nothing at all it is the head plus the template's one sentence, and the
-stitch says so in its output. `fill write --section watch` renders when
-`watch` is non-empty even with no picks. `template_head` takes the run and
-fills `{{BASE_TIME}}`.
+**`write-stitch`**: sections from the slot; every `###` under What moved
+must start with one of the four kinds, and the `moved` URLs must appear in
+base order; with no picks at all the brief is the head plus
+`EMPTY_UPDATE_LINE`, and the stitch says so in its output instead of dying.
+`template_head` takes the run and fills `{{BASE_TIME}}`.
 
 **`x-start`**: for an afternoon run, `skip("the afternoon has no X section")`
 before any other check. `x-wait` and `x-merge` already handle `skipped`.
@@ -339,8 +313,8 @@ line does not report X for a run that never had it.
 <base run_id>): 6 of 6 sources screened · N articles new since the morning
 (M already seen) · undated … · kept … · items (F following a morning story,
 S new but too small to read) · read · notes with a figure removed · K new ·
-L moved (a developments, b confirmations, c reversals, d corrections) · W
-still open · profile of … · retries · failures.`
+L moved (a developments, b confirmations, c reversals, d corrections) ·
+profile of … · retries · failures.`
 
 ### 4.7 `SKILL.md`
 
@@ -366,14 +340,15 @@ still open · profile of … · retries · failures.`
 - `items-sync`: `follows` rejected in a morning run; a bare id or a non-pick
   rejected in an afternoon run; followers grouped `follow-read` first; a small
   new item is not read and is counted.
-- `picks-sync` afternoon: tags, `kind`, `follows` consistency, `watch` shape
-  and ceiling, `unchanged` reason, trim order, empty picks with a watch list,
-  `leads` empty, the base's `picks.json` untouched.
+- `picks-sync` afternoon: tags, `kind`, `follows` consistency, `unchanged`
+  reason, trim order, empty picks accepted, `leads` empty, the base's
+  `picks.json` untouched.
 - `fill pick` writes `prompts/pick.md` from `pick-update.md` in an afternoon
   run; `fill counterpoint` refuses a `MOVED` pick; `fill write --section
   leads` is refused in an afternoon run.
-- `write-stitch` afternoon: three sections, `watch` optional, kind prefix and
-  base order checked, `{{BASE_TIME}}` filled, the empty-update sentence.
+- `write-stitch` afternoon: two sections, kind prefix and base order
+  checked, `{{BASE_TIME}}` filled, `EMPTY_UPDATE_LINE` when nothing was
+  picked.
 - `x-start` afternoon: `skipped`, and the audit line carries no X bit.
 - `audit-line` afternoon shape.
 
@@ -408,7 +383,7 @@ The usual entries. README's one line on `/ybs-brief` gains the slot.
    `read-list`, `notes_block`; tests. Commit.
 3. `_pick-rules.md`, `pick-update.md`, `pick.md` trimmed, `picks-sync`, `fill
    pick`; tests. Commit.
-4. `section_job`, `picks_block` for `moved` and `watch`, `write-stitch`,
+4. `section_job`, `picks_block` for `moved`, `write-stitch`,
    `template_head`, `x-start` skip, audit line; tests. Commit.
 5. `SKILL.md`, README, DEVLOG, STATUS. Commit.
 6. One live `/ybs-brief afternoon` against today's morning run, timed from

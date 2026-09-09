@@ -47,7 +47,8 @@ Three files are yours to edit:
 
 - `preferences.md` — what you want from the brief, in your own words
 - `sources.md` — which news sites are read, and which X lists (at the bottom,
-  under "X lists" — one line each, add or delete a line and that is the change)
+  under "X lists" — one line each, a name and a link, add or delete a line and
+  that is the change)
 - `settings.md` — every number, all three jobs: how many stories reach the
   brief under "The article brief", the X section's own numbers under "The X
   list", and the shows' numbers under "The shows". Every model each step runs

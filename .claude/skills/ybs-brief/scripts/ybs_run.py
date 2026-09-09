@@ -240,7 +240,6 @@ SCHEMA = {
         "counterpoint": "ybs cp <id>",
     },
     "sentinel": {
-        "session_down": "SESSION_DOWN",
         "truncated": "PAGE_TRUNCATED",
         "no_case": "NONE",
         "no_figures": "no figures",
@@ -1349,8 +1348,7 @@ def cmd_fill(args):
                    {"slug": slug, "attempt": attempt, "started_utc": iso(utc_now()),
                     "token": f"{slug}-a{attempt}-{os.getpid()}", "done": False})
         ns.update({"SOURCE_NAME": sname, "SLUG": slug,
-                   "SOURCE_URL": s["front_page"], "MARKER": s.get("marker") or "",
-                   "MARKER_JSON": json.dumps(s.get("marker") or ""),
+                   "SOURCE_URL": s["front_page"],
                    "SOURCE_JSON": json.dumps(sname),
                    "ATTEMPT": str(attempt),
                    "TASK_SPACE": f"ybs screen {slug} a{attempt}"})
@@ -1553,17 +1551,19 @@ X_WAIT_MINUTES = SETTINGS["x_wait_minutes_max"]
 X_LISTS_HEADING = "x lists"
 
 
-def read_sources(root: Path) -> list:
-    """Read sources.md. One source per line, in any of these shapes:
+def read_sources(root: Path) -> tuple:
+    """Read sources.md. One source per line, in either of these shapes:
 
         1. Guardian - https://www.theguardian.com/
         - Reason - https://reason.com/
-        WSJ - https://www.wsj.com/ - Sign Out
 
-    The list marker and its number are ignored, so nothing needs renumbering.
-    A third part is the logged-in marker for a paid site: text that only appears
-    on the page when the session is alive. Lines without a link are ignored,
-    which is why the notes at the top of the file are harmless.
+    A line is a name and a link, and nothing else. The list marker and its
+    number are ignored, so nothing needs renumbering. Lines without a link are
+    ignored, which is why the notes at the top of the file are harmless.
+
+    Returns `(rows, notices)`. A line that still carries a third part is read
+    all the same -- an older copy of this file used one as a logged-in marker --
+    but the part is dropped and the line earns a notice, which `start` prints.
 
     Lines under the `## X lists` heading are NOT news sources: they belong to
     the X half of the run and are read by `read_x_lists` instead. A front page
@@ -1573,7 +1573,7 @@ def read_sources(root: Path) -> list:
     f = root / "sources.md"
     if not f.exists():
         die("sources.md not found at " + str(f))
-    rows = []
+    rows, notices = [], []
     section = ""
     for line in f.read_text(encoding="utf-8").splitlines():
         if line.startswith("    ") or line.startswith("\t"):
@@ -1591,22 +1591,24 @@ def read_sources(root: Path) -> list:
         if not url or parts[0] == url:
             continue
         i = parts.index(url)
+        name = " - ".join(parts[:i])
+        if parts[i + 1:]:
+            notices.append(f'sources.md: "{name}" has a third part; it is no '
+                           f'longer used, delete it')
         rows.append({
-            "name": " - ".join(parts[:i]),
-            "slug": slugify(" - ".join(parts[:i])),
+            "name": name,
+            "slug": slugify(name),
             "front_page": url,
-            "marker": " - ".join(parts[i + 1:]) or "FREE",
         })
     if not rows:
         die("sources.md lists no sources (each line needs a name and a link)")
-    return rows
+    return rows, notices
 
 
 def read_x_lists(root: Path) -> list:
     """Read the `## X lists` section of sources.md: `1. Name - https://x.com/...`.
 
-    Same forgiving line shape as a news source, minus the logged-in marker (the
-    X half checks the logged-in handle itself). An empty or absent section is
+    Same forgiving line shape as a news source. An empty or absent section is
     not an error: the X half then has nothing to read and says so.
     """
     f = root / "sources.md"
@@ -1635,7 +1637,10 @@ def read_x_lists(root: Path) -> list:
 
 
 def cmd_sources(args):
-    print(json.dumps({"sources": read_sources(project_root()),
+    rows, notices = read_sources(project_root())
+    for n in notices:
+        print(n, file=sys.stderr)
+    print(json.dumps({"sources": rows,
                        "x_lists": read_x_lists(project_root())},
                       indent=2, ensure_ascii=False))
     return 0
@@ -1708,6 +1713,12 @@ def find_base(named: str, local_date: str) -> dict:
 
 def cmd_start(args):
     root = project_root()
+    # Read the source list first, and say once what is stale in it. The notice
+    # goes to stderr because stdout is this command's JSON and the skill parses
+    # it; a line of prose in the middle would break the run rather than warn it.
+    sources, notices = read_sources(root)
+    for n in notices:
+        print(n, file=sys.stderr)
     now, local = utc_now(), datetime.now()
     local_date = local.strftime("%Y-%m-%d")
     # The afternoon is an update of one named brief, so the base is settled
@@ -1739,10 +1750,10 @@ def cmd_start(args):
         "completed_utc": None,
         "status": "running",
         "sources": {s["name"]: {"slug": s["slug"], "front_page": s["front_page"],
-                                "marker": s["marker"], "status": "pending",
+                                "status": "pending",
                                 "listed": 0, "in_window": 0, "undated": 0,
                                 "kept": 0, "retries": 0}
-                    for s in read_sources(root)},
+                    for s in sources},
         "counts": {},
         "events": [],
     }
@@ -3137,8 +3148,7 @@ def build_audit_line(run_dir: Path) -> str:
     c = d.get("counts", {})
     evs = d.get("events", [])
     retries = sum(1 for e in evs if e.get("retry"))
-    failures = [e for e in evs if "fail" in e.get("type", "").lower()
-                or e.get("type", "").lower() == "session_down"]
+    failures = [e for e in evs if "fail" in e.get("type", "").lower()]
     cps = [f for f in (run_dir / "picks").glob("cp-*.md")
            if f.read_text(encoding="utf-8").strip() != "NONE"]
     und = {n: s["undated"] for n, s in d.get("sources", {}).items() if s.get("undated")}

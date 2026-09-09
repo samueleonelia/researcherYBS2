@@ -78,7 +78,7 @@ def fenced_block(text):
 # asks for must be a fragment, a setting or a schema name.
 RUN_VARS = {
     "DATE", "SLOT", "RUN_DIR", "WINDOW_START", "WINDOW_END",
-    "SOURCE_NAME", "SLUG", "SOURCE_URL", "MARKER", "MARKER_JSON", "SOURCE_JSON",
+    "SOURCE_NAME", "SLUG", "SOURCE_URL", "SOURCE_JSON",
     "ATTEMPT", "TASK_SPACE",
     "ARTICLES", "NOTES", "NOTE_IDS", "NOTE_COUNT",
     "PICKS", "COUNTERPOINTS", "TEMPLATE", "SECTION_JOB",
@@ -151,6 +151,23 @@ def test_placeholders():
     for s in ("What leads", "Secondary Topics", "Worth Yaron", "COUNTERPOINT -",
               "AUDIT_LINE"):
         check(f"write.md does not restate the shape ({s})", s not in wr)
+
+
+def test_screen_prompt_has_no_login_check():
+    """A source line is a name and a link. The screener runs one command for
+    every source and never judges whether a login is alive, so neither the word
+    that used to prove it nor the sentinel it raised may survive rendering."""
+    print("\nthe rendered screen prompt asks nothing about a login")
+    rd = fresh_run()
+    try:
+        out, code = run("fill", "screen", "--run", rd, "--source", "bbc")
+        check("fill screen renders", code == 0, str(out)[:200])
+        text = Path(out["file"]).read_text() if code == 0 else ""
+        for word in ("SESSION_DOWN", "marker", "MARKER"):
+            check(f"the rendered prompt does not mention {word!r}",
+                  word not in text)
+    finally:
+        shutil.rmtree(rd, ignore_errors=True)
 
 
 def test_pass_through():
@@ -451,6 +468,7 @@ def main():
     test_nothing_is_said_twice()
     test_numbers_live_in_settings()
     test_pass_through()
+    test_screen_prompt_has_no_login_check()
     test_agent_files_are_generated()
     test_agents_match_skill()
     test_examples_are_valid_json()

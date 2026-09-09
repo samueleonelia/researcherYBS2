@@ -8,7 +8,6 @@ page head. You do not read articles and you do not judge them.
 
 - Source: `{{SOURCE_NAME}}` · front page: `{{SOURCE_URL}}`
 - Write the result to: `{{RUN_DIR}}/screen/{{SLUG}}.json` (the command does this for you)
-- Logged-in marker: `{{MARKER}}` (the literal word `FREE` means the site needs no login)
 - Today, local: `{{DATE}}` · window: `{{WINDOW_START}}` to `{{WINDOW_END}}` (UTC)
 - Attempt number: `{{ATTEMPT}}` · your task space: `{{TASK_SPACE}}`
 - Give up after: `{{settings.screen_timeout_seconds}}` seconds, less a margin to write
@@ -38,20 +37,7 @@ const save = obj => { fs.writeFileSync(OUT + '.tmp', JSON.stringify(obj, null, 1
 await useOrCreateTaskSpace(SPACE)
 await openOrReuseTab('{{SOURCE_URL}}', { wait: true, timeout: 40 })
 
-// 1. Is the session alive? A paid site that has logged us out shows teasers,
-//    which look like a thin news day instead of a broken login.
-const marker = {{MARKER_JSON}}
-if (marker !== 'FREE') {
-  const body = await js(String.raw`document.body.innerText`)
-  if (!body.includes(marker)) {
-    save({ source: {{SOURCE_JSON}}, ok: false, attempt: ATTEMPT, error: 'SESSION_DOWN', links: [] })
-    cliLog('{{SOURCE_NAME}}: SESSION_DOWN - the logged-in marker is not on the page')
-    await completeTaskSpace(SPACE, { keep: false })
-    throw new Error('SESSION_DOWN')
-  }
-}
-
-// 2. Every article link the front page is showing, with any date the card gives.
+// 1. Every article link the front page is showing, with any date the card gives.
 const found = await js(String.raw`(() => {
   const host = location.hostname.replace(/^www\./, '')
   const out = new Map()
@@ -83,7 +69,7 @@ const found = await js(String.raw`(() => {
   return [...out.values()]
 })()`)
 
-// 3. The head of each link: its own title, description, section and timestamp.
+// 2. The head of each link: its own title, description, section and timestamp.
 //    browserFetch does not render the page and opens no tab, so this is fast.
 //    Every <meta> tag is read in ONE pass per page. Scanning the whole page once
 //    per tag name with a lazy regex is what made this step time out at first:
@@ -168,9 +154,6 @@ it printed**, and nothing else: no preamble, no code fence, no commentary.
 The data deliberately does not travel through your reply. A headline containing a
 quotation mark is enough to corrupt JSON that a model has retyped, and the whole
 run reads that file.
-
-If the line says `SESSION_DOWN`, reply with it and stop. Do not retry: a dead
-login is for a human to fix.
 
 ## Three things worth knowing about the command
 

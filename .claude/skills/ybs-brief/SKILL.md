@@ -168,10 +168,6 @@ the run go on without that source.
 Wait for the gate. Do not launch a screener from a prompt file `fill --retry`
 has not just printed.
 
-- A screener that replies `SESSION_DOWN`: **no retry.** Record it with
-  `event --type session_down --source <slug>` and continue. A dead login is for
-  a human to fix, and retrying just collects teaser pages.
-
 ```bash
 python3 .claude/skills/ybs-brief/scripts/ybs_run.py screen-sync --run <run_dir>
 ```
@@ -442,7 +438,6 @@ path to `brief.md` to the user. Nothing else.
    the agent's label, never by reading the content and guessing.
 4. **One retry, then honesty.** Any agent may be retried once. After that the
    failure is recorded with `event` and shows up in the audit line.
-   `SESSION_DOWN` is never retried.
 5. **A reader never reads a page it did not save itself**, and never a page saved
    for a different article.
 6. **The figure check never drops a note**, and never edits one except to strike

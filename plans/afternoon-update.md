@@ -387,3 +387,43 @@ The usual entries. README's one line on `/ybs-brief` gains the slot.
 6. One live `/ybs-brief afternoon` against today's morning run, timed from
    `run.json`. Expected: about 20 to 25 minutes, since most of the day's
    articles are already seen and dropped at `screen-sync`.
+
+## 7. Addenda
+
+Settled by the verifier after the plan was written, and binding on the
+implementation.
+
+1. **`_pick-rules.md` holds no placeholder.** `render` is one pass, so a
+   `{{…}}` inside a fragment is pasted, never filled, and the prompt tests
+   refuse it. The drop-reason lists stay in each prompt file, written out with
+   their `{{schema.reason_type.*}}` names: `pick.md` keeps four,
+   `pick-update.md` lists five.
+2. **The prompt test's own lists.** `namespace_names()` in
+   `tests/test-prompts-v4.py` hard-codes the fragment names, so `PICK_RULES`
+   goes in there; `SLOT_JOB`, `BASE_STORIES`, `BASE_DROPPED` and `BASE_TIME`
+   go in `RUN_VARS`.
+3. **`follows` names a base pick, and only a base pick.** An article about a
+   story the morning read and then dropped is `follows: null`, and it faces
+   `new_item_articles_min` like any other new item. So the cluster's
+   `{{SLOT_JOB}}` block lists the base picks only; the morning's dropped list
+   goes to `pick-update.md` alone, as `{{BASE_DROPPED}}`.
+4. **One base pick, one follower.** Two afternoon picks may not follow the
+   same base pick: `picks-sync` rejects it, and `pick-update.md` says to keep
+   the one carrying the movement and drop the other as `duplicate`.
+5. **The follower worked example lives in the `{{SLOT_JOB}}` block**, which
+   code builds, never in `cluster-select.md`'s ```json example: the prompt
+   tests run that example through `items-sync` on a morning run, where a
+   non-null `follows` is rejected.
+6. **The built agent files are static per build**, so `agents/pick.md.tmpl`
+   must state no ceiling and no tag names ("your prompt says how many you may
+   keep", "tags each as the prompt says"), and `agents/write.md.tmpl` says
+   "one brief", not "one morning brief". Run `ybs_run.py build` after.
+
+Three smaller settlements, of the same kind:
+
+- The empty-update sentence is a constant in `ybs_run.py`
+  (`EMPTY_UPDATE_LINE`); the template does not quote it.
+- `--section` argparse choices are the union of both slots' section names,
+  and `cmd_fill` refuses a section that is not in the run's own slot.
+- `template_headings` counts per slot: three sections for morning, two for
+  afternoon.

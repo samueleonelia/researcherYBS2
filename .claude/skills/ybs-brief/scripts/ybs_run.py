@@ -970,11 +970,51 @@ def sibling_lines(run_dir: Path, records: list) -> str:
     return "\n".join(lines).strip()
 
 
-def picks_block(run_dir: Path, tag: str = None) -> str:
+def base_rank(run_dir: Path, run: dict) -> dict:
+    """Where each pick of this run sits in the order the brief being updated ran.
+
+    An update's second section is read against the brief it follows, so its
+    stories come in that brief's order and not in the update's own. The rank of
+    a pick is the rank of the story it follows; a pick following nothing sorts
+    last, which in a checked run is a pick that does not belong here at all.
+    One home for the order, so the writer's prompt and the stitch's check can
+    never disagree about it.
+    """
+    base_dir = base_run_dir(run)
+    base_picks = (load_json(base_dir / "picks" / "picks.json")
+                  or {}).get("picks") or []
+    rank = {f"m:{p['id']}": i for i, p in enumerate(base_picks) if p.get("id")}
+    items = (load_json(run_dir / "items" / "plan.json") or {}).get("items") or []
+    item_of = {a: it for it in items for a in (it.get("articles") or [])}
+    last = len(rank)
+    return {a: rank.get(it.get("follows"), last)
+            for it in items for a in (it.get("articles") or [])}
+
+
+def base_line(run: dict, aid: str) -> list:
+    """The line the brief being updated ran for one of its own stories.
+
+    Three fields and no more: what it said happened, and what was new in it
+    then. That is the thing the update's writer measures the afternoon note
+    against, and everything else in the base note would only invite a retelling.
+    """
+    base_dir = base_run_dir(run)
+    note = base_dir / "notes" / f"{aid}.md"
+    text = note.read_text(encoding="utf-8") if note.exists() else ""
+    head = re.sub(r"\s+", " ", note_field(text, "HEADLINE")).strip()
+    out = [f"THE MORNING HAD: {head or '-'}"]
+    for field in ("WHAT HAPPENED", "WHAT'S NEW"):
+        out.append(f"{field}: {note_field(text, field) or '-'}")
+    return out
+
+
+def picks_block(run_dir: Path, run: dict, tag: str = None) -> str:
     """Every picked note with its tag and its item's full article list.
 
     With a tag, only the picks carrying it: one section writer sees its own
-    stories and nothing else.
+    stories and nothing else. An update's moved stories arrive in the order the
+    brief being updated ran them, each under the line that brief carried, so the
+    writer can say what changed without going looking for what was there before.
     """
     picks = (load_json(run_dir / "picks" / "picks.json") or {}).get("picks") or []
     if tag:
@@ -983,23 +1023,43 @@ def picks_block(run_dir: Path, tag: str = None) -> str:
             ((load_json(run_dir / "articles.json") or {}).get("articles") or [])}
     items = (load_json(run_dir / "items" / "plan.json") or {}).get("items") or []
     item_of = {a: it for it in items for a in (it.get("articles") or [])}
+    moved = run.get("slot") == "afternoon" and tag == "MOVED"
+    if moved:
+        rank = base_rank(run_dir, run)
+        picks = sorted(picks, key=lambda p: rank.get(p["id"], len(rank)))
     out = []
     for p in picks:
         note = run_dir / "notes" / f"{p['id']}.md"
         if not note.exists():
             continue
-        out.append(f"{p['id']} · {p.get('tag', '-')}")
+        head = [p["id"], p.get("tag", "-")]
+        if p.get("kind"):
+            # An update's heading opens with the kind, so the writer is given it.
+            head.append(str(p["kind"]).strip().lower())
+        out.append(" · ".join(head))
         siblings = (item_of.get(p["id"], {}).get("articles") or [])
         out.append("SOURCES, the picked article first:")
         for a in [p["id"]] + [x for x in siblings if x != p["id"]]:
             r = arts.get(a, {})
             title = (r.get("title") or "").strip() or r.get("url", "-")
             out.append(f"- {title} · {r.get('source', '-')} · {r.get('url', '-')}")
+        if moved:
+            follows = item_of.get(p["id"], {}).get("follows") or ""
+            m = BASE_ID.match(follows) if follows else None
+            if m:
+                out += base_line(run, m.group(1))
+            out.append("THE AFTERNOON'S NOTE:")
         out.append(note.read_text(encoding="utf-8").strip())
         out.append("")
     if not out:
         die("no picked note has a file; nothing to write from")
     return "\n".join(out).strip()
+
+
+# An update has no lead story, so it has no counterpoint either, and step 9
+# never runs on one. Its writers are told that outright rather than handed an
+# empty block, which reads as a hole.
+NO_COUNTERPOINTS = "None: the afternoon update carries no counterpoints."
 
 
 def counterpoints_block(run_dir: Path) -> str:
@@ -1065,11 +1125,32 @@ def template_time(tpl: str) -> str:
     return m.group(1) if m else "00:00"
 
 
+# The one sentence a brief carries when the update found nothing at all. It
+# lives here rather than in the template because code writes it: no writer is
+# ever launched on a run with no picks.
+EMPTY_UPDATE_LINE = "Nothing has moved since the morning brief."
+
+
+def head_vars(run: dict) -> dict:
+    """What the head line of this run's template asks code for, if anything.
+
+    Only an update has one: it names the brief it follows by that brief's own
+    clock time, which `start` wrote down when it found it. A morning template
+    asks for nothing, so this answers with nothing and `fill` keeps refusing a
+    template that asks for a name nobody provides.
+    """
+    if run.get("slot") != "afternoon":
+        return {}
+    return {"BASE_TIME": (run.get("base") or {}).get("time") or "-"}
+
+
 def template_head(tpl: str, run: dict) -> str:
     """The lines above the first section, with the date filled in.
 
     The template writes the date line as `<D Month YYYY at HH:MM>`; the day is
-    the run's, the time is the slot's, taken from the template's own title.
+    the run's, the time is the slot's, taken from the template's own title. A
+    placeholder in the head is filled from the same namespace `fill` uses, so
+    the head the writer was shown and the head that is stitched are one text.
     """
     when = template_time(tpl)
     d = datetime.strptime(run["local_date"], "%Y-%m-%d")
@@ -1079,23 +1160,48 @@ def template_head(tpl: str, run: dict) -> str:
         if line.startswith("## "):
             break
         head.append(re.sub(r"<[^>]*>", stamp, line))
-    return "\n".join(head).strip()
+    text, _ = render("\n".join(head).strip(), head_vars(run))
+    return text
+
+
+# How many writers a slot puts on one brief, in words, since the sentence that
+# tells a writer how many are beside it reads better with a word than a digit.
+WRITER_COUNT = {1: "One writer is", 2: "Two writers are", 3: "Three writers are"}
+
+# What the update's second writer is told, and nothing else is. The first
+# writer's job is the morning's, so it is not restated anywhere.
+MOVED_JOB = [
+    "- These stories reach you in the order the brief being updated ran them.",
+    "  Keep that order: it is the order he read them in this morning.",
+    "- Each one arrives twice. `THE MORNING HAD:` is the line that brief carried,",
+    "  and under it is the afternoon's own note.",
+    "- The heading opens with the pick's kind, capitalised, then ` - `, then the",
+    "  headline sentence.",
+    "- Write the story in this order: what changed since the morning, in one",
+    "  sentence; what that does to the story he already has; what is still not",
+    "  established.",
+    "- Never tell the morning's story again. One clause saying what it had is the",
+    "  most it gets.",
+]
 
 
 def section_job(run_dir: Path, run: dict, section: str, headings: list) -> str:
-    """What one section writer is told about its job, and about the other two.
+    """What one section writer is told about its job, and about the others.
 
     The other sections' stories are listed by headline so a writer does not
     retell a story another writer owns; that is all the cross-talk the
-    parallel write keeps.
+    parallel write keeps. How many writers there are, and whether this one is
+    writing what moved, both come from the run's slot.
     """
     picks = (load_json(run_dir / "picks" / "picks.json") or {}).get("picks") or []
     sections = sections_of(run)
     mine = headings[sections.index(section)]
+    n = len(sections)
     lines = [
         "## Your section",
         "",
-        "Three writers are at work on this brief at the same time, one per section,",
+        f"{WRITER_COUNT.get(n, f'{n} writers are')} at work on this brief at the "
+        f"same time, one per section,",
         "from the same notes and the same template, and code joins the sections in",
         f"the template's order. You write **one section only: `## {mine}`**.",
         "",
@@ -1105,6 +1211,8 @@ def section_job(run_dir: Path, run: dict, section: str, headings: list) -> str:
         "  no other section, no placeholder line: those belong to code or to the",
         "  other writers.",
     ]
+    if run.get("slot") == "afternoon" and section == "moved":
+        lines += MOVED_JOB
     others = []
     for other, heading in zip(sections, headings):
         if other == section:
@@ -1369,6 +1477,8 @@ def cmd_fill(args):
         # The template is rendered too, so it can name a setting without
         # restating its value. {{AUDIT_LINE}} passes through: code fills it in
         # once the brief is written.
+        update = run.get("slot") == "afternoon"
+        ns.update(head_vars(run))
         raw = template_source(run)
         tpl, tpl_missing = render(raw, ns)
         if tpl_missing:
@@ -1386,15 +1496,17 @@ def cmd_fill(args):
                 return 0
             headings = template_headings(raw, run)
             ns.update({"TEMPLATE": tpl,
-                       "PICKS": picks_block(run_dir, tag),
-                       "COUNTERPOINTS": counterpoints_block(run_dir) if section == "leads"
-                       else "None here. Counterpoints hang under the leads, "
-                            "and another writer is writing those.",
+                       "PICKS": picks_block(run_dir, run, tag),
+                       "COUNTERPOINTS": NO_COUNTERPOINTS if update
+                       else (counterpoints_block(run_dir) if section == "leads"
+                             else "None here. Counterpoints hang under the leads, "
+                                  "and another writer is writing those."),
                        "SECTION_JOB": section_job(run_dir, run, section, headings)})
         else:
             ns.update({"TEMPLATE": tpl,
-                       "PICKS": picks_block(run_dir),
-                       "COUNTERPOINTS": counterpoints_block(run_dir),
+                       "PICKS": picks_block(run_dir, run),
+                       "COUNTERPOINTS": NO_COUNTERPOINTS if update
+                       else counterpoints_block(run_dir),
                        "SECTION_JOB": ""})
 
     text, missing = render(src.read_text(encoding="utf-8"), ns)
@@ -2251,6 +2363,12 @@ REASON_TYPES = tuple(SCHEMA["reason_type"]["all"].split(" | "))
 # a MOVED pick carries one, and the four are the whole vocabulary.
 KINDS = tuple(SCHEMA["tag"]["kind"].split(" | "))
 
+# How a story of the update's second section opens: the kind it was picked with,
+# capitalised, then ` - `. The stitch is where that is checked, and the kinds
+# come from the same one list the pick is checked against.
+KIND_HEADING = re.compile(r"^### (?:" + "|".join(k.capitalize() for k in KINDS)
+                          + r") - \S")
+
 
 def cmd_picks_sync(args):
     """Validate picks/picks.json against the slot's tags and ceilings, then trim.
@@ -2820,7 +2938,20 @@ def cmd_write_stitch(args):
     headings = template_headings(raw, run)
     picks = (load_json(run_dir / "picks" / "picks.json") or {}).get("picks") or []
     if not picks:
-        die("no picks.json with picks; nothing to stitch")
+        if run.get("slot") != "afternoon":
+            die("no picks.json with picks; nothing to stitch")
+        # An update that picked nothing is the true answer to a quiet afternoon,
+        # not a failure: the head, one sentence, and the two lines code still
+        # fills after this, so x-merge and audit-line work as they always do.
+        brief = run_dir / "brief.md"
+        brief.write_text("\n\n".join([template_head(raw, run), EMPTY_UPDATE_LINE,
+                                      SCHEMA["x"]["placeholder"], "{{AUDIT_LINE}}"])
+                         + "\n", encoding="utf-8")
+        log_event(run_dir, "brief_stitched", "nothing moved since the morning")
+        print(json.dumps({"ok": True, "brief": str(brief), "sections": [],
+                          "ignored": [], "empty": True,
+                          "note": EMPTY_UPDATE_LINE}, indent=2, ensure_ascii=False))
+        return 0
     arts = {r["id"]: r for r in
             ((load_json(run_dir / "articles.json") or {}).get("articles") or [])}
     parts, problems, used, skipped = [template_head(raw, run)], [], [], []
@@ -2851,6 +2982,24 @@ def cmd_write_stitch(args):
             if url and url not in text:
                 problems.append(f"{section}: {p['id']} is picked for it but its "
                                 f"URL is not in {f.name}: {url}")
+        if run.get("slot") == "afternoon" and section == "moved":
+            # Two things the update's second section alone must get right: every
+            # story says how it moved, and they run in the order he read them in.
+            for line in text.splitlines():
+                if line.startswith("### ") and not KIND_HEADING.match(line):
+                    problems.append(
+                        f"{section}: {f.name} has a story whose heading does not "
+                        f"open with {' | '.join(k.capitalize() for k in KINDS)} "
+                        f"and ' - ': {line.strip()}")
+            rank = base_rank(run_dir, run)
+            at = [(text.find((arts.get(p["id"]) or {}).get("url") or ""), p["id"])
+                  for p in sorted(tagged, key=lambda p: rank.get(p["id"], len(rank)))]
+            at = [(pos, aid) for pos, aid in at if pos >= 0]
+            if [pos for pos, _ in at] != sorted(pos for pos, _ in at):
+                problems.append(
+                    f"{section}: {f.name} runs its stories in another order; the "
+                    f"brief being updated ran them "
+                    f"{', '.join(aid for _, aid in at)}")
         parts.append(text)
         used.append(f.name)
     if problems:
@@ -2910,7 +3059,7 @@ def cmd_x_merge(args):
     elif section:
         anchor = ("{{AUDIT_LINE}}" if "{{AUDIT_LINE}}" in text else
                   next((ln for ln in text.splitlines()
-                        if ln.startswith("Audit: ")), None))
+                        if AUDIT_OPENING.match(ln)), None))
         if anchor:
             text = text.replace(anchor, section + "\n\n" + anchor, 1)
         else:
@@ -2959,6 +3108,30 @@ def cmd_event(args):
     return 0
 
 
+def audit_opening(run: dict) -> str:
+    """How the audit line opens: which brief this is, and which one it updates.
+
+    A morning brief's line has opened `Audit: ` since v1 and still does. An
+    update says so in the same breath, and names the run it followed, so a
+    brief in a folder can be told from the brief above it without opening
+    anything else.
+    """
+    if run.get("slot") == "afternoon":
+        base = (run.get("base") or {}).get("run_id") or "an unrecorded run"
+        return f"Audit (afternoon, updates {base}): "
+    return "Audit: "
+
+
+# Both openings, for the one reader that has to find a line already written:
+# x-merge, placing its section above it. One home for the shape.
+AUDIT_OPENING = re.compile(r"^Audit(?: \([^)]*\))?: ")
+
+
+def plural(n: int, word: str) -> str:
+    """`1 development`, `2 developments`. Counts read as prose or not at all."""
+    return f"{n} {word}" + ("" if n == 1 else "s")
+
+
 def build_audit_line(run_dir: Path) -> str:
     d = load_run(run_dir)
     c = d.get("counts", {})
@@ -2975,23 +3148,51 @@ def build_audit_line(run_dir: Path) -> str:
     undated_bit = f"{sum(und.values())} undated links dropped"
     if und:
         undated_bit += " (" + ", ".join(f"{n} {k}" for n, k in sorted(und.items())) + ")"
+    update = d.get("slot") == "afternoon"
+    by_group = g.get("items_by_group", {})
+    if update:
+        # An update counts different things, because different things are the
+        # question: what the morning had not already seen, how much of the day
+        # was carried forward rather than found, and how the stories moved.
+        screened_bit = (f"{c.get('screened', 0)} articles new since the morning "
+                        f"({c.get('seen_this_morning', 0)} already seen)")
+        items_bit = (
+            f"{sum(by_group.values())} news items "
+            f"({by_group.get('follow-read', 0) + by_group.get('follow-maybe', 0)} "
+            f"following a morning story, "
+            f"{c.get('small_new_items', 0)} new but too small to read)")
+        kinds = c.get("moved_by_kind", {})
+        picks_bits = [
+            f"{c.get('new', 0)} new",
+            f"{c.get('moved', 0)} moved ("
+            + ", ".join(plural(kinds.get(k, 0), k) for k in KINDS) + ")",
+        ]
+    else:
+        screened_bit = f"{c.get('screened', 0)} articles in window"
+        items_bit = (f"{sum(by_group.values())} news items "
+                     f"({by_group.get('topic-read', 0)} on a current topic)")
+        picks_bits = [
+            f"{c.get('picks', 0)} in the brief ({c.get('leads', 0)} leads, "
+            f"{c.get('worth', 0)} worth attention)",
+            f"picks by group: {mix.get('topic', 0)} topic, {mix.get('beat', 0)} beat, "
+            f"{mix.get('maybe', 0)} maybe",
+        ]
     bits = [
         f"{c.get('sources_ok', 0)} of {len(d.get('sources', {}))} sources screened",
-        f"{c.get('screened', 0)} articles in window",
+        screened_bit,
         undated_bit,
         f"{c.get('kept', 0)} kept at triage"
         + (f" ({c['kept_by_category']} by section, no agent)"
            if c.get("kept_by_category") else ""),
-        f"{sum(g.get('items_by_group', {}).values())} news items "
-        f"({g.get('items_by_group', {}).get('topic-read', 0)} on a current topic)",
+        items_bit,
         f"{c.get('notes', 0)} read",
         f"{c.get('notes_struck', 0)} notes with a figure removed",
-        f"{c.get('picks', 0)} in the brief ({c.get('leads', 0)} leads, {c.get('worth', 0)} worth attention)",
-        f"picks by group: {mix.get('topic', 0)} topic, {mix.get('beat', 0)} beat, "
-        f"{mix.get('maybe', 0)} maybe",
-        f"profile of {profile_built}",
-        f"{len(cps)} counterpoints",
     ]
+    bits += picks_bits
+    bits.append(f"profile of {profile_built}")
+    if not update:
+        # An update has no lead, so it never ran a counterpoint to report.
+        bits.append(f"{len(cps)} counterpoints")
     x_bit = x_audit_bit(run_dir)
     if x_bit:
         bits.append(x_bit)
@@ -3002,7 +3203,7 @@ def build_audit_line(run_dir: Path) -> str:
     split = [e for e in evs if e.get("type") == "cluster_split"]
     if split:
         bits.append(f"clustered in {split[-1].get('detail') or 'parts'}")
-    return "Audit: " + " · ".join(bits) + "."
+    return audit_opening(d) + " · ".join(bits) + "."
 
 
 def cmd_audit_line(args):

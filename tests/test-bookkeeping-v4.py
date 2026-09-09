@@ -144,6 +144,7 @@ def build_morning(root, run_id, started, status="completed", links=(), picks=())
         for a in picks:
             (d / "notes" / f"{a}.md").write_text(
                 f"HEADLINE: the morning's story {a}\n"
+                f"WHAT HAPPENED: what {a} established at ten\n"
                 f"WHAT'S NEW: what {a} carried at ten\n", encoding="utf-8")
     return d
 
@@ -1069,6 +1070,11 @@ def afternoon_run(tmp, env, ids, follows, groups=None):
                                                 encoding="utf-8")
     write(rd / "items" / "plan.json", {"items": items, "near_misses": []})
     write(rd / "items" / "read-list.json", {"read": read})
+    write(rd / "articles.json", {"articles": [
+        {"id": a, "source": "Guardian", "url": f"https://example.com/{a}",
+         "title": f"headline of {a}", "description": "d", "category": "world",
+         "published": now_iso(-1), "also_in": []}
+        for it in items for a in it["articles"]]})
     return rd, [aid for aid, _ in pairs]
 
 
@@ -1372,6 +1378,195 @@ def test_write_sections(rd):
     for f in ("brief-leads.md", "brief-body.md", "brief-worth.md", "brief.md"):
         (rd / f).unlink(missing_ok=True)
     (rd / "picks" / "picks.json").write_text(picks_before)
+
+
+def script_const(name):
+    """One string constant read out of ybs_run.py, so no test restates it."""
+    m = re.search(r'^%s = "(.*)"$' % name, SCRIPT.read_text(), re.M)
+    return m.group(1) if m else None
+
+
+def afternoon_written(tmp, env):
+    """An update with its pick made: two stories that moved and one that is new.
+
+    The morning it follows ran three stories, and the two that moved carry the
+    second and the first of them, in that order, so every check below on the
+    order of the update is a real one: reading the picks as they were written
+    would put them the other way round.
+    """
+    build_morning(tmp, "2026-x_morning_100000", now_iso(-6),
+                  links=[f"https://www.theguardian.com/m/{i}" for i in (1, 2, 3)],
+                  picks=["a101", "a102", "a103"])
+    rd, _ = afternoon_run(tmp, env, ["a001", "a002", "a003"],
+                          {"a001": "m:a102", "a002": "m:a101"})
+    write(rd / "picks" / "picks.json", {
+        "picks": [{"id": "a001", "tag": "MOVED", "kind": "development", "why": "x"},
+                  {"id": "a002", "tag": "MOVED", "kind": "confirmation", "why": "x"},
+                  {"id": "a003", "tag": "NEW", "why": "x"}],
+        "dropped": []})
+    return rd
+
+
+def section_file(rd, name, heading, stories):
+    """One writer's reply, written by hand: a heading, then its stories."""
+    out = [f"## {heading}", ""]
+    for head, aid in stories:
+        out += [f"### {head}", "", "The story.", "",
+                f"1. [headline of {aid}](https://example.com/{aid}) — Guardian", ""]
+    (rd / f"brief-{name}.md").write_text("\n".join(out), encoding="utf-8")
+
+
+def test_write_afternoon():
+    """The update's two writers, and the stitch that joins them.
+
+    Everything runs inside a runs folder of its own, named by YBS_RUNS_DIR, so
+    the morning being updated is one this test wrote.
+    """
+    print("\nwrite: the afternoon's two sections")
+    tmp = Path(tempfile.mkdtemp(prefix="ybs-runs-"))
+    env = {"YBS_RUNS_DIR": str(tmp)}
+    try:
+        rd = afternoon_written(tmp, env)
+
+        _, r = run("fill", "write", "--run", rd, "--section", "leads", expect=2)
+        check("a morning section is refused in an update",
+              "is not a section of a afternoon run" in r.stderr, r.stderr.strip()[:200])
+
+        out, _ = run("fill", "write", "--run", rd, "--section", "moved", expect=0)
+        text = Path(out["file"]).read_text()
+        check("no placeholder is left unfilled in the update's write prompt",
+              out["unfilled"] == [], str(out))
+        check("the head of the brief names the morning it updates, by its time",
+              "**Updates:** the morning brief of 10:00" in text,
+              text[text.find("**Updates:**"):][:80])
+        check("the moved writer is asked for its own section",
+              "one section only: `## What moved`" in text)
+        check("two writers, not three, are at work on an update",
+              "Two writers are at work" in text)
+        check("and it is told the heading opens with the kind",
+              "opens with the pick's kind" in text)
+        check("an update carries no counterpoints, and says so",
+              "the afternoon update carries no counterpoints" in text)
+        check("each moved story arrives with the line the morning had",
+              "THE MORNING HAD: the morning's story a101" in text
+              and "WHAT HAPPENED: what a101 established at ten" in text,
+              text[text.find("THE MORNING HAD"):][:200])
+        check("the moved stories come in the morning's order, not the pick's",
+              0 < text.find("a002 · MOVED") < text.find("a001 · MOVED"),
+              f"a002 at {text.find('a002 · MOVED')}, a001 at {text.find('a001 · MOVED')}")
+        check("and each one carries the kind its heading has to open with",
+              "a001 · MOVED · development" in text, text[text.find("a001 ·"):][:60])
+        check("the new story is another writer's", "a003 · NEW" not in text)
+
+        out, _ = run("fill", "write", "--run", rd, "--section", "new", expect=0)
+        text = Path(out["file"]).read_text()
+        check("the new writer gets the story the morning never had",
+              "a003 · NEW" in text and "a001 · MOVED" not in text)
+
+        # The stitch: the kind on every heading, and the morning's order.
+        section_file(rd, "new", "New since the morning",
+                     [("Something the morning did not have.", "a003")])
+        section_file(rd, "moved", "What moved",
+                     [("Something was confirmed.", "a002"),
+                      ("Something developed.", "a001")])
+        out, _ = run("write-stitch", "--run", rd, expect=1)
+        check("a moved story whose heading does not say how it moved is refused",
+              any("does not open with Development" in p for p in out["problems"]),
+              str(out.get("problems")))
+
+        section_file(rd, "moved", "What moved",
+                     [("Development - Something developed.", "a001"),
+                      ("Confirmation - Something was confirmed.", "a002")])
+        out, _ = run("write-stitch", "--run", rd, expect=1)
+        check("and so is a section that runs them in another order",
+              any("in another order" in p for p in out["problems"]),
+              str(out.get("problems")))
+
+        section_file(rd, "moved", "What moved",
+                     [("Confirmation - Something was confirmed.", "a002"),
+                      ("Development - Something developed.", "a001")])
+        out, _ = run("write-stitch", "--run", rd, expect=0)
+        text = (rd / "brief.md").read_text()
+        check("the update joins in the template's order, new first",
+              0 < text.find("## New since the morning") < text.find("## What moved"),
+              text[:200])
+        check("its head says which brief it updates",
+              "**Updates:** the morning brief of 10:00" in text, text[:200])
+        check("and it ends with the X and audit placeholders",
+              text.rstrip().endswith("{{X_SECTION}}\n\n{{AUDIT_LINE}}"), text[-80:])
+
+        # Nothing picked at all: the true answer to a quiet afternoon.
+        write(rd / "picks" / "picks.json", {"picks": [], "dropped": []})
+        out, _ = run("write-stitch", "--run", rd, expect=0)
+        text = (rd / "brief.md").read_text()
+        empty = script_const("EMPTY_UPDATE_LINE")
+        check("an update that picked nothing is a brief, not a failure",
+              out["ok"] and out["empty"] is True and out["sections"] == [], str(out))
+        check("and it is the head, the one sentence, and nothing else",
+              bool(empty) and empty in text and "## " not in text
+              and "**Updates:** the morning brief of 10:00" in text, repr(text))
+        check("with the two lines code still fills after it",
+              text.rstrip().endswith("{{X_SECTION}}\n\n{{AUDIT_LINE}}"), repr(text[-60:]))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_write_stitch_morning_still_dies():
+    """A morning brief with no picks is still a failure, as it always was."""
+    print("\nwrite-stitch: a morning with nothing in it")
+    tmp = Path(tempfile.mkdtemp(prefix="ybs-runs-"))
+    env = {"YBS_RUNS_DIR": str(tmp)}
+    try:
+        out, _ = run("start", "--slot", "morning", expect=0, env=env)
+        rd = Path(out["run_dir"])
+        write(rd / "picks" / "picks.json", {"picks": [], "dropped": []})
+        _, r = run("write-stitch", "--run", rd, expect=2)
+        check("no picks and no brief in a morning run",
+              "nothing to stitch" in r.stderr and not (rd / "brief.md").exists(),
+              r.stderr.strip()[:160])
+        _, r = run("fill", "write", "--run", rd, "--section", "new", expect=2)
+        check("and an update's section is refused in a morning run",
+              "is not a section of a morning run" in r.stderr, r.stderr.strip()[:200])
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_audit_afternoon():
+    """The update's audit line counts what an update is judged on."""
+    print("\naudit-line: the afternoon's own shape")
+    tmp = Path(tempfile.mkdtemp(prefix="ybs-runs-"))
+    env = {"YBS_RUNS_DIR": str(tmp)}
+    try:
+        rd = afternoon_written(tmp, env)
+        run("picks-sync", "--run", rd, expect=0)
+        data = json.loads((rd / "run.json").read_text())
+        data["counts"].update({
+            "sources_ok": 6, "screened": 12, "seen_this_morning": 30, "kept": 9,
+            "notes": 4, "notes_struck": 1, "small_new_items": 1,
+            "items_by_group": {"follow-read": 2, "follow-maybe": 1, "beat-read": 2}})
+        data["sources"] = {f"s{i}": {} for i in range(6)}
+        write(rd / "run.json", data)
+
+        line, _ = run("audit-line", "--run", rd, expect=0)
+        check("it opens by naming the brief it updates",
+              line.startswith("Audit (afternoon, updates 2026-x_morning_100000): "),
+              repr(line)[:120])
+        check("it counts what is new against what the morning already saw",
+              "12 articles new since the morning (30 already seen)" in line,
+              repr(line)[:300])
+        check("it says how many items carried a morning story and how many were "
+              "too small",
+              "5 news items (3 following a morning story, 1 new but too small to "
+              "read)" in line, repr(line)[:400])
+        check("it counts the new stories and the moved ones by kind",
+              "1 new · 2 moved (1 development, 1 confirmation, 0 reversals, "
+              "0 corrections)" in line, repr(line)[:500])
+        check("an update reports no counterpoints, having none to run",
+              "counterpoints" not in line, repr(line)[:500])
+        check("and no picks-by-group bit, which is the morning's question",
+              "picks by group" not in line, repr(line)[:500])
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 def test_audit_and_close(rd):
@@ -1809,6 +2004,61 @@ def test_x_merge_shapes(tmp):
         shutil.rmtree(rd, ignore_errors=True)
 
 
+def test_x_afternoon(tmp):
+    """The update runs the X pipeline exactly as the morning does.
+
+    Same launch, same merge, same bit in the audit line: the only thing the slot
+    changes is what the audit line says around it.
+    """
+    print("\nx-start and x-merge: the afternoon")
+    runs = Path(tempfile.mkdtemp(prefix="ybs-runs-"))
+    env = {"YBS_RUNS_DIR": str(runs)}
+    xdir = None
+    try:
+        rd = afternoon_written(runs, env)
+        env = {**env, **stub(tmp, "afternoon.py", brief=X_BRIEF, notes=2)}
+        out, _ = run("x-start", "--run", rd, expect=0, env=env)
+        xdir = Path(out["x_run_dir"])
+        check("an update launches the X run the way the morning does",
+              out["status"] == "running", str(out))
+        run("x-wait", "--run", rd, expect=0, env=env)
+
+        section_file(rd, "new", "New since the morning",
+                     [("Something the morning did not have.", "a003")])
+        section_file(rd, "moved", "What moved",
+                     [("Confirmation - Something was confirmed.", "a002"),
+                      ("Development - Something developed.", "a001")])
+        run("write-stitch", "--run", rd, expect=0)
+        run("x-merge", "--run", rd, expect=0)
+        text = (rd / "brief.md").read_text()
+        check("the X section lands above the audit line of an update",
+              0 < text.find("## What the list") < text.find("{{AUDIT_LINE}}"),
+              text[-300:])
+        run("audit-line", "--run", rd, "--append", expect=0)
+        text = (rd / "brief.md").read_text()
+        check("and the update's audit line carries the X bit",
+              "Audit (afternoon, updates " in text
+              and "X: 2 picks from 7 subjects, 2 tweets read" in text,
+              text[-300:])
+
+        # An audit line already written is still what x-merge aims above, and
+        # an update's opens with more than the word Audit.
+        state = json.loads((rd / "run.json").read_text())
+        state["x"]["status"] = "completed"
+        write(rd / "run.json", state)
+        (rd / "brief.md").write_text(
+            "**Date:** 9 September 2026 at 16:00\n\n## What moved\n\ntext\n\n"
+            + [l for l in text.splitlines() if l.startswith("Audit (")][0] + "\n")
+        run("x-merge", "--run", rd, expect=0)
+        after = (rd / "brief.md").read_text()
+        check("an update's audit line already written is still the last line",
+              0 < after.find("## What the list") < after.find("Audit (afternoon"),
+              after[-300:])
+    finally:
+        drop_x(xdir)
+        shutil.rmtree(runs, ignore_errors=True)
+
+
 def test_sources_halves():
     """sources.md holds the news front pages and, at the bottom, the X lists.
     A screener agent must never be sent to x.com, so the two halves are read
@@ -1871,6 +2121,9 @@ def main():
         test_checks(rd)
         test_counterpoint_fill(rd)
         test_write_sections(rd)
+        test_write_afternoon()
+        test_write_stitch_morning_still_dies()
+        test_audit_afternoon()
         test_audit_and_close(rd)
     finally:
         shutil.rmtree(rd, ignore_errors=True)
@@ -1884,6 +2137,7 @@ def main():
         test_x_timeout(tmp)
         test_x_merge(tmp)
         test_x_merge_shapes(tmp)
+        test_x_afternoon(tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print()

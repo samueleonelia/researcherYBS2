@@ -58,6 +58,20 @@ def placeholders(text):
     return set(re.findall(r"\{\{([A-Z_]+)\}\}", text))
 
 
+def fenced_block(text):
+    """The lines inside the first code fence: a template's shape, as code reads it."""
+    out, fenced = [], False
+    for line in text.splitlines():
+        if line.strip().startswith("```"):
+            if fenced:
+                break
+            fenced = True
+            continue
+        if fenced:
+            out.append(line)
+    return out
+
+
 # ------------------------------------------------------- 1. placeholders
 
 # The variables `fill` builds from a run's own files. Everything else a prompt
@@ -106,8 +120,18 @@ def test_placeholders():
 
     # Every slot's template goes through the same checks: a slot is a different
     # brief, not a different set of rules for its template.
+    sections, _ = run("schema", "--key", "write.sections")
     for t in sorted((SKILL / "templates").glob("*.md")):
         tpl = t.read_text()
+        # A template is named for its slot, and the sectioned write counts its
+        # `##` headings against that slot's own list. Three for the morning, two
+        # for the afternoon, and a template that grows a section nobody writes
+        # stops the run at `fill`, which is far too late.
+        want = (sections.get(t.stem) or "").split(" | ")
+        heads = [l for l in fenced_block(tpl) if l.startswith("## ")]
+        check(f"{t.name} has one `##` section per section of its slot",
+              t.stem in sections and len(heads) == len(want),
+              f"{len(heads)} headings, {len(want)} sections ({', '.join(want)})")
         unknown = set(ANY_PLACEHOLDER.findall(tpl)) - known
         check(f"{t.name}: every placeholder is one the script can fill", not unknown,
               f"nothing provides {sorted(unknown)}")

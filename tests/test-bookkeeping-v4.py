@@ -117,6 +117,143 @@ def test_screen_sync(rd):
     check("assigns stable ids", ids == ["a001", "a002", "a003", "a004"], str(ids))
 
 
+def test_screen_attempts():
+    """Two screens of one source at the same time is the failure this guards.
+
+    `fill screen` records an attempt before it hands anyone a prompt, and a
+    second prompt for the same slug is refused until that attempt is provably
+    over: either its file is on disk, or it has outlived the command's own
+    timeout. Nothing here runs a browser; the files a screener would have
+    written are written by hand.
+    """
+    print("\nfill screen: one attempt at a time")
+    settings = json.loads(subprocess.run(
+        [sys.executable, str(SCRIPT), "settings"], capture_output=True,
+        text=True, cwd=ROOT).stdout)
+    timeout = settings["screen_timeout_seconds"]
+    rd = new_run()
+    slug = "guardian"
+    rec = rd / "screen" / f"{slug}.attempt.json"
+    try:
+        out, _ = run("fill", "screen", "--run", rd, "--source", slug, expect=0)
+        check("the first fill is attempt 1", out.get("attempt") == 1, str(out)[:120])
+        check("and records the attempt as open",
+              rec.exists() and json.loads(rec.read_text())["done"] is False)
+
+        _, r = run("fill", "screen", "--run", rd, "--source", slug, expect=1)
+        check("a second fill without --retry is refused",
+              slug in r.stderr and "--retry" in r.stderr, r.stderr.strip()[:160])
+
+        _, r = run("fill", "screen", "--run", rd, "--source", slug, "--retry", expect=1)
+        check("--retry while the first attempt is young says how long to wait",
+              "may still be fetching" in r.stderr or "Wait" in r.stderr,
+              r.stderr.strip()[:160])
+
+        # The screener finishes: its file carries the attempt it belongs to.
+        write(rd / "screen" / f"{slug}.json",
+              {"source": "Guardian", "ok": True, "attempt": 1, "seconds": 61,
+               "links": []})
+        out, _ = run("fill", "screen", "--run", rd, "--source", slug, "--retry",
+                     expect=0)
+        check("--retry after the matching file lands is attempt 2",
+              out.get("attempt") == 2, str(out)[:120])
+        check("and the retry gets a task space of its own",
+              out.get("task_space") == f"ybs screen {slug} a2",
+              str(out.get("task_space")))
+        first = (rd / "prompts" / f"screen-{slug}.md").read_text()
+        second = Path(out["file"]).read_text()
+        check("the two prompts name two different task spaces",
+              f"ybs screen {slug} a1" in first and f"ybs screen {slug} a2" in second)
+        check("and the retry is a file of its own", out["file"] != str(
+            rd / "prompts" / f"screen-{slug}.md"))
+    finally:
+        shutil.rmtree(rd, ignore_errors=True)
+
+    print("\nfill screen: an attempt that outlived its own timeout")
+    rd = new_run()
+    slug = "reason"
+    rec = rd / "screen" / f"{slug}.attempt.json"
+    try:
+        run("fill", "screen", "--run", rd, "--source", slug, expect=0)
+        old = json.loads(rec.read_text())
+        old["started_utc"] = now_iso(-(timeout + 120) / 3600.0)
+        rec.write_text(json.dumps(old))
+        out, _ = run("fill", "screen", "--run", rd, "--source", slug, "--retry",
+                     expect=0)
+        check("past the timeout and the grace, --retry goes ahead with no file",
+              out.get("attempt") == 2, str(out)[:120])
+    finally:
+        shutil.rmtree(rd, ignore_errors=True)
+
+    print("\nfill --retry belongs to screen alone")
+    rd = new_run()
+    try:
+        _, r = run("fill", "pick", "--run", rd, "--retry", expect=2)
+        check("--retry on another prompt is a usage error",
+              "only for screen" in r.stderr, r.stderr.strip()[:120])
+    finally:
+        shutil.rmtree(rd, ignore_errors=True)
+
+
+def test_screen_stragglers():
+    """A first attempt that finishes after its retry did must not win."""
+    print("\nscreen-sync: the straggler loses")
+    rd = new_run()
+    try:
+        write(rd / "screen" / "guardian.attempt.json",
+              {"slug": "guardian", "attempt": 2, "started_utc": now_iso(),
+               "done": False})
+        write(rd / "screen" / "guardian.json", {
+            "source": "Guardian", "ok": True, "attempt": 1, "seconds": 274,
+            "links": [link("https://www.theguardian.com/world/2026/x/late", "Late")]})
+        write(rd / "screen" / "reason.json", {
+            "source": "Reason", "ok": True, "seconds": 40,
+            "links": [link("https://reason.com/2026/x/c", "C")]})
+        out, _ = run("screen-sync", "--run", rd)
+        check("the older attempt's file is ignored",
+              out["stale"].get("Guardian") == {"file_attempt": 1, "latest_attempt": 2},
+              str(out.get("stale")))
+        check("and screen-sync says so in its problems",
+              any("Guardian" in p and "attempt" in p for p in out["problems"]),
+              str(out["problems"])[:160])
+        check("a file with no attempt number is still read as the first one",
+              out["articles"] == 1, f"got {out['articles']}")
+
+        # The retry lands: its file matches the record, and the record closes.
+        write(rd / "screen" / "guardian.json", {
+            "source": "Guardian", "ok": True, "attempt": 2, "seconds": 54,
+            "links": [link("https://www.theguardian.com/world/2026/x/a", "A")]})
+        (rd / "articles.json").unlink()
+        out, _ = run("screen-sync", "--run", rd)
+        check("the matching attempt is taken", out["stale"] == {} and
+              out["articles"] == 2, str(out)[:160])
+        check("and screen-sync marks the attempt done",
+              json.loads((rd / "screen" / "guardian.attempt.json").read_text())
+              ["done"] is True)
+    finally:
+        shutil.rmtree(rd, ignore_errors=True)
+
+
+def test_screen_prompt_is_safe_to_retry():
+    """The rendered command, not the prose: the four things it must now do."""
+    print("\nthe rendered screen command")
+    rd = new_run()
+    try:
+        out, _ = run("fill", "screen", "--run", rd, "--source", "bbc", expect=0)
+        text = Path(out["file"]).read_text()
+        for name, needle in (("writes to a .tmp file first", "OUT + '.tmp'"),
+                             ("renames it into place", "fs.renameSync"),
+                             ("tries a failed fetch a second time", "go < 2"),
+                             ("waits before the next url after an error", "backoff = 1000"),
+                             ("carries its own deadline", "DEADLINE"),
+                             ("puts the attempt in the file", "attempt: ATTEMPT"),
+                             ("names its own task space", "ybs screen bbc a1")):
+            check(f"it {name}", needle in text)
+        check("no placeholder is left unfilled", out["unfilled"] == [], str(out))
+    finally:
+        shutil.rmtree(rd, ignore_errors=True)
+
+
 def test_dates():
     """The three date shapes a screener can hand over besides a timestamp: a
     <time datetime> without seconds, a Guardian-style /2026/aug/24/ URL date,
@@ -1183,6 +1320,9 @@ def main():
         test_settings_halves()
         test_sources_halves()
         test_screen_sync(rd)
+        test_screen_attempts()
+        test_screen_stragglers()
+        test_screen_prompt_is_safe_to_retry()
         test_dates()
         test_triage(rd)
         test_items(rd)

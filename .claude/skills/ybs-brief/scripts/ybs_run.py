@@ -163,6 +163,7 @@ PASS_THROUGH = {"AUDIT_LINE", "X_SECTION"}
 SCHEMA = {
     "path": {
         "screen": "<run_dir>/screen/<slug>.json",
+        "screen_attempt": "<run_dir>/screen/<slug>.attempt.json",
         "verdict": "<run_dir>/triage/<id>.verdict.txt",
         "plan": "<run_dir>/items/plan.json",
         "plan_part": "<run_dir>/items/plan-part<k>.json",
@@ -183,7 +184,7 @@ SCHEMA = {
         "checker": "<id> | <run_dir>",
     },
     "taskspace": {
-        "screen": "ybs screen <slug>",
+        "screen": "ybs screen <slug> a<attempt>",
         "read": "ybs read <id>",
         "counterpoint": "ybs cp <id>",
     },
@@ -769,6 +770,61 @@ def counterpoints_block(run_dir: Path) -> str:
     return "\n".join(out).strip() or "None. The brief runs without counterpoints."
 
 
+# ------------------------------------------------- the screen attempt record
+#
+# Two screens of one source at the same time is the one failure this pipeline
+# cannot survive quietly: both fetch the same site at once, both slow each
+# other down, and the slower one closes the faster one's task space and
+# overwrites its file. So an attempt is recorded before a screener is given a
+# prompt, and a second prompt for the same source is refused until the first
+# attempt is provably over.
+
+ATTEMPT_GRACE_SECONDS = 60      # a command may be a little past its own deadline
+
+
+def attempt_path(run_dir: Path, slug: str) -> Path:
+    return run_dir / "screen" / f"{slug}.attempt.json"
+
+
+def screen_attempt(run_dir: Path, slug: str) -> dict:
+    return load_json(attempt_path(run_dir, slug)) or {}
+
+
+def file_attempt(reply: dict) -> int:
+    """Which attempt wrote a screen file. Files written before attempts were
+    recorded carry no number; they are the first and only attempt."""
+    try:
+        return int(reply.get("attempt") or 1)
+    except (TypeError, ValueError):
+        return 1
+
+
+def attempt_over(run_dir: Path, slug: str, rec: dict, timeout: int):
+    """Is the recorded attempt provably finished? Returns (yes, why not).
+
+    Two proofs, and nothing else counts. Either the command wrote its file --
+    a `seconds` field is only written on the last line of the command, so the
+    file is its receipt -- or so much time has passed that the command has hit
+    its own deadline and cannot still be running.
+    """
+    n = int(rec.get("attempt") or 0)
+    reply = load_json(run_dir / "screen" / f"{slug}.json")
+    if reply is not None and reply.get("seconds") is not None \
+            and file_attempt(reply) == n:
+        return True, ""
+    started = parse_iso(rec.get("started_utc") or "")
+    if started is None:
+        return True, ""          # a record with no clock proves nothing; let it go
+    age = (utc_now() - started).total_seconds()
+    dead_at = timeout + ATTEMPT_GRACE_SECONDS
+    if age >= dead_at:
+        return True, ""
+    return False, (f"{slug}: attempt {n} started {int(age)}s ago and has written no "
+                   f"result yet, so it may still be fetching. Wait "
+                   f"{int(dead_at - age)}s more, or until its screener replies, "
+                   f"then run this again.")
+
+
 def cmd_fill(args):
     """Render one single-call prompt, with its run data already in it.
 
@@ -786,6 +842,9 @@ def cmd_fill(args):
 
     if args.part and name != "cluster-select":
         die("--part is only for cluster-select: it names one part of a cut kept list")
+    if args.retry and name != "screen":
+        die("--retry is only for screen: it is how a second screen of one source "
+            "is allowed, and only once the first one is over")
     ns = namespace(need_profile=(name != "screen"))
     ns.update({
         "DATE": run["local_date"],
@@ -802,10 +861,28 @@ def cmd_fill(args):
         if not found:
             die(f"no source with slug {args.source} in this run")
         sname, s = found[0]
-        ns.update({"SOURCE_NAME": sname, "SLUG": s["slug"],
+        slug = s["slug"]
+        timeout = int(load_settings()["screen_timeout_seconds"])
+        rec = screen_attempt(run_dir, slug)
+        prev = int(rec.get("attempt") or 0)
+        if prev and not rec.get("done"):
+            if not args.retry:
+                die(f"{slug}: attempt {prev} is recorded as started and not done. "
+                    f"Never screen one source twice at the same time. Pass --retry "
+                    f"once that attempt is over.", 1)
+            over, why = attempt_over(run_dir, slug, rec, timeout)
+            if not over:
+                die(why, 1)
+        attempt = prev + 1
+        write_json(attempt_path(run_dir, slug),
+                   {"slug": slug, "attempt": attempt, "started_utc": iso(utc_now()),
+                    "token": f"{slug}-a{attempt}-{os.getpid()}", "done": False})
+        ns.update({"SOURCE_NAME": sname, "SLUG": slug,
                    "SOURCE_URL": s["front_page"], "MARKER": s.get("marker") or "",
                    "MARKER_JSON": json.dumps(s.get("marker") or ""),
-                   "SOURCE_JSON": json.dumps(sname)})
+                   "SOURCE_JSON": json.dumps(sname),
+                   "ATTEMPT": str(attempt),
+                   "TASK_SPACE": f"ybs screen {slug} a{attempt}"})
     elif name == "cluster-select":
         records = kept_articles(run_dir)
         too_long = len(records) > CLUSTER_MAX
@@ -929,13 +1006,20 @@ def cmd_fill(args):
 
     text, missing = render(src.read_text(encoding="utf-8"), ns)
     suffix = f"-{args.source or args.article}" if (args.source or args.article) else ""
+    if name == "screen" and attempt > 1:
+        # A retry gets its own file. The first screener may still be holding the
+        # old one open, and two attempts must share nothing at all.
+        suffix += f"-a{attempt}"
     if args.part:
         suffix = part_suffix
     out = Path(args.out) if args.out else run_dir / "prompts" / f"{name}{suffix}.md"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(text, encoding="utf-8")
-    print(json.dumps({"prompt": name, "file": str(out), "unfilled": missing},
-                     indent=2, ensure_ascii=False))
+    result = {"prompt": name, "file": str(out), "unfilled": missing}
+    if name == "screen":
+        result["attempt"] = attempt
+        result["task_space"] = ns["TASK_SPACE"]
+    print(json.dumps(result, indent=2, ensure_ascii=False))
     return 1 if missing else 0
 
 # Every number this script obeys is a ceiling read from settings.md.
@@ -1117,7 +1201,7 @@ def cmd_screen_sync(args):
 
     start = parse_iso(data["window_start_utc"])
     end = parse_iso(data["window_end_utc"])
-    articles, seen, problems = [], {}, []
+    articles, seen, problems, stale = [], {}, [], {}
 
     for name, sinfo in data["sources"].items():
         f = run_dir / "screen" / (sinfo["slug"] + ".json")
@@ -1126,6 +1210,24 @@ def cmd_screen_sync(args):
             sinfo["status"] = "missing"
             problems.append(f"{name}: no screen/{sinfo['slug']}.json")
             continue
+        # A first attempt that finished after its retry did leaves an older file
+        # behind. It is a straggler, not a result: the retry is the record.
+        rec = screen_attempt(run_dir, sinfo["slug"])
+        latest = int(rec.get("attempt") or 0)
+        wrote = file_attempt(reply)
+        if latest and wrote < latest:
+            sinfo["status"] = "stale"
+            stale[name] = {"file_attempt": wrote, "latest_attempt": latest}
+            problems.append(f"{name}: screen/{sinfo['slug']}.json was written by "
+                            f"attempt {wrote}, and attempt {latest} is the record")
+            continue
+        if latest and wrote == latest and not rec.get("done"):
+            rec["done"] = True
+            rec["finished_utc"] = iso(utc_now())
+            write_json(attempt_path(run_dir, sinfo["slug"]), rec)
+        if reply.get("truncated"):
+            problems.append(f"{name}: the screen ran out of time with "
+                            f"{reply.get('not_fetched', 0)} links not fetched")
         if reply.get("ok") is False:
             sinfo["status"] = reply.get("error", "failed")
             problems.append(f"{name}: screener reported {sinfo['status']}")
@@ -1186,6 +1288,7 @@ def cmd_screen_sync(args):
            "undated_by_source": {n: s["undated"] for n, s in data["sources"].items()
                                  if s.get("undated")},
            "duplicates_merged": sum(len(r["also_in"]) for r in articles),
+           "stale": stale,
            "sources_ok": data["counts"]["sources_ok"],
            "sources_total": len(data["sources"]), "problems": problems}
     print(json.dumps(out, indent=2, ensure_ascii=False))
@@ -2311,6 +2414,8 @@ def main():
     p.add_argument("--article")
     p.add_argument("--part", metavar="K/N",
                    help="render part K of the N parts a too-long kept list cuts into")
+    p.add_argument("--retry", action="store_true",
+                   help="screen one source again, once its first attempt is over")
     p.add_argument("--out")
     p.set_defaults(fn=cmd_fill)
 

@@ -140,9 +140,28 @@ Each screener writes `<run_dir>/screen/<slug>.json` itself and replies with one
 summary line. Do not write that file yourself and do not paste its contents
 anywhere.
 
-- A screener that errors: one retry, logged with `event --type screen_retry
-  --source <slug> --retry`, then `event --type screen_failed --source <slug>`.
-  The run continues without that source.
+**Never two screens of one source at the same time.** Two copies fetch the same
+site at once, and the slower one closes the faster one's task space and lands on
+top of its file. So you never launch a second screener on your own judgement.
+
+A screener that errors, or that returns with no file, gets one retry, and the
+retry starts here:
+
+```bash
+python3 .claude/skills/ybs-brief/scripts/ybs_run.py fill screen --run <run_dir> --source <slug> --retry
+```
+
+That command is the gate. It refuses, and exits 1, while the first attempt may
+still be running, and its message says how long is left to wait. When it
+succeeds it prints a new prompt file and a new attempt number, and the screener
+you launch with that file works in a task space of its own. Launch it, then log
+the relaunch with `event --type screen_retry --source <slug> --retry`. If the
+retry fails as well, record `event --type screen_failed --source <slug>` and let
+the run go on without that source.
+
+Wait for the gate. Do not launch a screener from a prompt file `fill --retry`
+has not just printed.
+
 - A screener that replies `SESSION_DOWN`: **no retry.** Record it with
   `event --type session_down --source <slug>` and continue. A dead login is for
   a human to fix, and retrying just collects teaser pages.
@@ -155,6 +174,10 @@ This assigns ids, merges duplicate URLs and drops anything dated outside the
 window or carrying no date at all. The per-source count is in the output: a
 source whose undated count approaches its listed count has stopped publishing
 dates, and that is worth opening its screen file over.
+
+It also reports a `stale` key. A name in there is a file an earlier attempt
+finished writing after its retry had already delivered; the newer attempt is
+what counts, and the older file is ignored.
 
 ## Step 3 — triage
 

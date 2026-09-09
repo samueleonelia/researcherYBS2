@@ -16,6 +16,11 @@ command has printed its line: a source with a hundred links takes a minute or
 two, and a reply that says the command is still running is a failed screen,
 not a result.
 
+That 600000 is only the harness ceiling. The real limit is
+`screen_timeout_seconds` in settings.md, which the command carries inside
+itself: it stops fetching before then and saves what it has, so it always
+prints a line while the Bash tool is still listening.
+
 You do not judge stories, do not read articles, do not follow links out of the
 front page, and do not handle a second source. Your reply is exactly the one
 line the command prints, and nothing else.

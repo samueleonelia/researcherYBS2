@@ -10,6 +10,11 @@ page head. You do not read articles and you do not judge them.
 - Write the result to: `{{RUN_DIR}}/screen/{{SLUG}}.json` (the command does this for you)
 - Logged-in marker: `{{MARKER}}` (the literal word `FREE` means the site needs no login)
 - Today, local: `{{DATE}}` · window: `{{WINDOW_START}}` to `{{WINDOW_END}}` (UTC)
+- Attempt number: `{{ATTEMPT}}` · your task space: `{{TASK_SPACE}}`
+- Give up after: `{{settings.screen_timeout_seconds}}` seconds, less a margin to write
+
+The attempt number is yours alone. It names your task space and it goes into the
+file, so nobody can mistake an older run of this same source for yours.
 
 ## Your job
 
@@ -22,8 +27,15 @@ line it prints.
 ego-browser nodejs <<'EOF'
 const fs = await import('fs')
 const OUT = '{{RUN_DIR}}/screen/{{SLUG}}.json'
+const ATTEMPT = {{ATTEMPT}}
+const SPACE = '{{TASK_SPACE}}'
+const DEADLINE = {{settings.screen_timeout_seconds}} * 1000 - 30000
 const t0 = Date.now()
-await useOrCreateTaskSpace('ybs screen {{SLUG}}')
+const sleep = ms => new Promise(r => setTimeout(r, ms))
+// Written to a neighbour file and renamed. A rename is one step for the file
+// system, so screen-sync can only ever see the whole file or none of it.
+const save = obj => { fs.writeFileSync(OUT + '.tmp', JSON.stringify(obj, null, 1)); fs.renameSync(OUT + '.tmp', OUT) }
+await useOrCreateTaskSpace(SPACE)
 await openOrReuseTab('{{SOURCE_URL}}', { wait: true, timeout: 40 })
 
 // 1. Is the session alive? A paid site that has logged us out shows teasers,
@@ -32,9 +44,9 @@ const marker = {{MARKER_JSON}}
 if (marker !== 'FREE') {
   const body = await js(String.raw`document.body.innerText`)
   if (!body.includes(marker)) {
-    fs.writeFileSync(OUT, JSON.stringify({ source: {{SOURCE_JSON}}, ok: false, error: 'SESSION_DOWN', links: [] }))
+    save({ source: {{SOURCE_JSON}}, ok: false, attempt: ATTEMPT, error: 'SESSION_DOWN', links: [] })
     cliLog('{{SOURCE_NAME}}: SESSION_DOWN - the logged-in marker is not on the page')
-    await completeTaskSpace('ybs screen {{SLUG}}', { keep: false })
+    await completeTaskSpace(SPACE, { keep: false })
     throw new Error('SESSION_DOWN')
   }
 }
@@ -99,34 +111,52 @@ const pick = (m, ...names) => { for (const n of names) if (m[n]) return m[n]; re
 // for the site.
 const ldDate = html => (html.match(/"datePublished"\s*:\s*"([^"]+)"/) || [])[1] || ''
 
+//    One fetch may fail because the site is busy rather than because the page
+//    is gone, so each url gets a second try after a short pause. After a
+//    failure the loop waits a moment before the next url, and stops waiting as
+//    soon as one succeeds: a site that never errors is never slowed down.
 const links = [], errors = []
-for (const f of found) {
-  try {
-    const r = await browserFetch(f.url)
-    const h = typeof r === 'string' ? r : (r.body || r.text || '')
-    const m = metas(h)
-    links.push({
-      url: pick(m, 'og:url') || f.url,
-      title: pick(m, 'og:title', 'twitter:title') || f.card_title,
-      description: pick(m, 'og:description', 'description', 'twitter:description'),
-      category: pick(m, 'article:section', 'og:type'),
-      published: pick(m, 'article:published_time', 'datepublished')
-                 || ldDate(h) || f.card_date || f.url_date || '',
-    })
-  } catch (e) {
-    errors.push({ url: f.url, error: String(e).slice(0, 120) })
+let backoff = 0, notFetched = 0, truncated = false
+for (let i = 0; i < found.length; i++) {
+  const f = found[i]
+  if (Date.now() - t0 > DEADLINE) { truncated = true; notFetched = found.length - i; break }
+  if (backoff) await sleep(backoff)
+  let h = null, bad = null
+  for (let go = 0; go < 2; go++) {
+    try {
+      const r = await browserFetch(f.url)
+      h = typeof r === 'string' ? r : (r.body || r.text || '')
+      bad = null
+      break
+    } catch (e) {
+      bad = e
+      if (go === 0) await sleep(1500)
+    }
   }
+  if (bad) { errors.push({ url: f.url, error: String(bad).slice(0, 120) }); backoff = 1000; continue }
+  backoff = 0
+  const m = metas(h)
+  links.push({
+    url: pick(m, 'og:url') || f.url,
+    title: pick(m, 'og:title', 'twitter:title') || f.card_title,
+    description: pick(m, 'og:description', 'description', 'twitter:description'),
+    category: pick(m, 'article:section', 'og:type'),
+    published: pick(m, 'article:published_time', 'datepublished')
+               || ldDate(h) || f.card_date || f.url_date || '',
+  })
 }
 
 // Write the result ourselves. It never passes through a reply, so a stray quote
 // in a headline cannot corrupt it.
-fs.writeFileSync(OUT, JSON.stringify({ source: {{SOURCE_JSON}}, ok: true,
-  seconds: Math.round((Date.now() - t0) / 1000), listed: found.length, links, errors }, null, 1))
+save({ source: {{SOURCE_JSON}}, ok: true, attempt: ATTEMPT,
+  seconds: Math.round((Date.now() - t0) / 1000), listed: found.length,
+  truncated, not_fetched: notFetched, links, errors })
 cliLog(`{{SOURCE_NAME}}: ${found.length} links found, ${links.length} read, ` +
        `${links.filter(l => l.description).length} with a description, ` +
        `${links.filter(l => l.published).length} dated, ${errors.length} errors, ` +
-       `${Math.round((Date.now() - t0) / 1000)}s -> ${OUT}`)
-await completeTaskSpace('ybs screen {{SLUG}}', { keep: false })
+       `${truncated ? notFetched + ' left unfetched at the deadline, ' : ''}` +
+       `attempt ${ATTEMPT}, ${Math.round((Date.now() - t0) / 1000)}s -> ${OUT}`)
+await completeTaskSpace(SPACE, { keep: false })
 EOF
 ```
 
@@ -142,7 +172,7 @@ run reads that file.
 If the line says `SESSION_DOWN`, reply with it and stop. Do not retry: a dead
 login is for a human to fix.
 
-## Two things worth knowing about the command
+## Three things worth knowing about the command
 
 `browserFetch` runs from inside the page you have open, so it can only fetch from
 **the same site**. That is exactly what this step does, and it is why the front
@@ -152,6 +182,11 @@ source's pages.
 The date is read from three places in order: the `article:published_time` meta
 tag, the schema.org `datePublished` field, then any date on the card or in the
 URL. Sites use different ones and all of them are standards.
+
+It watches its own clock. When the deadline above arrives it stops fetching,
+saves what it has with `truncated` set and a count of the links it never
+reached, and prints its line anyway. A short file that admits it is short is
+worth far more to the next step than a command that dies with nothing on disk.
 
 ## What you will see, and why it is fine
 
@@ -175,3 +210,6 @@ would mean writing a rule for every site.
    do not guess what went wrong, do not try a different approach.
 6. Never write the file yourself and never repeat its contents in your reply. The
    command is the only thing that writes it.
+7. One copy of this command, ever. It cannot be running twice against one site
+   at once. If it feels slow, wait for it: it holds its own clock and gives up
+   on time.

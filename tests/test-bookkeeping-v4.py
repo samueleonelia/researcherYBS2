@@ -898,6 +898,94 @@ def test_x_failure(tmp):
         shutil.rmtree(rd, ignore_errors=True)
 
 
+RESUME_STUB = '''#!/usr/bin/env python3
+import sys
+from pathlib import Path
+argv = sys.argv[1:]
+run_dir = Path(argv[argv.index("--run-dir") + 1])
+run_dir.mkdir(parents=True, exist_ok=True)
+with (run_dir / "argv.txt").open("a", encoding="utf-8") as f:
+    f.write(" ".join(argv) + "\\n")
+print("-- step 1 (scrape): 40 tweet(s)")
+print("-- step 2 (filter): 4 survivor(s)")
+print("-- step 3 (read): 4 link(s) in 2 batch(es) of 2")
+print("ERROR: step 3 (read) finished but 2 link(s) in links.md have no note",
+      file=sys.stderr)
+sys.exit(1)
+'''
+
+
+def resume_stub(where, name):
+    path = Path(where) / name
+    path.write_text(RESUME_STUB, encoding="utf-8")
+    return {"YBS_X_RUN": str(path)}
+
+
+def test_x_retry_resumes(tmp):
+    """--retry after a failure re-runs the SAME folder from the step that
+    failed, instead of scraping and re-reading everything (the 2026-09-08 run
+    cost 29 minutes that way)."""
+    print("\nx-start --retry: resuming the failed run")
+    rd, started = new_run(), []
+    try:
+        env = resume_stub(tmp, "step3-fail.py")
+        out, _ = run("x-start", "--run", rd, expect=0, env=env)
+        first = Path(out["x_run_dir"])
+        started.append(first)
+        out, _ = run("x-wait", "--run", rd, expect=0, env=env)
+        check("the stub failed at step 3", out["status"] == "failed", str(out))
+
+        out, _ = run("x-start", "--run", rd, "--retry", expect=0, env=env)
+        check("--retry says it resumed, and from which step",
+              out.get("resumed") is True and out.get("from_step") == 3, str(out))
+        check("and it reused the failed run's own folder",
+              out["x_run_dir"] == str(first), str(out))
+        run("x-wait", "--run", rd, expect=0, env=env)
+        argv = (first / "argv.txt").read_text().splitlines()
+        check("the chain was launched a second time, from step 3",
+              len(argv) == 2 and "--from 3" in argv[1], str(argv))
+        check("the retry event says what it resumed",
+              any(e["type"] == "x_retry" and "resumed" in e.get("detail", "")
+                  and "step 3" in e.get("detail", "")
+                  for e in json.loads((rd / "run.json").read_text())["events"]),
+              str(json.loads((rd / "run.json").read_text())["events"][-1]))
+    finally:
+        drop_x(*started)
+        shutil.rmtree(rd, ignore_errors=True)
+
+
+def test_x_retry_falls_back_to_a_fresh_run(tmp):
+    """No folder to resume, no resuming: the retry starts over from step 1,
+    exactly as it did before, and says so."""
+    print("\nx-start --retry: nothing to resume")
+    rd, started = new_run(), []
+    try:
+        env = resume_stub(tmp, "step3-fail-2.py")
+        out, _ = run("x-start", "--run", rd, expect=0, env=env)
+        first = Path(out["x_run_dir"])
+        started.append(first)
+        run("x-wait", "--run", rd, expect=0, env=env)
+        shutil.rmtree(first, ignore_errors=True)
+
+        out, _ = run("x-start", "--run", rd, "--retry", expect=0, env=env)
+        started.append(Path(out["x_run_dir"]))
+        check("a missing folder falls back to a fresh run",
+              out.get("resumed") is False and out["launched"], str(out))
+        check("and the note says why", "folder is gone" in (out.get("note") or ""),
+              str(out.get("note")))
+        check("and a folder was made for it", Path(out["x_run_dir"]).is_dir(), str(out))
+        run("x-wait", "--run", rd, expect=0, env=env)
+        # A fresh folder holds only this launch's argv -- and within the same
+        # minute it may even be given the deleted folder's name, so counting
+        # the launches is the honest test, not comparing the two names.
+        argv = (Path(out["x_run_dir"]) / "argv.txt").read_text().splitlines()
+        check("and it was launched from the top, with no --from",
+              len(argv) == 1 and "--from" not in argv[0], str(argv))
+    finally:
+        drop_x(*started)
+        shutil.rmtree(rd, ignore_errors=True)
+
+
 def test_x_skipped():
     print("\nx-start: no pipeline to start")
     rd = new_run()
@@ -1112,6 +1200,8 @@ def main():
     try:
         test_x_start(tmp)
         test_x_failure(tmp)
+        test_x_retry_resumes(tmp)
+        test_x_retry_falls_back_to_a_fresh_run(tmp)
         test_x_skipped()
         test_x_timeout(tmp)
         test_x_merge(tmp)

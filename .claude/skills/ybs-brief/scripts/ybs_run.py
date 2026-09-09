@@ -1845,6 +1845,29 @@ def x_reason(log: Path) -> str:
     return (errors[-1] if errors else lines[-1]).strip()[:300]
 
 
+X_STEP_LINE = re.compile(r"^--\s*step\s+([1-7])\s*\(")
+
+
+def x_failed_step(log: Path):
+    """Which step of the X chain the last launch got to, or None.
+
+    The chain prints one `-- step N (name): ...` line as it enters a step, so
+    the highest N it printed is the step that failed. Only the last launch's
+    section of the log counts -- a retry appends to the same file, and the
+    first run's steps are not this one's. None means the log does not say, and
+    the caller starts a fresh run rather than guessing.
+    """
+    if not log or not Path(log).exists():
+        return None
+    lines = Path(log).read_text(encoding="utf-8", errors="replace").splitlines()
+    marks = [i for i, ln in enumerate(lines) if ln.startswith(X_LOG_MARK)]
+    if marks:
+        lines = lines[marks[-1] + 1:]
+    steps = [int(m.group(1)) for ln in lines
+             for m in [X_STEP_LINE.match(ln.strip())] if m]
+    return max(steps) if steps else None
+
+
 def x_state(run_dir: Path) -> dict:
     """The one status test, used by x-start, x-wait and x-merge.
 
@@ -1891,6 +1914,14 @@ def cmd_x_start(args):
     stdin closed: a child holding on to the Bash tool's pipe would keep the
     orchestrator's call hanging until the chain finished, which is the one thing
     running it in parallel is for.
+
+    `--retry` after a failure resumes the failed run rather than starting over.
+    The folder that run left behind is reused, and the chain is launched with
+    `--from N` at the step its log says it reached, so the scrape, the filter
+    and every note already written are kept: a step 3 failure used to cost a
+    fresh scrape and 29 minutes of re-reading. If the folder is gone, or the
+    log does not say which step failed, a fresh run starts from step 1 as
+    before and the printed JSON says so (`"resumed": false` with a note).
     """
     run_dir = run_dir_of(args)
     state = x_state(run_dir)
@@ -1930,7 +1961,26 @@ def cmd_x_start(args):
     if not os.environ.get("YBS_X_RUN") and not shutil.which("ego-browser"):
         return skip("ego-browser is not on the PATH")
 
-    x_dir = new_x_run_dir()
+    # A retry resumes the failed run's own folder from the step it died on,
+    # when the folder is still there and its log says which step that was.
+    resume_dir, resume_step, resume_note = None, None, None
+    if retries:
+        old_dir = Path(state["run_dir"]) if state.get("run_dir") else None
+        if not old_dir or not old_dir.is_dir():
+            resume_note = ("the failed run's folder is gone, so this retry "
+                           "starts a fresh run from step 1")
+        else:
+            step = x_failed_step(state.get("log"))
+            if not step:
+                resume_note = (f"{old_dir.name}'s log does not say which step "
+                               "failed, so this retry starts a fresh run from step 1")
+            else:
+                resume_dir, resume_step = old_dir, step
+
+    x_dir = resume_dir or new_x_run_dir()
+    cmd = [sys.executable, str(script), "--run-dir", str(x_dir)]
+    if resume_step:
+        cmd += ["--from", str(resume_step)]
     log_path = run_dir / "x" / "x-run.log"
     log_path.parent.mkdir(parents=True, exist_ok=True)
     with open(log_path, "a", encoding="utf-8") as log:
@@ -1939,7 +1989,7 @@ def cmd_x_start(args):
         log.write(f"{X_LOG_MARK} {iso(utc_now())} ===\n")
         log.flush()
         proc = subprocess.Popen(
-            [sys.executable, str(script), "--run-dir", str(x_dir)],
+            cmd,
             cwd=str(x_lists_dir()), stdin=subprocess.DEVNULL,
             stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
             # Unbuffered, so the log reads in the order things happened: the
@@ -1952,9 +2002,21 @@ def cmd_x_start(args):
                  "started_utc": iso(utc_now()), "status": "running",
                  "retries": retries}
     save_run(run_dir, data)
-    log_event(run_dir, "x_retry" if retries else "x_started",
-              f"{x_dir.name} as pid {proc.pid}", retry=True if retries else None)
-    return x_out(data["x"], launched=True)
+    if retries:
+        where = (f"resumed {x_dir.name} from step {resume_step}" if resume_dir
+                 else f"fresh {x_dir.name}")
+        log_event(run_dir, "x_retry", f"{where} as pid {proc.pid}", retry=True)
+    else:
+        log_event(run_dir, "x_started", f"{x_dir.name} as pid {proc.pid}")
+
+    extra = {}
+    if retries:
+        extra["resumed"] = bool(resume_dir)
+        if resume_dir:
+            extra["from_step"] = resume_step
+        else:
+            extra["note"] = resume_note
+    return x_out(data["x"], launched=True, **extra)
 
 
 def cmd_x_wait(args):

@@ -27,6 +27,17 @@ also runs one sub-agent per batch of `x_read_batch` links at a time (up to
 2026-09-06 -- it used to run its batches serially on the old "the browser is
 the one serial thing" rule, which Samuele replaced.
 
+Step 3 became resumable on 2026-09-09, after a read agent exited cleanly
+having written one note out of three and killed a 39-batch run. It now does
+three things it did not do before. It skips any link that already has a
+usable note, so re-running the step costs only what is left. It re-reads,
+once, whatever has no note after the first pass. Whatever still has no note
+after that second pass gets a note written here, in code, marked
+`status: unavailable` with the reason `no note after two read passes` -- the
+only note in the chain no agent wrote, and it says so, so the audit trail
+stays honest. And it keeps every read agent's reply in `read-log/`, so a run
+that stops this way can be explained afterwards instead of guessed at.
+
 Step 7 is also new on 2026-09-06: it takes picks.md and the picked tweets'
 notes and writes the finished, show-ready brief.md -- the last step before
 the checks in x_checks.py.
@@ -226,12 +237,18 @@ def fill_template(template: str, values: dict) -> str:
 
 
 def call_claude(prompt_text: str, model: str, effort: str, cwd: Path,
-                timeout: int = 1800) -> str:
+                timeout: int = 1800, log_path: Path = None) -> str:
     """Shell out to `claude -p` headless, prompt on stdin, at `model` and
     `effort`. Both come from settings.md's `## X models` row for the step,
     so an edit there reaches the agent on the next run with nothing else to
     do. Returns the agent's stdout (its one-line summary); dies clearly on a
     non-zero exit or a missing `claude` binary.
+
+    `log_path` is optional and nothing but a keyword: pass one and the
+    agent's whole reply -- stdout, then its stderr under a `--- stderr ---`
+    rule -- is written there before the exit code is judged, so an agent
+    that stopped early can be read afterwards. Callers that pass nothing
+    behave exactly as they did before.
     """
     cmd = ["claude", "-p", "--model", model, "--effort", effort]
     try:
@@ -243,9 +260,25 @@ def call_claude(prompt_text: str, model: str, effort: str, cwd: Path,
         die("the `claude` CLI is not on PATH; cannot run an agent step")
     except subprocess.TimeoutExpired:
         die(f"claude -p timed out after {timeout}s")
+    if log_path is not None:
+        write_agent_log(Path(log_path), result.stdout or "", result.stderr or "",
+                        result.returncode)
     if result.returncode != 0:
         die(f"claude -p exited {result.returncode}: {result.stderr.strip()[:2000]}")
     return result.stdout.strip()
+
+
+def write_agent_log(path: Path, stdout: str, stderr: str, returncode) -> None:
+    """One agent's reply on disk. Never lets a logging problem stop a run:
+    the log is an audit trail, not a step."""
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        body = f"exit: {returncode}\n\n--- stdout ---\n{stdout.rstrip()}\n"
+        if stderr.strip():
+            body += f"\n--- stderr ---\n{stderr.rstrip()}\n"
+        path.write_text(body, encoding="utf-8")
+    except OSError as e:  # noqa: BLE001 - a lost log never fails the chain
+        print(f"-- could not write {path}: {e}", file=sys.stderr)
 
 
 def tweet_block(t: dict, notes: dict = None) -> str:
@@ -419,10 +452,65 @@ def load_notes(run_dir: Path) -> dict:
     return out
 
 
+UNAVAILABLE_REASON = "(unavailable: no note after two read passes)"
+
+
+def note_is_usable(notes_dir: Path, tweet_id: str) -> bool:
+    """The one test of a note, shared by the read step and validate_notes: the
+    file exists and either holds a full_text or says `status: unavailable`.
+    Anything else counts as no note at all."""
+    path = notes_dir / f"{tweet_id}.md"
+    if not path.exists():
+        return False
+    try:
+        note = parse_note(path.read_text(encoding="utf-8"))
+    except OSError:
+        return False
+    return bool(note.get("full_text")) or note.get("status", "").lower() == "unavailable"
+
+
+def links_without_notes(links: list, notes_dir: Path) -> list:
+    """The links `validate_notes` would fail on, in file order."""
+    return [l for l in links if not note_is_usable(notes_dir, l["id"])]
+
+
+def write_unavailable_note(notes_dir: Path, link: dict) -> None:
+    """The one note in the whole chain that code writes rather than an agent.
+
+    It is the last resort of step 3: two read passes went by and this link
+    still has no note. The shape is prompts/read.md's own "when a tweet will
+    not load" shape, so `parse_note`, `validate_notes` and `tweet_block`'s
+    fallback all read it as they read any other note -- and the reason line
+    says in words that no agent read this tweet, so nobody downstream mistakes
+    it for a page that was actually opened."""
+    text = (
+        f"# {link['id']}\n\n"
+        f"- id: {link['id']}\n"
+        f"- url: {link['url']}\n"
+        f"- author: {link['author']}\n"
+        f"- kind: {link['kind']}\n"
+        "- posted_at:\n"
+        "- replies: 0\n"
+        "- reposts: 0\n"
+        "- likes: 0\n"
+        "- views: 0\n"
+        "- status: unavailable\n\n"
+        "## full_text\n\n"
+        f"{UNAVAILABLE_REASON}\n"
+        "This note was written by x_run.py, not by a read agent: the tweet was\n"
+        "handed to a read sub-agent twice and neither pass left a note.\n\n"
+        "## quoted\n\n(none)\n\n"
+        "## media\n\n(none)\n"
+    )
+    notes_dir.mkdir(parents=True, exist_ok=True)
+    (notes_dir / f"{link['id']}.md").write_text(text, encoding="utf-8")
+
+
 def step_read(run_dir: Path, settings: dict):
     links = parse_links_md(run_dir / "links.md")
     notes_dir = run_dir / "notes"
     notes_dir.mkdir(parents=True, exist_ok=True)
+    read_log_dir = run_dir / "read-log"
     if not links:
         print("-- step 3 (read): links.md holds no survivors, nothing to read")
         return
@@ -430,23 +518,25 @@ def step_read(run_dir: Path, settings: dict):
     batch_size = settings["x_read_batch"]
     model, effort = agent_settings(settings, "read")
     max_workers = settings.get("x_agents_active_max", 1)
-    batches = list(chunked(links, batch_size))
     template = load_prompt_template("read.md", 3, "read")
 
-    def make_job(i, batch):
+    batch_no = 0        # counts every batch of every pass, so no two agents
+                        # share a task space or a read-log file
+
+    def make_job(number, batch, position, of):
         def job():
             # One ego task space per batch (Samuele's rule, 2026-09-06):
             # many read sub-agents run at the same time, each in its own
             # task space, working only in it. Never two batches sharing one
             # space -- that would be two agents in one task space, which is
             # the thing that must never happen.
-            task_space = f"x-lists read {run_dir.name} batch {i + 1}"
+            task_space = f"x-lists read {run_dir.name} batch {number}"
             values = {
                 "RUN_DIR": str(run_dir),
                 "NOTES_DIR": str(notes_dir),
                 "TASK_SPACE": task_space,
                 "BATCH_NOTE": (
-                    f"This is batch {i + 1} of {len(batches)}. Other batches hold "
+                    f"This is batch {position} of {of}. Other batches hold "
                     f"other tweets, read by other sub-agents at the same time in "
                     f"their own task spaces; you read only the ones listed below, "
                     f"one at a time, in your own task space."
@@ -455,15 +545,49 @@ def step_read(run_dir: Path, settings: dict):
                 "ALLOWED_URLS": "\n".join(l["url"] for l in batch),
             }
             prompt = fill_template(template, values)
-            call_claude(prompt, model, effort, HERE)
+            call_claude(prompt, model, effort, HERE,
+                        log_path=read_log_dir / f"batch-{number}.txt")
         return job
 
-    print(
-        f"-- step 3 (read): {len(links)} link(s) in {len(batches)} batch(es) of "
-        f"{batch_size}, model={model}/{effort}, up to {max_workers} at once, each batch "
-        f"in its own ego task space"
-    )
-    run_pool([make_job(i, b) for i, b in enumerate(batches)], max_workers)
+    def read_pass(pass_links):
+        """One pooled pass over `pass_links`, in batches of `batch_size`."""
+        nonlocal batch_no
+        batches = list(chunked(pass_links, batch_size))
+        jobs = []
+        for position, batch in enumerate(batches, start=1):
+            batch_no += 1
+            jobs.append(make_job(batch_no, batch, position, len(batches)))
+        print(
+            f"-- step 3 (read): {len(pass_links)} link(s) in {len(batches)} batch(es) of "
+            f"{batch_size}, model={model}/{effort}, up to {max_workers} at once, each batch "
+            f"in its own ego task space"
+        )
+        run_pool(jobs, max_workers)
+
+    todo = links_without_notes(links, notes_dir)
+    skipped = len(links) - len(todo)
+    if skipped:
+        print(f"-- step 3 (read): {skipped} link(s) already have a usable note, "
+              f"skipping them")
+    if todo:
+        read_pass(todo)
+
+    # A read agent can exit cleanly having written only some of its batch --
+    # that is what killed the 2026-09-08 run. One more pass over whatever is
+    # missing costs a fraction of a fresh run, and usually ends it.
+    still_missing = links_without_notes(links, notes_dir)
+    if still_missing:
+        print(f"-- step 3 (read): {len(still_missing)} note(s) missing after pass 1, "
+              f"re-reading once")
+        read_pass(still_missing)
+
+    unwritten = links_without_notes(links, notes_dir)
+    for link in unwritten:
+        write_unavailable_note(notes_dir, link)
+    if unwritten:
+        print(f"-- step 3 (read): {len(unwritten)} note(s) written here in code as "
+              f"status: unavailable, no agent read them: "
+              + ", ".join(l["id"] for l in unwritten))
 
     validate_notes(links, notes_dir)
 

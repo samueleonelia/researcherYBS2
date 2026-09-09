@@ -20,6 +20,9 @@ judgment to fake) and do NOT drive a browser. They cover:
   - the read step (step 3) now runs its batches POOLED, up to
     x_agents_active_max at once, each batch its own ego task space -- not
     serially, which was the pre-2026-09-06 rule
+  - the read step skips links that already have a usable note, re-reads what
+    is missing once, writes a `status: unavailable` note itself for whatever
+    two passes could not read, and keeps every agent's reply in read-log/
   - the write step (step 7) fills every one of prompts/write.md's twelve
     placeholders correctly, and resolves each pick's permalink to its
     notes/<id>.md file, failing loudly (never silently dropping the pick)
@@ -27,6 +30,8 @@ judgment to fake) and do NOT drive a browser. They cover:
 """
 
 import ast
+import contextlib
+import io
 import json
 import re
 import subprocess
@@ -223,7 +228,7 @@ class TestJudgeMerge(unittest.TestCase):
             run_dir = Path(td)
             captured = {}
 
-            def fake_call_claude(prompt_text, model, effort, cwd, timeout=1800):
+            def fake_call_claude(prompt_text, model, effort, cwd, timeout=1800, **kw):
                 captured["prompt"] = prompt_text
                 captured["model"] = model
                 # simulate the agent doing its job: write picks.md
@@ -279,7 +284,7 @@ class TestReadStageConcurrency(unittest.TestCase):
                                   "read stage did not pool at x_agents_active_max")
                 return [job() for job in jobs]
 
-            def fake_call_claude(prompt_text, model, effort, cwd, timeout=1800):
+            def fake_call_claude(prompt_text, model, effort, cwd, timeout=1800, **kw):
                 ids = re.findall(r"^id:\s*(\d+)\s*$", prompt_text, re.M)
                 seen_ids.extend(ids)
                 notes_dir = run_dir / "notes"
@@ -318,7 +323,7 @@ class TestReadStageConcurrency(unittest.TestCase):
                 captured["n_jobs"] = len(jobs)
                 return [job() for job in jobs]
 
-            def fake_call_claude(prompt_text, model, effort, cwd, timeout=1800):
+            def fake_call_claude(prompt_text, model, effort, cwd, timeout=1800, **kw):
                 ids = re.findall(r"^id:\s*(\d+)\s*$", prompt_text, re.M)
                 notes_dir = run_dir / "notes"
                 for tid in ids:
@@ -351,7 +356,7 @@ class TestReadStageConcurrency(unittest.TestCase):
 
             task_spaces = []
 
-            def fake_call_claude(prompt_text, model, effort, cwd, timeout=1800):
+            def fake_call_claude(prompt_text, model, effort, cwd, timeout=1800, **kw):
                 m = re.search(r"Browser task space to use:\s*(.+)", prompt_text)
                 self.assertIsNotNone(m)
                 task_spaces.append(m.group(1).strip())
@@ -370,6 +375,188 @@ class TestReadStageConcurrency(unittest.TestCase):
 
             self.assertEqual(len(task_spaces), 3)  # ceil(6/2)
             self.assertEqual(len(set(task_spaces)), len(task_spaces), "two batches shared one task space")
+
+
+class TestReadStageResume(unittest.TestCase):
+    """The 2026-09-08 failure, and the three things step 3 now does about it.
+
+    A read agent exited cleanly having written one note out of three, and
+    `validate_notes` killed a 39-batch run that then started over from the
+    scrape. Step 3 now skips links that already have a note, re-reads what is
+    missing once, and writes a `status: unavailable` note itself for whatever
+    two passes could not read.
+    """
+
+    SETTINGS = {"x_read_batch": 2, "x_agents_active_max": 4,
+                "read_model": "sonnet", "read_effort": "medium"}
+
+    def _make_links_md(self, n):
+        lines = ["## POST"]
+        for i in range(n):
+            lines.append(f"- author: @acct{i}")
+            lines.append(f"https://x.com/acct{i}/status/{1000 + i}")
+        return "\n".join(lines) + "\n"
+
+    def _write_note(self, notes_dir: Path, tid: str, text="hello"):
+        notes_dir.mkdir(parents=True, exist_ok=True)
+        (notes_dir / f"{tid}.md").write_text(
+            f"# {tid}\n\n- id: {tid}\n- status: ok\n\n## full_text\n\n{text}\n\n"
+            "## quoted\n\n(none)\n\n## media\n\n(none)\n", encoding="utf-8")
+
+    def _ids_in(self, prompt_text):
+        return re.findall(r"^id:\s*(\d+)\s*$", prompt_text, re.M)
+
+    def _run(self, run_dir, fake):
+        out = io.StringIO()
+        with mock.patch.object(x_run, "call_claude", side_effect=fake), \
+                contextlib.redirect_stdout(out):
+            x_run.step_read(run_dir, self.SETTINGS)
+        return out.getvalue()
+
+    def test_links_that_already_have_a_note_are_not_read_again(self):
+        with tempfile.TemporaryDirectory() as td:
+            run_dir = Path(td)
+            (run_dir / "links.md").write_text(self._make_links_md(6), encoding="utf-8")
+            notes_dir = run_dir / "notes"
+            for tid in ("1000", "1001", "1002", "1003"):
+                self._write_note(notes_dir, tid)
+
+            seen = []
+
+            def fake(prompt_text, model, effort, cwd, timeout=1800, **kw):
+                ids = self._ids_in(prompt_text)
+                seen.extend(ids)
+                for tid in ids:
+                    self._write_note(notes_dir, tid)
+                return "wrote notes"
+
+            printed = self._run(run_dir, fake)
+
+            self.assertEqual(sorted(seen), ["1004", "1005"],
+                             "a link that already had a note was read again")
+            self.assertIn("4 link(s) already have a usable note", printed)
+            # the notes that were already there are untouched
+            self.assertIn("hello", (notes_dir / "1000.md").read_text(encoding="utf-8"))
+
+    def test_an_empty_note_does_not_count_as_read(self):
+        """A file with neither full_text nor `status: unavailable` is what
+        validate_notes rejects, so step 3 must read that link again."""
+        with tempfile.TemporaryDirectory() as td:
+            run_dir = Path(td)
+            (run_dir / "links.md").write_text(self._make_links_md(2), encoding="utf-8")
+            notes_dir = run_dir / "notes"
+            notes_dir.mkdir()
+            (notes_dir / "1000.md").write_text(
+                "# 1000\n\n- id: 1000\n- status: ok\n\n## full_text\n\n(none)\n",
+                encoding="utf-8")
+            self._write_note(notes_dir, "1001")
+
+            seen = []
+
+            def fake(prompt_text, model, effort, cwd, timeout=1800, **kw):
+                ids = self._ids_in(prompt_text)
+                seen.extend(ids)
+                for tid in ids:
+                    self._write_note(notes_dir, tid)
+                return "wrote notes"
+
+            self._run(run_dir, fake)
+            self.assertEqual(seen, ["1000"])
+
+    def test_missing_notes_are_re_read_once_then_written_unavailable(self):
+        """The half-written batch, reproduced: every agent writes only the
+        first note of its batch. Pass 1 leaves half the links without a note,
+        the one in-step retry catches all but one, and that last one gets its
+        note written here in code -- so validate_notes passes and the run does
+        not die."""
+        with tempfile.TemporaryDirectory() as td:
+            run_dir = Path(td)
+            (run_dir / "links.md").write_text(self._make_links_md(4), encoding="utf-8")
+            notes_dir = run_dir / "notes"
+            calls = []
+
+            def fake(prompt_text, model, effort, cwd, timeout=1800, **kw):
+                ids = self._ids_in(prompt_text)
+                calls.append(ids)
+                # 1003 is never written, however often it is handed over
+                for tid in ids[:1]:
+                    self._write_note(notes_dir, tid)
+                return "wrote 1 note"
+
+            printed = self._run(run_dir, fake)
+
+            # pass 1: [1000, 1001] and [1002, 1003] -> notes for 1000 and 1002
+            # pass 2: [1001, 1003]                  -> a note for 1001
+            self.assertEqual(calls, [["1000", "1001"], ["1002", "1003"],
+                                     ["1001", "1003"]])
+            self.assertIn("2 note(s) missing after pass 1, re-reading once", printed)
+            self.assertIn("1 note(s) written here in code", printed)
+
+            note_text = (notes_dir / "1003.md").read_text(encoding="utf-8")
+            note = x_run.parse_note(note_text)
+            self.assertEqual(note["status"], "unavailable")
+            self.assertIn("no note after two read passes", note_text)
+            self.assertEqual(note["full_text"], "",
+                             "the code-written note must read as empty, not as text")
+            # and it is the only note code wrote: the other three came from agents
+            self.assertNotIn("no note after two read passes",
+                             (notes_dir / "1001.md").read_text(encoding="utf-8"))
+
+            # validate_notes accepts the whole set, and the run carries on
+            x_run.validate_notes(x_run.parse_links_md(run_dir / "links.md"), notes_dir)
+            # tweet_block falls back to the feed text for the unread tweet
+            notes = x_run.load_notes(run_dir)
+            block = x_run.tweet_block({"id": "1003", "author": "@acct3",
+                                       "text": "the collapsed preview"}, notes)
+            self.assertIn("the collapsed preview", block)
+
+    def test_the_second_pass_is_the_last_one(self):
+        """Two passes, never three: an agent that writes nothing at all must
+        not loop the step."""
+        with tempfile.TemporaryDirectory() as td:
+            run_dir = Path(td)
+            (run_dir / "links.md").write_text(self._make_links_md(2), encoding="utf-8")
+            calls = []
+
+            def fake(prompt_text, model, effort, cwd, timeout=1800, **kw):
+                calls.append(self._ids_in(prompt_text))
+                return "wrote nothing"
+
+            self._run(run_dir, fake)
+            self.assertEqual(len(calls), 2, "step 3 read more than twice")
+            for tid in ("1000", "1001"):
+                note = x_run.parse_note(
+                    (run_dir / "notes" / f"{tid}.md").read_text(encoding="utf-8"))
+                self.assertEqual(note["status"], "unavailable")
+
+    def test_every_read_agents_reply_is_saved(self):
+        """`call_claude` is the real one here, with only `subprocess.run`
+        faked: the reply the agent sent back, and anything it put on stderr,
+        must be on disk under read-log/ -- the 2026-09-08 run threw its
+        agent's reply away and nobody could say why it stopped."""
+        with tempfile.TemporaryDirectory() as td:
+            run_dir = Path(td)
+            (run_dir / "links.md").write_text(self._make_links_md(3), encoding="utf-8")
+
+            class FakeResult:
+                returncode = 0
+                stdout = "wrote 1 note, 0 unavailable"
+                stderr = "a warning the agent printed"
+
+            with mock.patch.object(x_run.subprocess, "run", return_value=FakeResult()), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                x_run.step_read(run_dir, self.SETTINGS)
+
+            log_dir = run_dir / "read-log"
+            # 2 batches in pass 1 (2 + 1 links), 2 in pass 2: no note was written
+            self.assertTrue((log_dir / "batch-1.txt").exists())
+            self.assertTrue((log_dir / "batch-2.txt").exists())
+            first = (log_dir / "batch-1.txt").read_text(encoding="utf-8")
+            self.assertIn("wrote 1 note, 0 unavailable", first)
+            self.assertIn("a warning the agent printed", first)
+            self.assertIn("exit: 0", first)
+            self.assertEqual(len(list(log_dir.glob("batch-*.txt"))), 4,
+                             "one log file per batch of both passes")
 
 
 class TestWriteStepNoteResolution(unittest.TestCase):
@@ -489,7 +676,7 @@ class TestStepWrite(unittest.TestCase):
 
             captured = {}
 
-            def fake_call_claude(prompt_text, model, effort, cwd, timeout=1800):
+            def fake_call_claude(prompt_text, model, effort, cwd, timeout=1800, **kw):
                 captured["prompt"] = prompt_text
                 captured["model"] = model
                 (run_dir / "brief.md").write_text("# What the list is moving on\n", encoding="utf-8")

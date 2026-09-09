@@ -23,6 +23,7 @@ Commands
   picks-sync --run DIR     validate the pick reply, and trim it to picks_max
   x-start --run DIR        launch the X-list pipeline in the background, once
   x-wait --run DIR         block until that X run is done, failed or out of time
+  write-stitch --run DIR   join the section files into brief.md
   x-merge --run DIR        put the X run's brief under the article brief
   event --run DIR ...      record something that happened (failure, retry, ...)
   audit-line --run DIR     build the audit line from run.json (never from a model)
@@ -173,7 +174,13 @@ SCHEMA = {
         "picks": "<run_dir>/picks/picks.json",
         "counterpoint": "<run_dir>/picks/cp-<id>.md",
         "brief": "<run_dir>/brief.md",
+        "brief_section": "<run_dir>/brief-<section>.md",
         "profile": "shows/profile.json",
+    },
+    "write": {
+        "sections": "leads | body | worth",
+        "note": ("one writer per section, all launched at once; write-stitch "
+                 "joins the section files into brief.md in the template's order"),
     },
     "launch": {
         "triage": ("<run_dir>\n"
@@ -732,9 +739,15 @@ def sibling_lines(run_dir: Path, records: list) -> str:
     return "\n".join(lines).strip()
 
 
-def picks_block(run_dir: Path) -> str:
-    """Every picked note with its tag and its item's full article list."""
+def picks_block(run_dir: Path, tag: str = None) -> str:
+    """Every picked note with its tag and its item's full article list.
+
+    With a tag, only the picks carrying it: one section writer sees its own
+    stories and nothing else.
+    """
     picks = (load_json(run_dir / "picks" / "picks.json") or {}).get("picks") or []
+    if tag:
+        picks = [p for p in picks if (p.get("tag") or "").upper() == tag]
     arts = {r["id"]: r for r in
             ((load_json(run_dir / "articles.json") or {}).get("articles") or [])}
     items = (load_json(run_dir / "items" / "plan.json") or {}).get("items") or []
@@ -768,6 +781,107 @@ def counterpoints_block(run_dir: Path) -> str:
         out.append(text)
         out.append("")
     return "\n".join(out).strip() or "None. The brief runs without counterpoints."
+
+
+# ------------------------------------------------- the brief, one section each
+#
+# The brief is written by one writer per section, all at once, and joined in
+# code. The template stays the only statement of the shape: the section
+# headings, their order and the date line are read out of it here, never
+# restated. Tag -> section is by position: the first `##` section holds the
+# LEADs, the second the BODY stories, the third the WORTH ones.
+WRITE_SECTIONS = ("leads", "body", "worth")
+TAG_OF_SECTION = {"leads": "LEAD", "body": "BODY", "worth": "WORTH"}
+
+
+def template_source(run: dict) -> str:
+    return (skill_dir() / "templates" / f"{run['slot']}.md").read_text(encoding="utf-8")
+
+
+def template_block(tpl: str) -> list:
+    """The lines inside the template's first code fence: the brief's shape."""
+    lines, fenced = [], False
+    for line in tpl.splitlines():
+        if line.strip().startswith("```"):
+            if fenced:
+                break
+            fenced = True
+            continue
+        if fenced:
+            lines.append(line)
+    if not lines:
+        die("the template holds no fenced block; nothing says the brief's shape")
+    return lines
+
+
+def template_headings(tpl: str) -> list:
+    """The `##` section headings of the brief, in the template's order."""
+    heads = [l[3:].strip() for l in template_block(tpl) if l.startswith("## ")]
+    if len(heads) != len(WRITE_SECTIONS):
+        die(f"the template has {len(heads)} `##` sections; the sectioned write "
+            f"expects {len(WRITE_SECTIONS)} ({', '.join(WRITE_SECTIONS)})")
+    return heads
+
+
+def template_head(tpl: str, run: dict) -> str:
+    """The lines above the first section, with the date filled in.
+
+    The template writes the date line as `<D Month YYYY at HH:MM>`; the day is
+    the run's, the time is the slot's, taken from the template's own title.
+    """
+    m = re.search(r"\((\d{1,2}:\d{2})\)", tpl.splitlines()[0] if tpl else "")
+    when = m.group(1) if m else "00:00"
+    d = datetime.strptime(run["local_date"], "%Y-%m-%d")
+    stamp = f"{d.day} {d.strftime('%B %Y')} at {when}"
+    head = []
+    for line in template_block(tpl):
+        if line.startswith("## "):
+            break
+        head.append(re.sub(r"<[^>]*>", stamp, line))
+    return "\n".join(head).strip()
+
+
+def section_job(run_dir: Path, section: str, headings: list) -> str:
+    """What one section writer is told about its job, and about the other two.
+
+    The other sections' stories are listed by headline so a writer does not
+    retell a story another writer owns; that is all the cross-talk the
+    parallel write keeps.
+    """
+    picks = (load_json(run_dir / "picks" / "picks.json") or {}).get("picks") or []
+    mine = headings[WRITE_SECTIONS.index(section)]
+    lines = [
+        "## Your section",
+        "",
+        "Three writers are at work on this brief at the same time, one per section,",
+        "from the same notes and the same template, and code joins the sections in",
+        f"the template's order. You write **one section only: `## {mine}`**.",
+        "",
+        "- The picks above are every story of your section, and every one goes in.",
+        f"- Reply with that section and nothing else. It starts with the `## {mine}`",
+        "  line and ends with the last source line of its last story. No date line,",
+        "  no other section, no placeholder line: those belong to code or to the",
+        "  other writers.",
+    ]
+    others = []
+    for other, heading in zip(WRITE_SECTIONS, headings):
+        if other == section:
+            continue
+        for p in picks:
+            if (p.get("tag") or "").upper() != TAG_OF_SECTION[other]:
+                continue
+            note = run_dir / "notes" / f"{p['id']}.md"
+            head = note_field(note.read_text(encoding="utf-8"), "HEADLINE") \
+                if note.exists() else ""
+            others.append(f"  - {heading}: {head or p['id']}")
+    if others:
+        lines += ["- The other writers have these stories. Never retell one; where",
+                  "  yours turns on it, one clause saying the brief covers it is enough:"]
+        lines += others
+    else:
+        lines += ["- The other sections are empty today: yours is the whole brief",
+                  "  below the date line."]
+    return "\n".join(lines)
 
 
 # ------------------------------------------------- the screen attempt record
@@ -845,6 +959,8 @@ def cmd_fill(args):
     if args.retry and name != "screen":
         die("--retry is only for screen: it is how a second screen of one source "
             "is allowed, and only once the first one is over")
+    if args.section and name != "write":
+        die("--section is only for write: it names the one section a writer produces")
     ns = namespace(need_profile=(name != "screen"))
     ns.update({
         "DATE": run["local_date"],
@@ -995,14 +1111,33 @@ def cmd_fill(args):
         # The template is rendered too, so it can name a setting without
         # restating its value. {{AUDIT_LINE}} passes through: code fills it in
         # once the brief is written.
-        tpl, tpl_missing = render((skill_dir() / "templates" /
-                                   f"{run['slot']}.md").read_text(encoding="utf-8"), ns)
+        raw = template_source(run)
+        tpl, tpl_missing = render(raw, ns)
         if tpl_missing:
             die(f"{run['slot']}.md asks for {', '.join(tpl_missing)}, "
                 f"which nothing provides")
-        ns.update({"TEMPLATE": tpl,
-                   "PICKS": picks_block(run_dir),
-                   "COUNTERPOINTS": counterpoints_block(run_dir)})
+        section = args.section
+        if section:
+            # One writer per section. A section with no picks gets no writer:
+            # the template omits an empty section, and write-stitch does too.
+            tag = TAG_OF_SECTION[section]
+            picks = (load_json(run_dir / "picks" / "picks.json") or {}).get("picks") or []
+            if not any((p.get("tag") or "").upper() == tag for p in picks):
+                print(json.dumps({"prompt": name, "section": section, "empty": True,
+                                  "file": None, "launch": False}, indent=2))
+                return 0
+            headings = template_headings(raw)
+            ns.update({"TEMPLATE": tpl,
+                       "PICKS": picks_block(run_dir, tag),
+                       "COUNTERPOINTS": counterpoints_block(run_dir) if section == "leads"
+                       else "None here. Counterpoints hang under the leads, "
+                            "and another writer is writing those.",
+                       "SECTION_JOB": section_job(run_dir, section, headings)})
+        else:
+            ns.update({"TEMPLATE": tpl,
+                       "PICKS": picks_block(run_dir),
+                       "COUNTERPOINTS": counterpoints_block(run_dir),
+                       "SECTION_JOB": ""})
 
     text, missing = render(src.read_text(encoding="utf-8"), ns)
     suffix = f"-{args.source or args.article}" if (args.source or args.article) else ""
@@ -1012,6 +1147,8 @@ def cmd_fill(args):
         suffix += f"-a{attempt}"
     if args.part:
         suffix = part_suffix
+    if args.section:
+        suffix = f"-{args.section}"
     out = Path(args.out) if args.out else run_dir / "prompts" / f"{name}{suffix}.md"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(text, encoding="utf-8")
@@ -2211,6 +2348,67 @@ def x_section(brief_text: str) -> str:
 X_COUNTS = re.compile(r"(\d+)\s+picks?\s+from\s+(\d+)\s+subjects", re.I)
 
 
+def cmd_write_stitch(args):
+    """Join the section files into brief.md, in the template's order.
+
+    Every section that has picks must have its file, start with its own `##`
+    heading, hold no other section and no placeholder, and carry the URL of
+    every article picked for it: the template says the sources are exactly
+    the picked articles, and this is where that is checked. A section with no
+    picks is omitted, as the template says. On any problem nothing is written
+    and the section to rerun is named.
+    """
+    run_dir = run_dir_of(args)
+    run = load_run(run_dir)
+    raw = template_source(run)
+    headings = template_headings(raw)
+    picks = (load_json(run_dir / "picks" / "picks.json") or {}).get("picks") or []
+    if not picks:
+        die("no picks.json with picks; nothing to stitch")
+    arts = {r["id"]: r for r in
+            ((load_json(run_dir / "articles.json") or {}).get("articles") or [])}
+    parts, problems, used, skipped = [template_head(raw, run)], [], [], []
+    for section, heading in zip(WRITE_SECTIONS, headings):
+        tagged = [p for p in picks if (p.get("tag") or "").upper() == TAG_OF_SECTION[section]]
+        f = run_dir / f"brief-{section}.md"
+        if not tagged:
+            if f.exists():
+                skipped.append(f.name)
+            continue
+        if not f.exists():
+            problems.append(f"{section}: {len(tagged)} picks and no {f.name}")
+            continue
+        text = f.read_text(encoding="utf-8").strip()
+        if text.startswith("```"):        # a writer that fenced its whole reply
+            text = re.sub(r"^```[^\n]*\n|\n```$", "", text).strip()
+        if not text.startswith(f"## {heading}"):
+            problems.append(f"{section}: {f.name} does not start with '## {heading}'")
+        foreign = [l for l in text.splitlines()
+                   if l.startswith("## ") and l.strip() != f"## {heading}"]
+        if foreign:
+            problems.append(f"{section}: {f.name} holds another section: {foreign[0]}")
+        if "{{" in text:
+            problems.append(f"{section}: {f.name} carries a placeholder line; "
+                            f"code writes those")
+        for p in tagged:
+            url = (arts.get(p["id"]) or {}).get("url")
+            if url and url not in text:
+                problems.append(f"{section}: {p['id']} is picked for it but its "
+                                f"URL is not in {f.name}: {url}")
+        parts.append(text)
+        used.append(f.name)
+    if problems:
+        print(json.dumps({"ok": False, "problems": problems}, indent=2, ensure_ascii=False))
+        return 1
+    parts += [SCHEMA["x"]["placeholder"], "{{AUDIT_LINE}}"]
+    brief = run_dir / "brief.md"
+    brief.write_text("\n\n".join(parts) + "\n", encoding="utf-8")
+    log_event(run_dir, "brief_stitched", f"{len(used)} sections: {', '.join(used)}")
+    print(json.dumps({"ok": True, "brief": str(brief), "sections": used,
+                      "ignored": skipped}, indent=2, ensure_ascii=False))
+    return 0
+
+
 def cmd_x_merge(args):
     """Put the X run's brief under the article brief, in code.
 
@@ -2416,6 +2614,8 @@ def main():
                    help="render part K of the N parts a too-long kept list cuts into")
     p.add_argument("--retry", action="store_true",
                    help="screen one source again, once its first attempt is over")
+    p.add_argument("--section", choices=list(WRITE_SECTIONS),
+                   help="write only: the one section this writer produces")
     p.add_argument("--out")
     p.set_defaults(fn=cmd_fill)
 
@@ -2453,6 +2653,7 @@ def main():
     p.add_argument("--timeout-seconds", type=int, default=0, help=argparse.SUPPRESS)
     p.set_defaults(fn=cmd_x_wait)
 
+    with_run(sub.add_parser("write-stitch")).set_defaults(fn=cmd_write_stitch)
     with_run(sub.add_parser("x-merge")).set_defaults(fn=cmd_x_merge)
 
     p = with_run(sub.add_parser("event"))

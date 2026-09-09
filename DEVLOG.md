@@ -378,3 +378,53 @@ ALL GOOD after four verifier rounds, then carried out by agents, one per item.
 - One live `/ybs-brief morning`, timed, before any Tier B change.
 - Still open from the slowdown doc: a blocking `wait` instead of polling,
   the Guardian sign-in wall (no retry, log in once).
+
+## 2026-09-09 · Tier B: shorter plans, medium judges, three writers
+
+**Branch** `main`, directly. Nothing replayed live yet: each of the three
+changes waits for one corpus replay against a known day before it is trusted.
+
+**Done**
+- Cluster output shortened: `why` stays one line for READ and MAYBE, is one
+  word for a DROP, and `near_misses` stops at five lines (`_item-shape.md`,
+  both cluster prompts, example plans still pass `items-sync`). Measured on
+  the 09-08 plan first: `why` was 3.5 KB and `near_misses` 3.4 KB of a 30 KB
+  plan, so the saving is nearer a quarter than the half the plan doc hoped;
+  the rest is ids, names and JSON shape.
+- `cluster` and `pick` run at opus/medium (`settings.md`, agents rebuilt).
+  A note under the Models table says when and why, and to put them back to
+  `high` if a replay shows a missed duplicate or a missing second read.
+- Write in parallel: `fill write --section leads|body|worth` renders one
+  prompt per section holding only that section's picks, the whole template,
+  the counterpoints (leads only) and the other sections' headlines, so a
+  writer does not retell a story another writer owns. A section with no
+  picks prints `empty` and gets no writer. `write-stitch` joins the section
+  files under the date line in the template's order, puts the two
+  placeholders at the end, and refuses (naming the section) a missing file,
+  a wrong heading, a foreign section, a placeholder, or a section without the
+  URL of an article picked for it. The stitch is code, not an agent.
+- The template stays the only statement of the shape: the section headings,
+  their order and the date line are read out of `templates/morning.md` by
+  code; tag → section is by position.
+- Replayed `fill write --section` and `write-stitch` on a copy of the 09-08
+  run: 5 + 6 + 4 picks reach the three prompts (41, 36, 27 KB against one
+  76 KB prompt); the 09-08 brief cut into its three sections stitches back
+  byte for byte.
+- SKILL step 10 rewritten; `fill write` without `--section` still renders
+  the whole-brief prompt, for a side-by-side replay.
+- Tests: 17 new checks for the sectioned write; suite keeps its old failures
+  (2 in picks-sync, plus the pick.md placeholders and the rotted profile name
+  in the cluster example, which crashes the prompt suite before the merge
+  example runs).
+
+**Decisions**
+- The stitch is deterministic code, never a fourth Opus call: it has nothing
+  to judge, and a fourth call would give back most of the minutes saved.
+- The one cross-reference kept between writers is the other sections'
+  headlines; if a replay shows the brief's voice suffers, that is where to
+  add more.
+
+**Next**
+- One live `/ybs-brief morning`, timed, and a side-by-side of its plan and
+  brief against 09-08: duplicates missed, second reads not asked for, and
+  whether the three sections still read as one brief.

@@ -132,6 +132,17 @@ One JSON object and nothing else.
       "primary": "a058",
       "read": ["a058"],
       "why": "on the AI topic, but an opinion piece: nothing happened"
+    },
+    {
+      "item_id": "i04",
+      "name": "Ferry runs aground off Cornwall",
+      "kind": "single",
+      "verdict": "DROP",
+      "profile": null,
+      "articles": ["a077"],
+      "primary": "a077",
+      "read": [],
+      "why": "accident"
     }
   ],
   "near_misses": [

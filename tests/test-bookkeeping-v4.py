@@ -842,6 +842,81 @@ def test_pick_groups():
         shutil.rmtree(rd, ignore_errors=True)
 
 
+def test_write_sections(rd):
+    """One writer per section, each seeing only its picks, joined in code."""
+    print("\nwrite: one prompt per section, and the stitch")
+    picks_before = (rd / "picks" / "picks.json").read_text()
+    arts = {a["id"]: a for a in json.loads((rd / "articles.json").read_text())["articles"]}
+    ids = sorted(arts)[:3]
+    for aid in ids:
+        (rd / "notes" / f"{aid}.md").write_text(f"HEADLINE: story {aid}\nKEY FIGURES:\n")
+    write(rd / "picks" / "picks.json", {
+        "picks": [{"id": ids[0], "tag": "LEAD"}, {"id": ids[1], "tag": "LEAD"},
+                  {"id": ids[2], "tag": "WORTH"}], "dropped": []})
+
+    out, _ = run("fill", "write", "--run", rd, "--section", "leads", expect=0)
+    text = Path(out["file"]).read_text()
+    check("the leads prompt holds the leads and not the worth story",
+          f"{ids[0]} · LEAD" in text and f"{ids[1]} · LEAD" in text
+          and f"{ids[2]} · WORTH" not in text)
+    check("and names the other sections' stories by headline", f"story {ids[2]}" in text)
+    check("and asks for one section only, by the template's heading",
+          "one section only: `## What leads`" in text)
+    out, _ = run("fill", "write", "--run", rd, "--section", "body", expect=0)
+    check("a section with no picks gets no prompt and no writer",
+          out.get("empty") is True and out.get("launch") is False, str(out))
+    out, _ = run("fill", "write", "--run", rd, "--section", "worth", expect=0)
+    check("the worth prompt says counterpoints are another writer's",
+          "another writer is writing those" in Path(out["file"]).read_text())
+    _, r = run("fill", "pick", "--run", rd, "--section", "worth")
+    check("--section is refused on any prompt but write", r.returncode == 2)
+
+    def src(a):
+        return f"1. [{arts[a]['title']}]({arts[a]['url']}) — Guardian"
+    (rd / "brief-leads.md").write_text(
+        f"## What leads\n\n### 1. One.\n\nStory.\n\n{src(ids[0])}\n\n"
+        f"### 2. Two.\n\nStory.\n\n{src(ids[1])}\n")
+    out, _ = run("write-stitch", "--run", rd, expect=1)
+    check("refuses while a section with picks has no file",
+          any("no brief-worth.md" in p for p in out["problems"]), str(out))
+    check("and writes no brief", not (rd / "brief.md").exists())
+    (rd / "brief-worth.md").write_text(
+        f"```markdown\n## Worth Yaron's attention\n\n### Three.\n\nStory.\n\n{src(ids[2])}\n```\n")
+    (rd / "brief-body.md").write_text("## Secondary Topics\n\nstray\n")
+    out, _ = run("write-stitch", "--run", rd, expect=0)
+    text = (rd / "brief.md").read_text()
+    check("joins the sections in the template's order under the date line",
+          re.match(r"\*\*Date:\*\* \d{1,2} [A-Z][a-z]+ \d{4} at \d\d:\d\d\n", text)
+          and 0 < text.find("## What leads") < text.find("## Worth Yaron"), text[:200])
+    check("a fence a writer put around its section is stripped", "```" not in text)
+    check("the empty section is left out and its stray file ignored",
+          "## Secondary Topics" not in text and out["ignored"] == ["brief-body.md"], str(out))
+    check("ends with the X and audit placeholders, in that order",
+          text.rstrip().endswith("{{X_SECTION}}\n\n{{AUDIT_LINE}}"), text[-80:])
+    check("the stitch is an event of the run",
+          any(e["type"] == "brief_stitched"
+              for e in json.loads((rd / "run.json").read_text())["events"]))
+
+    (rd / "brief-worth.md").write_text(
+        "## Worth Yaron's attention\n\n### Three.\n\nStory.\n\n"
+        "1. [x](https://example.com/x) — Guardian\n\n{{AUDIT_LINE}}\n")
+    out, _ = run("write-stitch", "--run", rd, expect=1)
+    probs = " ".join(out["problems"])
+    check("a section missing a picked article's URL is refused",
+          ids[2] in probs and arts[ids[2]]["url"] in probs, probs[:200])
+    check("a placeholder inside a section is refused", "placeholder" in probs, probs[:200])
+    (rd / "brief-leads.md").write_text(f"## Secondary Topics\n\n{src(ids[0])}\n{src(ids[1])}\n")
+    out, _ = run("write-stitch", "--run", rd, expect=1)
+    check("a section under the wrong heading is refused",
+          any("does not start with '## What leads'" in p for p in out["problems"]), str(out))
+    check("a refusal leaves the last good brief alone",
+          "## What leads" in (rd / "brief.md").read_text())
+
+    for f in ("brief-leads.md", "brief-body.md", "brief-worth.md", "brief.md"):
+        (rd / f).unlink(missing_ok=True)
+    (rd / "picks" / "picks.json").write_text(picks_before)
+
+
 def test_audit_and_close(rd):
     print("\naudit + close")
     run("event", "--run", rd, "--type", "reader_failed", "--detail", "a003 timed out",
@@ -1304,7 +1379,8 @@ def test_settings_halves():
     check("the article numbers are there", out["picks_max"] == 15, str(out.get("picks_max")))
     check("the article models are there", out["counterpoint_model"] == "opus",
           str(out.get("counterpoint_model")))
-    check("cluster is the article brief's own row", out["cluster_effort"] == "high",
+    # The X half's cluster row is opus/high; the article brief's is medium.
+    check("cluster is the article brief's own row", out["cluster_effort"] == "medium",
           str(out.get("cluster_effort")))
     for key in ("x_window_hours", "x_picks_max", "x_account", "judge_model",
                 "verify_check_7_model"):
@@ -1333,6 +1409,7 @@ def main():
         test_pick_groups()
         test_checks(rd)
         test_counterpoint_fill(rd)
+        test_write_sections(rd)
         test_audit_and_close(rd)
     finally:
         shutil.rmtree(rd, ignore_errors=True)

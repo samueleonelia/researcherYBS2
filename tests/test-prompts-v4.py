@@ -66,7 +66,7 @@ RUN_VARS = {
     "DATE", "SLOT", "RUN_DIR", "WINDOW_START", "WINDOW_END",
     "SOURCE_NAME", "SLUG", "SOURCE_URL", "MARKER", "MARKER_JSON", "SOURCE_JSON",
     "ATTEMPT", "TASK_SPACE",
-    "ARTICLES", "NOTES", "PICKS", "COUNTERPOINTS", "TEMPLATE",
+    "ARTICLES", "NOTES", "PICKS", "COUNTERPOINTS", "TEMPLATE", "SECTION_JOB",
     "PART_NOTE", "PART_ITEMS", "PARTS",
     "ARTICLE_ID", "WHAT_HAPPENED", "PRINCIPLE", "ANGLE", "ITEM_POOL",
     "AUDIT_LINE", "X_SECTION",
@@ -269,8 +269,8 @@ def test_agents_match_skill():
     # v3: the three fan-out agents carry their own instructions, so a launch is
     # one line. These checks are what stop that quietly rotting back.
     want = {"ybs4-screener": ("haiku", "low"), "ybs4-triage": ("sonnet", "low"),
-            "ybs4-cluster": ("opus", "high"), "ybs4-reader": ("sonnet", "medium"),
-            "ybs4-checker": ("haiku", "low"), "ybs4-pick": ("opus", "high"),
+            "ybs4-cluster": ("opus", "medium"), "ybs4-reader": ("sonnet", "medium"),
+            "ybs4-checker": ("haiku", "low"), "ybs4-pick": ("opus", "medium"),
             "ybs4-counterpoint": ("opus", "high"), "ybs4-write": ("opus", "high")}
     for name, (model, effort) in sorted(want.items()):
         body = agents.get(name, "")

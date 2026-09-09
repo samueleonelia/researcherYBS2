@@ -55,15 +55,20 @@ populations are where model choice decides the run's bill.
 |---|---|---|---|
 | screen | haiku | low | one per source |
 | triage | sonnet | low | the largest population, and the one that grows with the source list |
-| cluster | opus | high | 1-2 |
+| cluster | opus | medium | 1-2 |
 | read | sonnet | medium | one per article read, capped by read_items_max |
-| pick | opus | high | 1 |
+| pick | opus | medium | 1 |
 | check | haiku | low | one per picked note |
 | counterpoint | opus | high | one per lead |
-| write | opus | high | 1 |
+| write | opus | high | one per section of the brief (leads, body, worth attention), all at once |
 
 `pick`, `write` and `cluster` carry judgment that is expensive to get wrong: they
 decide what the brief says. `check` and `screen` are narrow mechanical work.
+
+`cluster` and `pick` went from `high` to `medium` on 2026-09-09 for speed. Not
+yet replayed: the risk is a quieter judgment (a duplicate missed, a second read
+not asked for). Put them back to `high` if a replay shows either, and say so in
+`DEVLOG.md`.
 
 # The X list
 

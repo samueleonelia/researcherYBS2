@@ -367,15 +367,37 @@ in step 8 come back under `already_struck` and are not touched again.
 
 ## Step 10 — write, and close
 
-One `ybs4-write` agent. `fill write --run <run_dir>` prints a path, and that path
-is all you pass:
+**One `ybs4-write` agent per section, all in one message.** The sections are
+the ones `schema write.sections` names, and each writer sees only its own
+picks, the same template and the other sections' headlines.
+
+Run `fill write --run <run_dir> --section <section>` for every section in
+**one Bash call**, one command per section. Each prints a path, or `"empty":
+true` with `"launch": false` when no pick carries that section's tag: an empty
+section gets no writer and is omitted from the brief. Then launch every writer
+in **one message**, one `Agent` call each, `run_in_background: true`,
+description `write <section>`, prompt:
 
 ```
-Read <run_dir>/prompts/write.md and follow it. Reply with the finished brief in
-markdown, and nothing else.
+Read <path> and follow it. Reply with your section in markdown, and nothing else.
 ```
 
-Write the reply to `<run_dir>/brief.md`, then, in this order:
+Write each reply to `<run_dir>/brief-<section>.md`, the description saying
+which is which. When all have returned:
+
+```bash
+python3 .claude/skills/ybs-brief/scripts/ybs_run.py write-stitch --run <run_dir>
+```
+
+It joins the sections in the template's order under the date line and puts the
+two placeholders at the end. It refuses, naming the section, when a section
+file is missing, starts with the wrong heading, holds another section or a
+placeholder, or lacks the URL of an article picked for it. Rerun that one
+writer, quoting the problem, rewrite its file, and stitch again; a section
+rejected twice is recorded with `event --type write_failed --detail
+"<section>"` and the run stops, because a brief is never written by hand.
+
+Then, in this order:
 
 ```bash
 python3 .claude/skills/ybs-brief/scripts/ybs_run.py x-wait --run <run_dir>

@@ -48,8 +48,8 @@ character.
 - Give every item a fresh id, `i01` onwards. The parts' ids are not yours.
 - Order the whole list so the most consequential item comes first. A part could
   only order what it saw; your order is the tie-break code uses.
-- Carry every near miss the parts reported into `near_misses`, then add the
-  pairs you nearly merged across parts.
+- `near_misses` holds the pairs you nearly merged across parts first, then the
+  closest of the ones the parts reported, and stops at five lines in all.
 
 ## Output
 

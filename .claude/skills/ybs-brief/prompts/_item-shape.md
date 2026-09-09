@@ -6,10 +6,14 @@ Field by field:
 - `profile` is an exact profile name or `null`.
 - `read` lists the article ids to read, and every id in it must also be in
   `articles`. For a `DROP`, `read` is empty.
-- `why` is one short line. It is read by a person, not by code.
+- `why` is read by a person, not by code. For a `READ` or a `MAYBE` it is one
+  short line: what happened, or what the second account adds. For a `DROP` it
+  is **one word** (`off-beat`, `accident`, `crime`, `lifestyle`, `sport`):
+  nobody reads the reason for dropping a story, so it is not written out.
 - `near_misses` is where you say which pairs you almost merged and why you did
   not. It is how a human checks your grouping, so do not leave it empty when
-  there were genuine near misses.
+  there were genuine near misses. **At most five lines**: the pairs that came
+  closest, not every pair you considered.
 
 Code checks the shape, and any of these fails the whole reply:
 

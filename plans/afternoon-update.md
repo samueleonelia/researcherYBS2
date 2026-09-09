@@ -76,7 +76,7 @@ second version, if a live run shows it is needed.
 | Step | Morning | Afternoon |
 |---|---|---|
 | 0 preflight | same | same |
-| 1 start | `start --slot morning`, then `x-start` | `start --slot afternoon` finds the base; `x-start` answers `skipped` (the afternoon has no X section) |
+| 1 start | `start --slot morning`, then `x-start` | `start --slot afternoon` finds the base; then `x-start`, exactly as in the morning |
 | 2 screen | six screeners | same six; `screen-sync` also drops what the base saw |
 | 3 triage | same | same |
 | 4-5 cluster | one call, `cluster-select.md` | same file; a `{{SLOT_JOB}}` block names the morning's stories, an item may `follows` one, and a new item is read only when it is big |
@@ -84,7 +84,7 @@ second version, if a live run shows it is needed.
 | 7 pick | `pick.md` | `pick-update.md`, chosen by `fill pick` from the slot; `picks-sync` checks the afternoon tags and ceilings |
 | 8 check | same | same |
 | 9 counterpoints | one per LEAD | nothing: there is no LEAD tag, and `picks-sync` lists no leads |
-| 10 write | three writers, `morning.md` | two writers, `afternoon.md`; `x-wait` and `x-merge` see `skipped` and do nothing; the audit line is the afternoon's |
+| 10 write | three writers, `morning.md` | two writers, `afternoon.md`; `x-wait` and `x-merge` as in the morning; the audit line is the afternoon's |
 
 ## 4. Changes, file by file
 
@@ -94,7 +94,7 @@ Two rows under `## Numbers`:
 
 | Setting | Value | What it means |
 |---|---|---|
-| update_picks_max | 15 | stories that may reach the afternoon update, new and moved together |
+| update_picks_max | 20 | stories that may reach the afternoon update, new and moved together |
 | new_item_articles_min | 10 | articles an afternoon item that follows no morning story must hold before it is read; the one floor in this table, and the note under it says so |
 
 The note: "`new_item_articles_min` is a floor, not a ceiling: it is the size
@@ -154,8 +154,9 @@ does not restate it):
   saying nothing has moved since the morning. The sentence is a constant in
   `ybs_run.py` (`EMPTY_UPDATE_LINE`); the template does not quote it, so it
   has one home.
-- `{{X_SECTION}}` and `{{AUDIT_LINE}}` as in the morning: code removes the
-  first (the afternoon has no X section) and fills the second.
+- `{{X_SECTION}}` and `{{AUDIT_LINE}}` as in the morning: the X run is
+  the same as the morning's, its own two-hour window, and `x-merge` puts its
+  section where the placeholder sits.
 
 `{{BASE_TIME}}` is filled by code in both places the head is rendered: `fill
 write` (through the namespace) and `write-stitch` (through `template_head`,
@@ -304,17 +305,17 @@ base order; with no picks at all the brief is the head plus
 `EMPTY_UPDATE_LINE`, and the stitch says so in its output instead of dying.
 `template_head` takes the run and fills `{{BASE_TIME}}`.
 
-**`x-start`**: for an afternoon run, `skip("the afternoon has no X section")`
-before any other check. `x-wait` and `x-merge` already handle `skipped`.
-`x_audit_bit` returns nothing when the skip reason is the slot, so the audit
-line does not report X for a run that never had it.
+**`x-start`, `x-wait`, `x-merge`**: unchanged. The afternoon runs the X
+pipeline exactly as the morning does (Samuele, 2026-09-09): launched at step
+1, its own window from `## X numbers`, merged under the last article section
+at step 10, and reported in the audit line's X bit.
 
 **`build_audit_line`** for an afternoon run: `Audit (afternoon, updates
 <base run_id>): 6 of 6 sources screened · N articles new since the morning
 (M already seen) · undated … · kept … · items (F following a morning story,
 S new but too small to read) · read · notes with a figure removed · K new ·
 L moved (a developments, b confirmations, c reversals, d corrections) ·
-profile of … · retries · failures.`
+profile of … · X: … · retries · failures.`
 
 ### 4.7 `SKILL.md`
 
@@ -323,8 +324,7 @@ profile of … · retries · failures.`
   brief: new stories first, then the morning's stories that moved."
 - Step 1: `start --slot <slot>`; "For `afternoon` it names the morning run it
   updates, or refuses when today has no completed morning run: then stop and
-  say so." The `x-start` paragraph gains: "`skipped` is also the afternoon's
-  answer: the update has no X section."
+  say so." The `x-start` paragraph does not change.
 - Step 7: "`picks-sync` checks the slot's tags and ceilings" instead of naming
   LEAD and WORTH.
 - Step 10: the sections are "the ones `schema write.sections` names for the
@@ -349,7 +349,8 @@ profile of … · retries · failures.`
 - `write-stitch` afternoon: two sections, kind prefix and base order
   checked, `{{BASE_TIME}}` filled, `EMPTY_UPDATE_LINE` when nothing was
   picked.
-- `x-start` afternoon: `skipped`, and the audit line carries no X bit.
+- `x-start` afternoon: launches as in the morning (the stub), and the audit
+  line carries the X bit.
 - `audit-line` afternoon shape.
 
 `tests/test-prompts-v4.py`: `RUN_VARS` gains `SLOT_JOB`, `BASE_STORIES`,
@@ -367,9 +368,6 @@ The usual entries. README's one line on `/ybs-brief` gains the slot.
 
 ## 5. What is deliberately not in this version
 
-- **No X section in the afternoon.** The X pipeline's window is "the last two
-  hours", not "since the morning", and it has no notion of a base run; an
-  afternoon X section would be a second morning section, not an update.
 - **No re-read of pages the morning read.** See section 2.
 - **No good-news report.** That is the second piece, and it is its own plan.
 - **No afternoon-specific models.** If a replay shows the update's pick needs
@@ -384,7 +382,7 @@ The usual entries. README's one line on `/ybs-brief` gains the slot.
 3. `_pick-rules.md`, `pick-update.md`, `pick.md` trimmed, `picks-sync`, `fill
    pick`; tests. Commit.
 4. `section_job`, `picks_block` for `moved`, `write-stitch`,
-   `template_head`, `x-start` skip, audit line; tests. Commit.
+   `template_head`, audit line; tests. Commit.
 5. `SKILL.md`, README, DEVLOG, STATUS. Commit.
 6. One live `/ybs-brief afternoon` against today's morning run, timed from
    `run.json`. Expected: about 20 to 25 minutes, since most of the day's

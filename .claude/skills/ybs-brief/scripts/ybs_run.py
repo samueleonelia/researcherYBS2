@@ -664,12 +664,104 @@ def part_cut(records: list, cap: int) -> list:
     return [[r for _, rs in part for r in rs] for part in parts]
 
 
-def plan_problems(items: list, kept: set, known: set, rank: dict):
+SLOT_JOB_HEAD = """## The brief you are updating
+
+This run is the afternoon update of that morning's brief. Every article in
+front of you is one the morning never saw. Its stories are these, in the order
+it ran them, each with what was new about it then:"""
+
+SLOT_JOB_RULES = """**An article about one of those stories goes in an item that names it:**
+`"follows": "m:<id>"`. Such an item is `READ` only when a headline or a
+description promises something the morning's line does not already carry: a
+figure, a decision, a denial, a correction, a reversal, a death toll. The same
+event told again is `DROP`, with `why: "no-move"`.
+
+**An item that follows nothing** is a story the morning did not have at all.
+It is read only when it is big: at least {floor} articles reporting it.
+Label the smaller ones as honestly as any other item, `READ`, `MAYBE` or
+`DROP`, and code leaves them unread. Group them as carefully as the followers,
+because the size of the cluster is the whole test of a story nobody was
+covering at ten.
+
+A follower item looks like this:
+
+```json
+{{
+  "item_id": "i07",
+  "name": "Centcom names the tankers and gives a crew count",
+  "kind": "cluster",
+  "verdict": "READ",
+  "profile": null,
+  "follows": "m:a149",
+  "articles": ["a018", "a044"],
+  "primary": "a018",
+  "read": ["a018"],
+  "why": "the morning had the strike; this names the ships and counts the crew"
+}}
+```"""
+
+
+def slot_job(run_dir: Path, run: dict) -> str:
+    """What this run's slot adds to the cluster's job, or nothing.
+
+    A morning run renders this empty: it groups a day of articles and there is
+    no earlier brief to measure them against. An afternoon run renders the
+    stories of the brief it updates, the rule for an article that carries one
+    of them further, and the rule for everything else.
+    """
+    if run.get("slot") != "afternoon":
+        return ""
+    base = run.get("base") or {}
+    base_dir = Path(base.get("run_dir") or "")
+    picks = (load_json(base_dir / "picks" / "picks.json") or {}).get("picks") or []
+    lines = []
+    for p in picks:
+        note = base_dir / "notes" / f"{p['id']}.md"
+        text = note.read_text(encoding="utf-8") if note.exists() else ""
+
+        def one(field):
+            return re.sub(r"\s+", " ", note_field(text, field)).strip()
+
+        headline = one("HEADLINE") or "-"
+        whats_new = one("WHAT'S NEW") or "-"
+        lines.append(f"m:{p['id']} · {p.get('tag') or '-'} · {headline}"
+                     f" · new this morning: {whats_new}")
+    if not lines:
+        die(f"the run this update follows has no picks in "
+            f"{base_dir / 'picks' / 'picks.json'}")
+    return "\n\n".join([SLOT_JOB_HEAD, "\n".join(lines),
+                        SLOT_JOB_RULES.format(floor=NEW_ITEM_ARTICLES_MIN)])
+
+
+BASE_ID = re.compile(r"^m:(.+)$")
+
+
+def base_pick_ids(run: dict):
+    """The morning picks an item of this run may follow.
+
+    `None` in a morning run, which follows nothing at all; in an afternoon run
+    the ids of the base run's own picks, and nothing else may be followed. The
+    two are different answers, so the caller can tell "follows nothing" from
+    "follows one of these".
+    """
+    if run.get("slot") != "afternoon":
+        return None
+    base = run.get("base") or {}
+    picks = (load_json(Path(base.get("run_dir") or "") / "picks" / "picks.json")
+             or {}).get("picks") or []
+    return {p["id"] for p in picks if p.get("id")}
+
+
+def plan_problems(items: list, kept: set, known: set, rank: dict, base_ids=None):
     """What is wrong with a cluster plan, in the words items-sync has always used.
 
     Shared by items-sync (the whole plan against the kept list) and by
     fill cluster-merge (each part against its own articles). Returns the
     problems and which item placed each article; it annotates nothing.
+
+    `base_ids` is what `base_pick_ids` returned for the run: `None` for a
+    morning run, where every item's `follows` must be null, or the base picks
+    an afternoon item is allowed to name.
     """
     problems, placed = [], {}
     for it in items:
@@ -702,6 +794,19 @@ def plan_problems(items: list, kept: set, known: set, rank: dict):
             near = nearest_profile_name(name, rank)
             problems.append(f"{iid}: profile {name!r} is not in the profile"
                             + (f"; did you mean {near!r}?" if near else ""))
+
+        follows = it.get("follows")
+        if follows is not None:
+            m = BASE_ID.match(follows) if isinstance(follows, str) else None
+            if base_ids is None:
+                problems.append(f"{iid}: follows {follows!r}, and a morning brief "
+                                f"follows nothing; every item's follows is null")
+            elif not m:
+                problems.append(f"{iid}: follows {follows!r}; a story of the brief "
+                                f"being updated is named m:<id>, as in m:a032")
+            elif m.group(1) not in base_ids:
+                problems.append(f"{iid}: follows {follows!r}, which the brief being "
+                                f"updated did not pick")
     return problems, placed
 
 
@@ -723,6 +828,9 @@ def notes_block(run_dir: Path) -> tuple:
         ids.append(aid)
         head = [aid, entry.get("group", "-"), entry.get("profile") or "-",
                 arts.get(aid, {}).get("url", "-")]
+        if entry.get("follows"):
+            # Only an update has these, so a morning head line is what it was.
+            head.append(f"follows {entry['follows']}")
         out.append(" · ".join(head))
         out.append(note.read_text(encoding="utf-8").strip())
         out.append("")
@@ -1057,6 +1165,7 @@ def cmd_fill(args):
                    "ATTEMPT": str(attempt),
                    "TASK_SPACE": f"ybs screen {slug} a{attempt}"})
     elif name == "cluster-select":
+        ns["SLOT_JOB"] = slot_job(run_dir, run)
         records = kept_articles(run_dir)
         too_long = len(records) > CLUSTER_MAX
         parts = part_cut(records, CLUSTER_MAX) if too_long else [records]
@@ -1087,6 +1196,7 @@ def cmd_fill(args):
             ns["ARTICLES"] = article_lines(records)
             ns["PART_NOTE"] = ""
     elif name == "cluster-merge":
+        ns["SLOT_JOB"] = slot_job(run_dir, run)
         records = kept_articles(run_dir)
         if len(records) <= CLUSTER_MAX:
             die(f"{len(records)} kept articles fit one call "
@@ -1109,7 +1219,8 @@ def cmd_fill(args):
             in_plan = {a for it in plan["items"] for a in (it.get("articles") or [])}
             problems = [f"{a} is not in part {k}" for a in sorted(in_plan - part_ids)]
             if not problems:
-                problems, placed = plan_problems(plan["items"], part_ids, part_ids, rank)
+                problems, placed = plan_problems(plan["items"], part_ids, part_ids,
+                                                 rank, base_pick_ids(run))
                 problems += [f"{a}: kept at triage but in no item"
                              for a in sorted(part_ids - set(placed))]
             if problems:
@@ -1226,6 +1337,7 @@ LEAD_MAX = SETTINGS["lead_max"]
 WORTH_MAX = SETTINGS["worth_max"]
 MAYBE_SHARE_MAX = SETTINGS["maybe_share_max"]
 READ_ITEMS_MAX = SETTINGS["read_items_max"]
+NEW_ITEM_ARTICLES_MIN = SETTINGS["new_item_articles_min"]
 CLUSTER_MAX = SETTINGS["cluster_articles_max"]
 RETRIES_MAX = SETTINGS["retries_max"]
 X_WAIT_MINUTES = SETTINGS["x_wait_minutes_max"]
@@ -1785,7 +1897,14 @@ def cmd_triage_check(args):
 
 # ---------------------------------------------------------------- cluster / select
 
-GROUP_ORDER = ("topic-read", "beat-read", "topic-maybe", "beat-maybe")
+# Priority order, best first. An item that follows a story the brief being
+# updated ran comes before anything else of its verdict: it is the update. The
+# reading pools are these names split at the verdict, so a new group is added
+# here and nowhere else.
+GROUP_ORDER = ("follow-read", "topic-read", "beat-read",
+               "follow-maybe", "topic-maybe", "beat-maybe")
+READ_GROUPS = tuple(g for g in GROUP_ORDER if g.endswith("-read"))
+MAYBE_GROUPS = tuple(g for g in GROUP_ORDER if g.endswith("-maybe"))
 
 
 def cmd_items_sync(args):
@@ -1812,10 +1931,12 @@ def cmd_items_sync(args):
     known = {r["id"] for r in (load_json(run_dir / "articles.json") or {}).get("articles", [])}
     profile = load_profile()
     rank = profile["rank"]
+    base_ids = base_pick_ids(load_run(run_dir))
 
-    problems, placed = plan_problems(plan["items"], kept, known, rank)
+    problems, placed = plan_problems(plan["items"], kept, known, rank, base_ids)
     counts = {g: 0 for g in GROUP_ORDER}
     dropped = 0
+    small_new = []
 
     for index, it in enumerate(plan["items"]):
         verdict = (it.get("verdict") or "").upper()
@@ -1823,9 +1944,20 @@ def cmd_items_sync(args):
         it["_rank"] = rank.get(name.lower()) if name else None
         it["_index"] = index
         it["_group"] = None
+        it["_small_new"] = False
         if verdict in ("READ", "MAYBE"):
-            it["_group"] = f"{'topic' if it['_rank'] else 'beat'}-{verdict.lower()}"
+            kind = ("follow" if it.get("follows") else
+                    ("topic" if it["_rank"] else "beat"))
+            it["_group"] = f"{kind}-{verdict.lower()}"
             counts[it["_group"]] += 1
+            # An update's own test for a story the brief being updated never
+            # had: it counts only when the day has piled up around it. The
+            # item is still grouped and still counted honestly; it is only
+            # kept out of the reading pools.
+            if (base_ids is not None and not it.get("follows")
+                    and len(it.get("articles") or []) < NEW_ITEM_ARTICLES_MIN):
+                it["_small_new"] = True
+                small_new.append(it.get("item_id"))
         elif verdict == "DROP":
             dropped += 1
 
@@ -1847,7 +1979,8 @@ def cmd_items_sync(args):
                 -len(it.get("articles") or []),
                 it["_index"])
 
-    reads = sorted([it for it in plan["items"] if it["_group"] in ("topic-read", "beat-read")],
+    reads = sorted([it for it in plan["items"]
+                    if it["_group"] in READ_GROUPS and not it["_small_new"]],
                    key=order)
     taken = reads[:READ_ITEMS_MAX]
     skipped_for_cap = [it.get("item_id") for it in reads[READ_ITEMS_MAX:]]
@@ -1858,7 +1991,8 @@ def cmd_items_sync(args):
                       len(taken) * MAYBE_SHARE_MAX // 100)
         allowed = min(allowed, READ_ITEMS_MAX - len(taken))
         pool = sorted([it for it in plan["items"]
-                       if it["_group"] in ("topic-maybe", "beat-maybe")], key=order)
+                       if it["_group"] in MAYBE_GROUPS and not it["_small_new"]],
+                      key=order)
         maybes_taken = pool[:max(0, allowed)]
 
     to_read, seen = [], set()
@@ -1869,11 +2003,12 @@ def cmd_items_sync(args):
             seen.add(aid)
             to_read.append({"id": aid, "item": it.get("item_id"),
                             "group": it["_group"], "profile": it.get("profile") or None,
+                            "follows": it.get("follows") or None,
                             "primary": aid == it.get("primary")})
     write_json(run_dir / "items" / "read-list.json", {"read": to_read})
 
     for it in plan["items"]:
-        for k in ("_rank", "_index", "_group"):
+        for k in ("_rank", "_index", "_group", "_small_new"):
             it.pop(k, None)
     write_json(run_dir / "items" / "plan.json", plan)
 
@@ -1881,7 +2016,8 @@ def cmd_items_sync(args):
     run.setdefault("counts", {}).update(
         {"items": len(plan["items"]), "items_by_group": counts,
          "items_dropped": dropped, "items_taken": len(taken) + len(maybes_taken),
-         "maybes_taken": len(maybes_taken), "to_read": len(to_read)})
+         "maybes_taken": len(maybes_taken), "to_read": len(to_read),
+         "small_new_items": len(small_new)})
     save_run(run_dir, run)
 
     print(json.dumps({"ok": True, "items": len(plan["items"]),
@@ -1889,6 +2025,7 @@ def cmd_items_sync(args):
                       "read_items_max": READ_ITEMS_MAX,
                       "reads_taken": len(taken), "skipped_for_cap": skipped_for_cap,
                       "maybes_taken": len(maybes_taken),
+                      "small_new_items": len(small_new),
                       "articles_to_read": len(to_read),
                       "profile_built": profile.get("built_local_date", "unknown")},
                      indent=2, ensure_ascii=False))

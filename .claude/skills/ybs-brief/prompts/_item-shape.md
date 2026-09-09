@@ -6,6 +6,9 @@ Field by field:
 - `profile` is an exact profile name or `null`.
 - `read` lists the article ids to read, and every id in it must also be in
   `articles`. For a `DROP`, `read` is empty.
+- `follows` is `null`, or the id of a story an earlier brief of the same day
+  already ran, written `m:<id>`. In a morning run it is `null` on every item,
+  and code rejects anything else there.
 - `why` is read by a person, not by code. For a `READ` or a `MAYBE` it is one
   short line: what happened, or what the second account adds. For a `DROP` it
   is **one word** (`off-beat`, `accident`, `crime`, `lifestyle`, `sport`):

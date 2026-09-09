@@ -18,6 +18,8 @@ Nothing is opened here. The lines the parts saw are all the evidence there is.
 {{PART_ITEMS}}
 ```
 
+{{SLOT_JOB}}
+
 ## What he is arguing about now
 
 Rebuilt from his latest shows on {{PROFILE_DATE}}. A merged item is judged
@@ -45,6 +47,7 @@ character.
   side by side.
 - Every other item passes through unchanged: same articles, same primary, same
   `read`, same verdict, same profile, same `why`.
+- `follows` is carried through unchanged, whatever a part put there.
 - Give every item a fresh id, `i01` onwards. The parts' ids are not yours.
 - Order the whole list so the most consequential item comes first. A part could
   only order what it saw; your order is the tie-break code uses.
@@ -66,6 +69,7 @@ each found the same fine, and one part's column passes through:
       "verdict": "READ",
       "profile": "Capitalism versus the mixed economy",
       "articles": ["a033", "a210"],
+      "follows": null,
       "primary": "a033",
       "read": ["a033"],
       "why": "merged 1/i02 and 2/i05, the same fine; a210 promises nothing a033 lacks"
@@ -77,6 +81,7 @@ each found the same fine, and one part's column passes through:
       "verdict": "MAYBE",
       "profile": "Technology and AI as human progress",
       "articles": ["a058"],
+      "follows": null,
       "primary": "a058",
       "read": ["a058"],
       "why": "passed through from 1/i03"

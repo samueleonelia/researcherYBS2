@@ -67,7 +67,7 @@ RUN_VARS = {
     "SOURCE_NAME", "SLUG", "SOURCE_URL", "MARKER", "MARKER_JSON", "SOURCE_JSON",
     "ATTEMPT", "TASK_SPACE",
     "ARTICLES", "NOTES", "PICKS", "COUNTERPOINTS", "TEMPLATE", "SECTION_JOB",
-    "PART_NOTE", "PART_ITEMS", "PARTS",
+    "PART_NOTE", "PART_ITEMS", "PARTS", "SLOT_JOB", "BASE_TIME",
     "ARTICLE_ID", "WHAT_HAPPENED", "PRINCIPLE", "ANGLE", "ITEM_POOL",
     "AUDIT_LINE", "X_SECTION",
 }
@@ -102,25 +102,29 @@ def test_placeholders():
         check(f"{f.name}: every placeholder is one the script can fill",
               not unknown, f"nothing provides {sorted(unknown)}")
 
-    tpl = (SKILL / "templates" / "morning.md").read_text()
-    unknown = set(ANY_PLACEHOLDER.findall(tpl)) - known
-    check("morning.md: every placeholder is one the script can fill", not unknown,
-          f"nothing provides {sorted(unknown)}")
-    check("morning.md carries the audit-line placeholder", "{{AUDIT_LINE}}" in tpl)
-    # x-merge puts the X section where this sits, and audit-line ends the file,
-    # so the order of the two placeholders is the order of the two edits.
-    check("morning.md carries the X placeholder above the audit line",
-          0 <= tpl.find("{{X_SECTION}}") < tpl.find("{{AUDIT_LINE}}"),
-          f"X_SECTION at {tpl.find('{{X_SECTION}}')}")
+    # Every slot's template goes through the same checks: a slot is a different
+    # brief, not a different set of rules for its template.
+    for t in sorted((SKILL / "templates").glob("*.md")):
+        tpl = t.read_text()
+        unknown = set(ANY_PLACEHOLDER.findall(tpl)) - known
+        check(f"{t.name}: every placeholder is one the script can fill", not unknown,
+              f"nothing provides {sorted(unknown)}")
+        check(f"{t.name} carries the audit-line placeholder", "{{AUDIT_LINE}}" in tpl)
+        # x-merge puts the X section where this sits, and audit-line ends the file,
+        # so the order of the two placeholders is the order of the two edits.
+        check(f"{t.name} carries the X placeholder above the audit line",
+              0 <= tpl.find("{{X_SECTION}}") < tpl.find("{{AUDIT_LINE}}"),
+              f"X_SECTION at {tpl.find('{{X_SECTION}}')}")
+        # The template is the only statement of the brief's shape, and write.md
+        # the only statement of its sentences.
+        for s in ("words", "clause", "dash", "semicolon", "metaphor"):
+            check(f"{t.name} carries no sentence rule ({s})", s not in tpl)
 
-    # The template is the only statement of the brief's shape, and write.md the
-    # only statement of its sentences. Neither may drift into the other's job.
+    # The other half of that: write.md may not drift into the shape's job.
     wr = (SKILL / "prompts" / "write.md").read_text()
     for s in ("What leads", "Secondary Topics", "Worth Yaron", "COUNTERPOINT -",
               "AUDIT_LINE"):
         check(f"write.md does not restate the shape ({s})", s not in wr)
-    for s in ("words", "clause", "dash", "semicolon", "metaphor"):
-        check(f"morning.md carries no sentence rule ({s})", s not in tpl)
 
 
 def test_pass_through():

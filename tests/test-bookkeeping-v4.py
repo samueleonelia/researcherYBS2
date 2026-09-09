@@ -117,6 +117,37 @@ def test_screen_sync(rd):
     check("assigns stable ids", ids == ["a001", "a002", "a003", "a004"], str(ids))
 
 
+def build_morning(root, run_id, started, status="completed", links=(), picks=()):
+    """One morning run, written by hand, inside a runs folder of a test's own.
+
+    Enough of a finished run for an afternoon one to follow it: the record, the
+    articles it screened and, when `picks` names any, the stories its brief ran
+    with a note each. Those notes are what the update reads back.
+    """
+    d = root / run_id
+    for sub in ("screen", "triage", "items", "pages", "notes", "checks", "picks"):
+        (d / sub).mkdir(parents=True, exist_ok=True)
+    write(d / "run.json", {
+        "run_id": run_id, "slot": "morning",
+        "local_date": datetime.now().strftime("%Y-%m-%d"),
+        "window_start_utc": now_iso(-8), "window_end_utc": started,
+        "started_utc": started, "completed_utc": started,
+        "status": status, "sources": {}, "counts": {}, "events": []})
+    write(d / "articles.json", {"articles": [
+        {"id": f"a{i:03d}", "source": "Guardian", "url": u, "title": "t",
+         "description": "d", "category": "world", "published": started,
+         "also_in": []} for i, u in enumerate(links, 1)]})
+    if picks:
+        write(d / "picks" / "picks.json",
+              {"picks": [{"id": a, "tag": "LEAD", "why": "it led"} for a in picks],
+               "dropped": []})
+        for a in picks:
+            (d / "notes" / f"{a}.md").write_text(
+                f"HEADLINE: the morning's story {a}\n"
+                f"WHAT'S NEW: what {a} carried at ten\n", encoding="utf-8")
+    return d
+
+
 def test_afternoon_base():
     """The afternoon is an update of one named morning brief.
 
@@ -139,20 +170,7 @@ def test_afternoon_base():
 
         # A morning run of today, finished. Two of them: the later one wins.
         def morning(run_id, started, status="completed", links=()):
-            d = tmp / run_id
-            for sub in ("screen", "triage", "items", "pages", "notes", "checks",
-                        "picks"):
-                (d / sub).mkdir(parents=True, exist_ok=True)
-            write(d / "run.json", {
-                "run_id": run_id, "slot": "morning", "local_date": today,
-                "window_start_utc": now_iso(-8), "window_end_utc": started,
-                "started_utc": started, "completed_utc": started,
-                "status": status, "sources": {}, "counts": {}, "events": []})
-            write(d / "articles.json", {"articles": [
-                {"id": f"a{i:03d}", "source": "Guardian", "url": u, "title": "t",
-                 "description": "d", "category": "world", "published": started,
-                 "also_in": []} for i, u in enumerate(links, 1)]})
-            return d
+            return build_morning(tmp, run_id, started, status, links)
 
         early = morning("2026-x_morning_080000", now_iso(-4),
                         links=["https://www.theguardian.com/x/early"])
@@ -520,6 +538,115 @@ def test_items(rd):
     check("builds the read list", out["articles_to_read"] == 3)
     read = json.loads((rd / "items" / "read-list.json").read_text())["read"]
     check("every article carries its group", all(r["group"] == "beat-read" for r in read))
+
+
+def test_items_afternoon():
+    """An update's own clustering rules: who may be followed, and what is read.
+
+    Three items, and every rule of the afternoon turns on which is which: one
+    that follows the morning's story, one new story big enough to be read, and
+    one new story too small. Everything runs inside a runs folder of its own,
+    named by YBS_RUNS_DIR, so the real runs are neither read nor written.
+    """
+    print("\nitems-sync: following the morning, and the size of a new story")
+    settings, _ = run("settings", expect=0)
+    floor = settings["new_item_articles_min"]
+    tmp = Path(tempfile.mkdtemp(prefix="ybs-runs-"))
+    env = {"YBS_RUNS_DIR": str(tmp)}
+    try:
+        build_morning(tmp, "2026-x_morning_100000", now_iso(-6),
+                      links=["https://www.theguardian.com/x/seen-at-ten"],
+                      picks=["a001"])
+
+        def prepared(slot, n):
+            """A run of `slot` with n articles, all kept at triage."""
+            out, _ = run("start", "--slot", slot, expect=0, env=env)
+            rd = Path(out["run_dir"])
+            write(rd / "screen" / "guardian.json", {
+                "source": "Guardian", "ok": True,
+                "links": [link(f"https://www.theguardian.com/{slot}/{i:03d}",
+                               f"story {i}") for i in range(n)]})
+            run("screen-sync", "--run", rd)
+            run("triage-list", "--run", rd, expect=0)
+            for a in json.loads((rd / "articles.json").read_text())["articles"]:
+                (rd / "triage" / f"{a['id']}.verdict.txt").write_text(
+                    f"{a['id']} keep\n")
+            run("triage-check", "--run", rd, expect=0)
+            return rd
+
+        def item(iid, ids, follows=None, verdict="READ"):
+            return {"item_id": iid, "name": iid, "profile": None,
+                    "kind": "cluster" if len(ids) > 1 else "single",
+                    "verdict": verdict, "follows": follows, "articles": ids,
+                    "primary": ids[0], "read": [ids[0]], "why": "x"}
+
+        # 1. A morning run follows nothing at all.
+        rd = prepared("morning", 2)
+        write(rd / "items" / "plan.json", {"items": [
+            item("i01", ["a001"], follows="m:a001"), item("i02", ["a002"])],
+            "near_misses": []})
+        out, _ = run("items-sync", "--run", rd, expect=1)
+        check("a morning item may not follow anything",
+              has(out, "a morning brief follows nothing"), str(out)[:200])
+
+        # 2. The afternoon, with the morning behind it.
+        time.sleep(1.1)          # a run id names the second it started in
+        rd = prepared("afternoon", floor + 2)
+        ids = [a["id"] for a in
+               json.loads((rd / "articles.json").read_text())["articles"]]
+        follower, small, big = ids[0], ids[1], ids[2:]
+        plan = {"items": [item("i01", [follower], follows="m:a001"),
+                          item("i02", [small]),
+                          item("i03", big)], "near_misses": []}
+
+        bare = json.loads(json.dumps(plan))
+        bare["items"][0]["follows"] = "a001"
+        write(rd / "items" / "plan.json", bare)
+        out, _ = run("items-sync", "--run", rd, expect=1)
+        check("a bare id is refused: a story of the morning is named m:<id>",
+              has(out, "m:<id>"), str(out)[:200])
+
+        stranger = json.loads(json.dumps(plan))
+        stranger["items"][0]["follows"] = "m:a404"
+        write(rd / "items" / "plan.json", stranger)
+        out, _ = run("items-sync", "--run", rd, expect=1)
+        check("an id the morning brief never picked is refused",
+              has(out, "did not pick"), str(out)[:200])
+
+        write(rd / "items" / "plan.json", plan)
+        out, _ = run("items-sync", "--run", rd, expect=0)
+        check("a follower is its own group",
+              out["by_group"]["follow-read"] == 1
+              and out["by_group"]["beat-read"] == 2, str(out)[:200])
+        check(f"a new item under {floor} articles is counted, not read",
+              out["small_new_items"] == 1, str(out)[:200])
+        check("the counts of the run say so too",
+              json.loads((rd / "run.json").read_text())
+              ["counts"]["small_new_items"] == 1)
+        read = json.loads((rd / "items" / "read-list.json").read_text())["read"]
+        check("the follower is read before the new story is",
+              [r["id"] for r in read] == [follower, big[0]],
+              str([r["id"] for r in read]))
+        check("and it carries the morning story it follows",
+              read[0]["follows"] == "m:a001" and read[1]["follows"] is None,
+              str(read))
+        check("the small new story is read by nobody",
+              small not in [r["id"] for r in read], str(read))
+
+        # The head line of a note says what it follows, and that reaches the pick.
+        for r in read:
+            (rd / "notes" / f"{r['id']}.md").write_text(
+                f"HEADLINE: story {r['id']}\n", encoding="utf-8")
+        out, _ = run("fill", "pick", "--run", rd, expect=0)
+        text = Path(out["file"]).read_text()
+        check("a follower's note is headed with the story it follows",
+              f"{follower} · follow-read" in text and "· follows m:a001" in text,
+              text[text.find(follower):][:160])
+        check("and a note that follows nothing is headed as it always was",
+              f"{big[0]} · beat-read" in text and text.count("· follows ") == 1,
+              str(text.count("· follows ")))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 def selection_run(n_articles, build):
@@ -1512,6 +1639,7 @@ def main():
         test_dates()
         test_triage(rd)
         test_items(rd)
+        test_items_afternoon()
         test_selection()
         test_cluster_parts()
         test_read_list(rd)

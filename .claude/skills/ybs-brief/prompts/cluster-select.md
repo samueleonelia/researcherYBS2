@@ -25,6 +25,8 @@ You read no articles and you open nothing. Judge from what is in front of you.
 
 {{PART_NOTE}}
 
+{{SLOT_JOB}}
+
 ## What he is arguing about now
 
 Rebuilt from his latest shows on {{PROFILE_DATE}}. This is the first filter: a
@@ -107,6 +109,7 @@ One JSON object and nothing else.
       "verdict": "READ",
       "profile": null,
       "articles": ["a012", "a047"],
+      "follows": null,
       "primary": "a012",
       "read": ["a012", "a047"],
       "why": "a047 adds the crew-conditions reporting that triggered it"
@@ -118,6 +121,7 @@ One JSON object and nothing else.
       "verdict": "READ",
       "profile": "Capitalism versus the mixed economy",
       "articles": ["a033"],
+      "follows": null,
       "primary": "a033",
       "read": ["a033"],
       "why": "a fine with a number, and the regulator names the algorithm"
@@ -129,6 +133,7 @@ One JSON object and nothing else.
       "verdict": "MAYBE",
       "profile": "Technology and AI as human progress",
       "articles": ["a058"],
+      "follows": null,
       "primary": "a058",
       "read": ["a058"],
       "why": "on the AI topic, but an opinion piece: nothing happened"
@@ -140,6 +145,7 @@ One JSON object and nothing else.
       "verdict": "DROP",
       "profile": null,
       "articles": ["a077"],
+      "follows": null,
       "primary": "a077",
       "read": [],
       "why": "accident"

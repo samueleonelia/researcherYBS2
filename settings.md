@@ -28,6 +28,7 @@ settings`, `python3 x-lists/x_settings.py`, or `python3
 | retries_max | 1 | times one agent may be launched again after a failure |
 | screen_timeout_seconds | 540 | seconds one screen command may run before it counts as dead; the command stops itself just under this, and the value stays below the Bash tool's own ceiling |
 | read_items_max | 45 | items that may be read in one run |
+| read_wait_seconds | 10 | how long a reader waits for a blank page to show text before giving up; a page with text is copied at once |
 | cluster_articles_max | 200 | articles one cluster call may take; a longer kept list is cut into parts and merged |
 | triage_batch_size | 10 | articles one triage agent may sort; a batch may hold fewer |
 | maybe_below_reads | 30 | MAYBEs may be added only while the READ count is under this, and only up to it |

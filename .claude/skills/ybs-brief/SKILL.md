@@ -271,10 +271,13 @@ well. There is nothing to do about that: read what it prints and carry on.
 **Run the rolling pool** with `ybs4-reader`. Each reader opens its article in its
 own ego task space, saves the page and writes its own note; you write neither.
 
-A reader that replies `PAGE_TRUNCATED` could not see the whole article — a
-registration prompt, a sign-in box, a subscribe overlay. It writes no note, so
-`read-list` will list it again. Note the id and carry on; do not relaunch it
-inside the pool.
+A reader that replies `PAGE_TRUNCATED` or `PAGE_BLANK` did not get the article.
+`PAGE_TRUNCATED` means a registration prompt, a sign-in box or a subscribe
+overlay stood where the rest of it should be. `PAGE_BLANK` means the page never
+showed text within `read_wait_seconds`; the retry goes through `read-list`
+exactly as for a truncated page, and the `read_failed` detail carries the title
+the reader reported. Either way it writes no note, so `read-list` will list it
+again. Note the id and carry on; do not relaunch it inside the pool.
 
 When the pool drains, run `read-list` again: whatever it lists has no note. Send
 those through the pool once more. Anything still listed after that retry:

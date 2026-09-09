@@ -241,6 +241,7 @@ SCHEMA = {
     },
     "sentinel": {
         "truncated": "PAGE_TRUNCATED",
+        "blank": "PAGE_BLANK",
         "no_case": "NONE",
         "no_figures": "no figures",
         "triage": "keep | drop",

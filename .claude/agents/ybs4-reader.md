@@ -35,9 +35,18 @@ ego-browser nodejs <<'EOF'
 const fs = await import('fs')
 await useOrCreateTaskSpace('ybs read <id>')
 await openOrReuseTab('<url>', { wait: true, timeout: 40 })
-const txt = await js(String.raw`document.body.innerText`)
+// "Loaded" is not "showing text". Some sites run a check before they draw the
+// page and are blank for a second or two. Copy as soon as there is text; give
+// up at the ceiling and say so.
+let txt = '', waited = 0
+for (;;) {
+  txt = await js(String.raw`document.body ? document.body.innerText : ''`)
+  if (txt.trim().length >= 800 || waited >= 10) break
+  await new Promise(r => setTimeout(r, 1000)); waited++
+}
 fs.writeFileSync('<run_dir>/pages/<id>.txt', txt)
-cliLog(JSON.stringify({ id: '<id>', chars: txt.length, url: (await pageInfo()).url }))
+const info = await pageInfo()
+cliLog(JSON.stringify({ id: '<id>', chars: txt.length, waited, url: info.url, title: info.title }))
 await completeTaskSpace('ybs read <id>', { keep: false })
 EOF
 ```
@@ -47,7 +56,11 @@ EOF
 Read what you saved, then ask one question before anything else: **is the whole
 article here?**
 
-Reply with exactly the word `PAGE_TRUNCATED`, write no note, and stop, if any of
+If `chars` is under 800 after the wait, the page never showed anything at all:
+reply `PAGE_BLANK: <the title the command printed>`, write no
+note, and stop. Nothing below applies.
+
+Otherwise, reply with exactly the word `PAGE_TRUNCATED`, write no note, and stop, if any of
 these is true:
 
 - The article stops early and a registration prompt, a sign-in box, a subscribe

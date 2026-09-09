@@ -450,3 +450,65 @@ changes waits for one corpus replay against a known day before it is trusted.
 
 **Next**
 - Push `main` and tag it, so Yaron's `/update` picks the new version up.
+
+## 2026-09-09 · The afternoon update: one pipeline, a second slot
+
+**Status:** `main`, five commits (`feabc95`, `a27355f`, `aed6507`, `7559c59`,
+and this one). Plan: `plans/afternoon-update.md`, implemented as written.
+
+**Done**
+- `/ybs-brief afternoon` runs the same ten steps as the morning. Three things
+  differ and all three are decided in code from `slot: afternoon` in
+  `run.json`: what the screen keeps, what the cluster and the pick are asked,
+  and which template says what the brief looks like.
+- Wave 1: `update_picks_max` and `new_item_articles_min` in `settings.md`,
+  per-slot section and tag tables, `start --slot afternoon [--base]` which
+  finds today's completed morning run or refuses, and a `screen-sync` that
+  drops every URL the morning already screened and counts them.
+- Wave 2: `templates/afternoon.md`; `follows` on a cluster item, named
+  `m:<id>`; a `{{SLOT_JOB}}` block that renders empty for the morning and, for
+  the afternoon, lists the morning's picks and the two rules; `follow-read` and
+  `follow-maybe` at the front of the group order; a new item under the one
+  floor is counted and never read.
+- Wave 3: `_pick-rules.md` shared by both pick prompts, `pick-update.md` with
+  `NEW` / `MOVED` and the four kinds, `base_stories()` and `base_dropped()`,
+  and a `picks-sync` that checks the slot's tags, the kind, the tag/`follows`
+  agreement, one follower per base pick, and trims `NEW` before `MOVED`.
+- Wave 4: `{{BASE_TIME}}` in the head, a slot-aware `section_job`, a `MOVED`
+  picks block in the morning's order with `THE MORNING HAD` above each note,
+  a stitch that checks the kind prefix and that order, `EMPTY_UPDATE_LINE` for
+  an afternoon that found nothing, and an audit line that opens
+  `Audit (afternoon, updates <run_id>):`.
+- Wave 5: this entry, `SKILL.md`, `README.md`, `STATUS.md`.
+
+**Decisions**
+- One skill, not two. Every hard rule, the pool, the retries, the figure check
+  and the stitch are already right; a second copy would be a second place for
+  each of them to rot.
+- The window stays local midnight to now, minus what the morning screened, not
+  "since the morning's end": a story published at 08:00 that no front page was
+  showing at 10:00 is exactly what the morning missed.
+- No re-read of a page the morning already read. A live blog rewritten in place
+  keeps its URL and is dropped as seen; the development it carries almost
+  always shows up as a fresh dated article too.
+- `NOTE_IDS` and `NOTE_COUNT` joined the prompt test's `RUN_VARS`. `fill` has
+  always provided both; the test's list was stale, and `pick-update.md` would
+  have doubled the failure.
+
+**Verified, without a browser**
+- Morning unchanged: replaying `fill write --section leads|body|worth` and
+  `write-stitch` on a scratch copy of `runs/2026-09-09_morning_142825` under
+  wave-1 code and under wave-4 code gives a byte-identical `brief.md` and
+  byte-identical write prompts.
+- Afternoon end to end on scratch fixtures: `start` found the base and recorded
+  `10:00`; `screen-sync` dropped 1 seen link of 15; the cluster prompt carried
+  all 15 morning stories; `items-sync` gave 1 `follow-read`, 2 `beat-read` and
+  1 small new item unread; `fill pick` rendered `pick-update.md` into
+  `prompts/pick.md`; `picks-sync` passed 1 NEW and 1 MOVED; the two writers got
+  their own jobs and the morning's line; the stitch joined both sections; and
+  the quiet-afternoon path wrote the head plus the one sentence.
+
+**Next**
+- One live `/ybs-brief afternoon` against a real morning run, timed. Expected
+  20 to 25 minutes: most of the day's articles are already seen and dropped at
+  `screen-sync`.

@@ -1,10 +1,10 @@
 ---
 name: ybs-brief
-description: Produce a show-ready morning news brief for Yaron Brook from the sources in sources.md. Screens every source's front page in the ego browser with his logged-in sessions, groups the day's stories so one event is read once, reads each chosen article the way a person would, checks every figure against the page it came from, cuts the result to the picks the settings allow and writes the brief. Use when asked to run the morning brief, or when the user types /ybs-brief. Runs the X-list pipeline in x-lists/ at the same time and puts its section under the article brief. Does NOT send email, does NOT read show transcripts, and never schedules itself.
-argument-hint: "morning"
+description: Produce a show-ready morning news brief for Yaron Brook from the sources in sources.md. Screens every source's front page in the ego browser with his logged-in sessions, groups the day's stories so one event is read once, reads each chosen article the way a person would, checks every figure against the page it came from, cuts the result to the picks the settings allow and writes the brief. Use when asked to run the morning brief, or when the user types /ybs-brief. Runs the X-list pipeline in x-lists/ at the same time and puts its section under the article brief. Does NOT send email, does NOT read show transcripts, and never schedules itself. `afternoon` writes what changed since that day's morning brief: new stories first, then the morning's stories that moved.
+argument-hint: "morning | afternoon"
 ---
 
-# /ybs-brief — build one morning brief
+# /ybs-brief — build one brief
 
 You are the orchestrator. You run the steps below in order, launching subagents
 to do the work. You do not screen, read, judge or write anything yourself: every
@@ -109,11 +109,17 @@ If `ego-browser` is missing, stop: nothing here works without it.
 ## Step 1 — start the run
 
 ```bash
-python3 .claude/skills/ybs-brief/scripts/ybs_run.py start --slot morning
+python3 .claude/skills/ybs-brief/scripts/ybs_run.py start --slot <slot>
 ```
+
+The slot is the word the user typed, `morning` or `afternoon`.
 
 It prints `run_dir`, the window, the sources and the profile's date. Every later
 command takes `--run <run_dir>`. The window is local midnight to now.
+
+For `afternoon` it also names the morning run it updates, under `base`. It
+refuses when today has no completed morning run: then stop and say so, because
+an update with nothing to update is not a brief.
 
 If it says there is no topic profile, stop and tell the user to run `/ybs-shows`.
 
@@ -302,10 +308,10 @@ Write its JSON to `<run_dir>/picks/picks.json`, then:
 python3 .claude/skills/ybs-brief/scripts/ybs_run.py picks-sync --run <run_dir>
 ```
 
-It enforces the LEAD and WORTH ceilings in `settings.md` and that every note is
-either picked or dropped with a reason. A reply over `picks_max` is not a
-failure: the command trims it itself, smallest news items first and never a
-LEAD, and records what it cut. One rerun on failure, quoting the check.
+It checks the slot's own tags and ceilings, and that every note is either
+picked or dropped with a reason. A reply over the slot's ceiling is not a
+failure: the command trims it itself, smallest news items first, and records
+what it cut. One rerun on failure, quoting the check.
 
 ## Step 8 — check the figures
 
@@ -368,8 +374,8 @@ in step 8 come back under `already_struck` and are not touched again.
 ## Step 10 — write, and close
 
 **One `ybs4-write` agent per section, all in one message.** The sections are
-the ones `schema write.sections` names, and each writer sees only its own
-picks, the same template and the other sections' headlines.
+the ones `schema write.sections` names for the run's slot, and each writer
+sees only its own picks, the same template and the other sections' headlines.
 
 Run `fill write --run <run_dir> --section <section>` for every section in
 **one Bash call**, one command per section. Each prints a path, or `"empty":
@@ -451,8 +457,8 @@ path to `brief.md` to the user. Nothing else.
     step pass. A step that cannot complete is recorded as failed.
 11. **Never send anything anywhere.** No email, no posting, no scheduling. This
     skill produces one file and reports where it is.
-12. **Every number in `settings.md` is a ceiling, never a floor.** No step fills
-    a slot to reach a number.
+12. **Every number in `settings.md` is a ceiling**, apart from the one its
+    table marks as a floor. No step fills a slot to reach a number.
 13. **`x-start` is the only door to X.** Never open the list yourself, never run
     `x_run.py` by hand, never start a second one while a run is recorded as
     going, and never write the X section yourself. One relaunch is the ceiling,

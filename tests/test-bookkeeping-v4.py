@@ -117,6 +117,115 @@ def test_screen_sync(rd):
     check("assigns stable ids", ids == ["a001", "a002", "a003", "a004"], str(ids))
 
 
+def test_afternoon_base():
+    """The afternoon is an update of one named morning brief.
+
+    `start --slot afternoon` refuses without one, records the one it found, and
+    `screen-sync` then drops every link that morning already screened. The whole
+    test runs inside a runs folder of its own, named by YBS_RUNS_DIR, so it
+    neither sees nor leaves anything among the real runs.
+    """
+    print("\nstart --slot afternoon: the base run")
+    tmp = Path(tempfile.mkdtemp(prefix="ybs-runs-"))
+    env = {"YBS_RUNS_DIR": str(tmp)}
+    today = datetime.now().strftime("%Y-%m-%d")
+    try:
+        _, r = run("start", "--slot", "afternoon", expect=2, env=env)
+        check("with no morning run today, the afternoon refuses to start",
+              "no morning brief to update" in r.stderr, r.stderr.strip()[:200])
+        check("and says exactly what it looked for",
+              today in r.stderr and "slot morning" in r.stderr
+              and "status completed" in r.stderr, r.stderr.strip()[:240])
+
+        # A morning run of today, finished. Two of them: the later one wins.
+        def morning(run_id, started, status="completed", links=()):
+            d = tmp / run_id
+            for sub in ("screen", "triage", "items", "pages", "notes", "checks",
+                        "picks"):
+                (d / sub).mkdir(parents=True, exist_ok=True)
+            write(d / "run.json", {
+                "run_id": run_id, "slot": "morning", "local_date": today,
+                "window_start_utc": now_iso(-8), "window_end_utc": started,
+                "started_utc": started, "completed_utc": started,
+                "status": status, "sources": {}, "counts": {}, "events": []})
+            write(d / "articles.json", {"articles": [
+                {"id": f"a{i:03d}", "source": "Guardian", "url": u, "title": "t",
+                 "description": "d", "category": "world", "published": started,
+                 "also_in": []} for i, u in enumerate(links, 1)]})
+            return d
+
+        early = morning("2026-x_morning_080000", now_iso(-4),
+                        links=["https://www.theguardian.com/x/early"])
+        late = morning("2026-x_morning_100000", now_iso(-2), links=[
+            "https://www.theguardian.com/world/2026/x/a",
+            "https://reason.com/2026/x/c"])
+        unfinished = morning("2026-x_morning_110000", now_iso(-1),
+                             status="running")
+
+        out, _ = run("start", "--slot", "afternoon", expect=0, env=env)
+        rd = Path(out["run_dir"])
+        base = out["base"]
+        check("it finds the latest completed morning run of today",
+              base["run_dir"] == str(late), str(base))
+        check("an unfinished morning run is not taken",
+              base["run_dir"] != str(unfinished), str(base))
+        check("the base carries the run id and the morning's window end",
+              base["run_id"] == "2026-x_morning_100000"
+              and base["window_end_utc"] == json.loads(
+                  (late / "run.json").read_text())["window_end_utc"], str(base))
+        check("and the time the morning template puts on its brief",
+              base["time"] == "10:00", str(base.get("time")))
+        check("run.json records the same base",
+              json.loads((rd / "run.json").read_text())["base"] == base)
+
+        _, r = run("start", "--slot", "afternoon", "--base", unfinished,
+                   expect=2, env=env)
+        check("--base refuses a morning run that never completed",
+              "completed" in r.stderr and unfinished.name in r.stderr,
+              r.stderr.strip()[:200])
+
+        time.sleep(1.1)          # a run id names the second it started in
+        out, _ = run("start", "--slot", "afternoon", "--base", early,
+                     expect=0, env=env)
+        rd2 = Path(out["run_dir"])
+        check("--base takes the run it names, not the latest",
+              Path(out["base"]["run_dir"]) == early.resolve(), str(out["base"]))
+
+        # screen-sync on the afternoon run: the base's two URLs are gone, and
+        # what neither the morning nor another source had is kept.
+        write(rd / "screen" / "guardian.json", {
+            "source": "Guardian", "ok": True, "links": [
+                link("https://www.theguardian.com/world/2026/x/a", "Seen at ten"),
+                link("https://www.theguardian.com/world/2026/x/new", "New at four"),
+            ]})
+        write(rd / "screen" / "reason.json", {
+            "source": "Reason", "ok": True, "links": [
+                link("https://reason.com/2026/x/c?utm=1", "Seen at ten too"),
+                link("https://reason.com/2026/x/fresh", "Fresh"),
+            ]})
+        out, _ = run("screen-sync", "--run", rd)
+        check("what the morning screened is dropped, the rest kept",
+              out["articles"] == 2, str(out["articles"]))
+        check("the drops are counted in total", out["seen_this_morning"] == 2,
+              str(out.get("seen_this_morning")))
+        check("and per source",
+              out["seen_by_source"] == {"Guardian": 1, "Reason": 1},
+              str(out.get("seen_by_source")))
+        check("the source record carries the count beside undated",
+              json.loads((rd / "run.json").read_text())["sources"]["Reason"]
+              ["seen_this_morning"] == 1)
+        urls = [a["url"] for a in
+                json.loads((rd / "articles.json").read_text())["articles"]]
+        check("the two survivors are the ones the morning never had",
+              sorted(urls) == ["https://reason.com/2026/x/fresh",
+                               "https://www.theguardian.com/world/2026/x/new"],
+              str(urls))
+        check("the other afternoon run is untouched",
+              not (rd2 / "articles.json").exists())
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def test_screen_attempts():
     """Two screens of one source at the same time is the failure this guards.
 
@@ -1396,6 +1505,7 @@ def main():
         test_settings_halves()
         test_sources_halves()
         test_screen_sync(rd)
+        test_afternoon_base()
         test_screen_attempts()
         test_screen_stragglers()
         test_screen_prompt_is_safe_to_retry()

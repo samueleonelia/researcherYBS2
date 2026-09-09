@@ -12,7 +12,8 @@ Commands
   build [--check]          render .claude/agents/ybs4-*.md from the templates
   fill NAME --run DIR      render one single-call prompt, run data included
   sources                  print the sources listed in sources.md as JSON
-  start --slot morning     create the run folder, compute the time window
+  start --slot SLOT        create the run folder, compute the time window; an
+                           afternoon run also finds the morning it updates
   screen-sync --run DIR    fold every screen/<slug>.json into articles.json
   triage-list --run DIR    freeze the article list, print one launch line per article
   triage-check --run DIR   verify every article has its own one-line verdict file
@@ -161,6 +162,37 @@ PLACEHOLDER = re.compile(r"\{\{([A-Za-z_][A-Za-z0-9_.-]*)\}\}")
 # alone: the audit line by `audit-line`, the X section by `x-merge`.
 PASS_THROUGH = {"AUDIT_LINE", "X_SECTION"}
 
+
+# The sections of the brief, per slot, in the order their template prints them,
+# and the pick tag that belongs in each. A slot is a different brief, not a
+# different pipeline: the morning runs three sections and the afternoon two, and
+# every step that asks "which sections?" or "which tag?" asks these two tables
+# rather than carrying its own answer. Tag -> section is by position, so the
+# first `##` section of a template holds the first tag listed here.
+WRITE_SECTIONS = {"morning": ("leads", "body", "worth"),
+                  "afternoon": ("new", "moved")}
+TAG_OF_SECTION = {"morning": {"leads": "LEAD", "body": "BODY", "worth": "WORTH"},
+                  "afternoon": {"new": "NEW", "moved": "MOVED"}}
+
+# Every section name of every slot, morning's first. argparse builds `--section`
+# before any run is known, so its choices are the union; cmd_fill is where a
+# section that belongs to the other slot is refused.
+ALL_SECTIONS = tuple(s for names in WRITE_SECTIONS.values() for s in names)
+
+
+def sections_of(run: dict) -> tuple:
+    """The sections this run's own slot writes, in the template's order."""
+    slot = run.get("slot")
+    if slot not in WRITE_SECTIONS:
+        die(f"unknown slot {slot!r}; the slots are {', '.join(WRITE_SECTIONS)}")
+    return WRITE_SECTIONS[slot]
+
+
+def tag_of(run: dict, section: str) -> str:
+    """The pick tag that belongs in one section of this run's slot."""
+    return TAG_OF_SECTION[run["slot"]][section]
+
+
 SCHEMA = {
     "path": {
         "screen": "<run_dir>/screen/<slug>.json",
@@ -178,7 +210,8 @@ SCHEMA = {
         "profile": "shows/profile.json",
     },
     "write": {
-        "sections": "leads | body | worth",
+        "sections": {slot: " | ".join(names)
+                     for slot, names in WRITE_SECTIONS.items()},
         "note": ("one writer per section, all launched at once; write-stitch "
                  "joins the section files into brief.md in the template's order"),
     },
@@ -204,7 +237,12 @@ SCHEMA = {
         "check": "found | missing",
         "verdict": "READ | MAYBE | DROP",
     },
-    "tag": {"all": "LEAD | BODY | WORTH"},
+    # The tags are per slot, because the two briefs answer different questions:
+    # the morning ranks a story, the afternoon says whether it is new or moved.
+    # `kind` is the afternoon's second label, on a MOVED pick only.
+    "tag": {"morning": "LEAD | BODY | WORTH",
+            "afternoon": "NEW | MOVED",
+            "kind": "development | confirmation | reversal | correction"},
     "x": {
         "run_dir": "x-lists/runs/<YYYY-MM-DD-HHMM>",
         "log": "<run_dir>/x/x-run.log",
@@ -215,11 +253,14 @@ SCHEMA = {
         "placeholder": "{{X_SECTION}}",
     },
     "reason_type": {
-        "all": "evidence | duplicate | no-development | relevance",
+        "all": "evidence | duplicate | no-development | relevance | unchanged",
         "evidence": "its `WEAK SPOTS`, or a claim nothing supports",
         "duplicate": "the same event as a story you kept",
         "no-development": "nothing happened: a column, a feature, a recap",
         "relevance": "real enough, but not worth his morning",
+        # The afternoon's own reason: the story is his, and it has not moved.
+        "unchanged": ("the morning brief already carries this, and the note "
+                      "adds nothing that moves it"),
     },
 }
 
@@ -788,10 +829,8 @@ def counterpoints_block(run_dir: Path) -> str:
 # The brief is written by one writer per section, all at once, and joined in
 # code. The template stays the only statement of the shape: the section
 # headings, their order and the date line are read out of it here, never
-# restated. Tag -> section is by position: the first `##` section holds the
-# LEADs, the second the BODY stories, the third the WORTH ones.
-WRITE_SECTIONS = ("leads", "body", "worth")
-TAG_OF_SECTION = {"leads": "LEAD", "body": "BODY", "worth": "WORTH"}
+# restated. Which sections a run has, and which tag belongs in each, comes from
+# the two slot tables above.
 
 
 def template_source(run: dict) -> str:
@@ -814,13 +853,26 @@ def template_block(tpl: str) -> list:
     return lines
 
 
-def template_headings(tpl: str) -> list:
+def template_headings(tpl: str, run: dict) -> list:
     """The `##` section headings of the brief, in the template's order."""
+    sections = sections_of(run)
     heads = [l[3:].strip() for l in template_block(tpl) if l.startswith("## ")]
-    if len(heads) != len(WRITE_SECTIONS):
+    if len(heads) != len(sections):
         die(f"the template has {len(heads)} `##` sections; the sectioned write "
-            f"expects {len(WRITE_SECTIONS)} ({', '.join(WRITE_SECTIONS)})")
+            f"expects {len(sections)} ({', '.join(sections)})")
     return heads
+
+
+# A slot's template says the clock time of its own brief in its title line, as
+# `(10:00)`. Two readers need it -- the date line of the head, and the afternoon
+# recording which morning it updates -- so it is read in one place.
+TEMPLATE_TIME = re.compile(r"\((\d{1,2}:\d{2})\)")
+
+
+def template_time(tpl: str) -> str:
+    """The time in a template's title line, or midnight when it has none."""
+    m = TEMPLATE_TIME.search(tpl.splitlines()[0] if tpl else "")
+    return m.group(1) if m else "00:00"
 
 
 def template_head(tpl: str, run: dict) -> str:
@@ -829,8 +881,7 @@ def template_head(tpl: str, run: dict) -> str:
     The template writes the date line as `<D Month YYYY at HH:MM>`; the day is
     the run's, the time is the slot's, taken from the template's own title.
     """
-    m = re.search(r"\((\d{1,2}:\d{2})\)", tpl.splitlines()[0] if tpl else "")
-    when = m.group(1) if m else "00:00"
+    when = template_time(tpl)
     d = datetime.strptime(run["local_date"], "%Y-%m-%d")
     stamp = f"{d.day} {d.strftime('%B %Y')} at {when}"
     head = []
@@ -841,7 +892,7 @@ def template_head(tpl: str, run: dict) -> str:
     return "\n".join(head).strip()
 
 
-def section_job(run_dir: Path, section: str, headings: list) -> str:
+def section_job(run_dir: Path, run: dict, section: str, headings: list) -> str:
     """What one section writer is told about its job, and about the other two.
 
     The other sections' stories are listed by headline so a writer does not
@@ -849,7 +900,8 @@ def section_job(run_dir: Path, section: str, headings: list) -> str:
     parallel write keeps.
     """
     picks = (load_json(run_dir / "picks" / "picks.json") or {}).get("picks") or []
-    mine = headings[WRITE_SECTIONS.index(section)]
+    sections = sections_of(run)
+    mine = headings[sections.index(section)]
     lines = [
         "## Your section",
         "",
@@ -864,11 +916,11 @@ def section_job(run_dir: Path, section: str, headings: list) -> str:
         "  other writers.",
     ]
     others = []
-    for other, heading in zip(WRITE_SECTIONS, headings):
+    for other, heading in zip(sections, headings):
         if other == section:
             continue
         for p in picks:
-            if (p.get("tag") or "").upper() != TAG_OF_SECTION[other]:
+            if (p.get("tag") or "").upper() != tag_of(run, other):
                 continue
             note = run_dir / "notes" / f"{p['id']}.md"
             head = note_field(note.read_text(encoding="utf-8"), "HEADLINE") \
@@ -961,6 +1013,11 @@ def cmd_fill(args):
             "is allowed, and only once the first one is over")
     if args.section and name != "write":
         die("--section is only for write: it names the one section a writer produces")
+    # argparse takes every slot's section names, since it is built before any
+    # run is known. This is where a section of the other slot is refused.
+    if args.section and args.section not in sections_of(run):
+        die(f"--section {args.section} is not a section of a {run['slot']} run; "
+            f"a {run['slot']} run writes {', '.join(sections_of(run))}")
     ns = namespace(need_profile=(name != "screen"))
     ns.update({
         "DATE": run["local_date"],
@@ -1120,19 +1177,19 @@ def cmd_fill(args):
         if section:
             # One writer per section. A section with no picks gets no writer:
             # the template omits an empty section, and write-stitch does too.
-            tag = TAG_OF_SECTION[section]
+            tag = tag_of(run, section)
             picks = (load_json(run_dir / "picks" / "picks.json") or {}).get("picks") or []
             if not any((p.get("tag") or "").upper() == tag for p in picks):
                 print(json.dumps({"prompt": name, "section": section, "empty": True,
                                   "file": None, "launch": False}, indent=2))
                 return 0
-            headings = template_headings(raw)
+            headings = template_headings(raw, run)
             ns.update({"TEMPLATE": tpl,
                        "PICKS": picks_block(run_dir, tag),
                        "COUNTERPOINTS": counterpoints_block(run_dir) if section == "leads"
                        else "None here. Counterpoints hang under the leads, "
                             "and another writer is writing those.",
-                       "SECTION_JOB": section_job(run_dir, section, headings)})
+                       "SECTION_JOB": section_job(run_dir, run, section, headings)})
         else:
             ns.update({"TEMPLATE": tpl,
                        "PICKS": picks_block(run_dir),
@@ -1271,17 +1328,87 @@ def cmd_sources(args):
 
 # ---------------------------------------------------------------- start
 
+def runs_root() -> Path:
+    """Where the run folders live. `YBS_RUNS_DIR` overrides it, and only the
+    tests set it, the way `YBS_X_RUN` overrides the X chain and for the same
+    reason: an afternoon test needs an empty runs folder, or it would find the
+    real morning runs of today and update one of those."""
+    override = os.environ.get("YBS_RUNS_DIR")
+    if override:
+        return Path(override).expanduser()
+    return project_root() / "runs"
+
+
+def base_record(run_dir: Path, run: dict) -> dict:
+    """What an afternoon run keeps about the morning it updates.
+
+    Enough to find the morning's own files again, plus the time its template
+    puts on its brief, so the update can say which brief it follows.
+    """
+    tpl = (skill_dir() / "templates" / f"{run.get('slot')}.md").read_text(encoding="utf-8")
+    return {"run_id": run.get("run_id"), "run_dir": str(run_dir),
+            "window_end_utc": run.get("window_end_utc"),
+            "time": template_time(tpl)}
+
+
+def find_base(named: str, local_date: str) -> dict:
+    """The morning run an afternoon update follows.
+
+    Either the one `--base` names, or the latest run of today's local date
+    whose slot is morning and whose status is completed. There is no fallback:
+    an afternoon update with nothing to update is not a brief, so with none
+    this dies, naming exactly what it looked for.
+    """
+    if named:
+        d = Path(named).resolve()
+        if not (d / "run.json").exists():
+            die(f"not a run folder (no run.json): {d}")
+        r = load_run(d)
+        if r.get("slot") != "morning":
+            die(f"--base {d.name} is slot {r.get('slot')!r}; "
+                f"an afternoon update follows a morning run")
+        if r.get("status") != "completed":
+            die(f"--base {d.name} is {r.get('status')!r}; "
+                f"an afternoon update follows a completed morning run")
+        if r.get("local_date") != local_date:
+            die(f"--base {d.name} is of {r.get('local_date')}, and today is "
+                f"{local_date}; the update is of today's morning brief")
+        return base_record(d, r)
+
+    found = []
+    for d in sorted(runs_root().glob("*")):
+        r = load_json(d / "run.json")
+        if not r:
+            continue
+        if (r.get("local_date") == local_date and r.get("slot") == "morning"
+                and r.get("status") == "completed"):
+            found.append((r.get("started_utc") or "", d.name, d, r))
+    if not found:
+        die(f"no morning brief to update: nothing under {runs_root()} has "
+            f"local_date {local_date}, slot morning and status completed. "
+            f"Run the morning brief first, or name a run with --base.")
+    _, _, d, r = sorted(found)[-1]
+    return base_record(d, r)
+
+
 def cmd_start(args):
     root = project_root()
     now, local = utc_now(), datetime.now()
     local_date = local.strftime("%Y-%m-%d")
+    # The afternoon is an update of one named brief, so the base is settled
+    # before the folder is made: a run that cannot say what it updates is not
+    # started at all.
+    if args.base and args.slot != "afternoon":
+        die("--base names the morning run an afternoon update follows; "
+            "a morning run updates nothing")
+    base = find_base(args.base, local_date) if args.slot == "afternoon" else None
 
     # "Today" means since local midnight on this machine, not the last 24 hours.
     midnight_utc = local.replace(hour=0, minute=0, second=0,
                                  microsecond=0).astimezone(timezone.utc)
 
     run_id = f"{local_date}_{args.slot}_{local.strftime('%H%M%S')}"
-    run_dir = root / "runs" / run_id
+    run_dir = runs_root() / run_id
     if run_dir.exists():
         die(f"run folder already exists: {run_dir}")
     for sub in ("screen", "triage", "items", "pages", "notes", "checks", "picks"):
@@ -1304,6 +1431,8 @@ def cmd_start(args):
         "counts": {},
         "events": [],
     }
+    if base:
+        data["base"] = base
     save_run(run_dir, data)
     profile = load_profile()
     data["profile_built"] = profile.get("built_local_date", "unknown")
@@ -1315,6 +1444,7 @@ def cmd_start(args):
                       "profile_shows": data["profile_shows"], "slot": args.slot,
                       "window_start_utc": data["window_start_utc"],
                       "window_end_utc": data["window_end_utc"],
+                      "base": base,
                       "sources": list(data["sources"])}, indent=2))
     return 0
 
@@ -1330,6 +1460,11 @@ def cmd_screen_sync(args):
     window. On 2026-08-22 all 189 undated links were hubs, section pages, author
     profiles or site furniture; not one was an article. The per-source count is
     recorded so a source that stops publishing dates shows up as a number.
+
+    A run with a base drops one more thing: any link the base run already
+    screened, by the same canonical URL. That is not a new rule but the
+    duplicate rule again -- the pipeline has already had that URL -- and it is
+    what makes the afternoon's window "today, minus what the morning saw".
     """
     run_dir = run_dir_of(args)
     data = load_run(run_dir)
@@ -1339,6 +1474,13 @@ def cmd_screen_sync(args):
     start = parse_iso(data["window_start_utc"])
     end = parse_iso(data["window_end_utc"])
     articles, seen, problems, stale = [], {}, [], {}
+
+    base = data.get("base") or {}
+    base_seen = set()
+    if base:
+        base_arts = (load_json(Path(base["run_dir"]) / "articles.json")
+                     or {}).get("articles") or []
+        base_seen = {canon(a["url"]) for a in base_arts if a.get("url")}
 
     for name, sinfo in data["sources"].items():
         f = run_dir / "screen" / (sinfo["slug"] + ".json")
@@ -1373,11 +1515,15 @@ def cmd_screen_sync(args):
         sinfo["listed"] = len(links)
         kept = 0
         undated = 0
+        old = 0
         for L in links:
             url = (L.get("url") or "").strip()
             if not url.startswith("http"):
                 continue
             key = canon(url)
+            if key in base_seen:
+                old += 1                      # the base run already had it. Drop.
+                continue
             if key in seen:
                 seen[key]["also_in"].append(name)
                 continue
@@ -1407,6 +1553,7 @@ def cmd_screen_sync(args):
             kept += 1
         sinfo["in_window"] = kept
         sinfo["undated"] = undated
+        sinfo["seen_this_morning"] = old
         sinfo["status"] = "screened"
 
     articles.sort(key=lambda r: (r["source"], r["url"]))
@@ -1418,12 +1565,18 @@ def cmd_screen_sync(args):
     data["counts"]["sources_ok"] = sum(1 for s in data["sources"].values()
                                        if s["status"] == "screened")
     data["counts"]["undated"] = sum(s.get("undated", 0) for s in data["sources"].values())
+    data["counts"]["seen_this_morning"] = sum(s.get("seen_this_morning", 0)
+                                              for s in data["sources"].values())
     save_run(run_dir, data)
 
     out = {"articles": len(articles),
            "undated_dropped": data["counts"]["undated"],
            "undated_by_source": {n: s["undated"] for n, s in data["sources"].items()
                                  if s.get("undated")},
+           "seen_this_morning": data["counts"]["seen_this_morning"],
+           "seen_by_source": {n: s["seen_this_morning"]
+                              for n, s in data["sources"].items()
+                              if s.get("seen_this_morning")},
            "duplicates_merged": sum(len(r["also_in"]) for r in articles),
            "stale": stale,
            "sources_ok": data["counts"]["sources_ok"],
@@ -1904,7 +2057,9 @@ def cmd_picks_sync(args):
             problems.append(f"{aid}: picked twice")
         seen.add(aid)
         if tag not in TAGS:
-            problems.append(f"{aid}: tag '{tag}' is not {SCHEMA['tag']['all']}")
+            # The tags are per slot now, and this check is still the morning's:
+            # the afternoon's own tags and ceilings come with `pick-update.md`.
+            problems.append(f"{aid}: tag '{tag}' is not {SCHEMA['tag']['morning']}")
         else:
             counts[tag] += 1
     if counts["LEAD"] > LEAD_MAX:
@@ -2361,15 +2516,15 @@ def cmd_write_stitch(args):
     run_dir = run_dir_of(args)
     run = load_run(run_dir)
     raw = template_source(run)
-    headings = template_headings(raw)
+    headings = template_headings(raw, run)
     picks = (load_json(run_dir / "picks" / "picks.json") or {}).get("picks") or []
     if not picks:
         die("no picks.json with picks; nothing to stitch")
     arts = {r["id"]: r for r in
             ((load_json(run_dir / "articles.json") or {}).get("articles") or [])}
     parts, problems, used, skipped = [template_head(raw, run)], [], [], []
-    for section, heading in zip(WRITE_SECTIONS, headings):
-        tagged = [p for p in picks if (p.get("tag") or "").upper() == TAG_OF_SECTION[section]]
+    for section, heading in zip(sections_of(run), headings):
+        tagged = [p for p in picks if (p.get("tag") or "").upper() == tag_of(run, section)]
         f = run_dir / f"brief-{section}.md"
         if not tagged:
             if f.exists():
@@ -2614,7 +2769,7 @@ def main():
                    help="render part K of the N parts a too-long kept list cuts into")
     p.add_argument("--retry", action="store_true",
                    help="screen one source again, once its first attempt is over")
-    p.add_argument("--section", choices=list(WRITE_SECTIONS),
+    p.add_argument("--section", choices=list(ALL_SECTIONS),
                    help="write only: the one section this writer produces")
     p.add_argument("--out")
     p.set_defaults(fn=cmd_fill)
@@ -2622,7 +2777,10 @@ def main():
     sub.add_parser("sources").set_defaults(fn=cmd_sources)
 
     p = sub.add_parser("start")
-    p.add_argument("--slot", default="morning", choices=["morning"])
+    p.add_argument("--slot", default="morning", choices=list(WRITE_SECTIONS))
+    p.add_argument("--base", metavar="RUN_DIR",
+                   help="afternoon only: the morning run this update follows; "
+                        "without it the latest completed morning run of today")
     p.set_defaults(fn=cmd_start)
 
     with_run(sub.add_parser("screen-sync")).set_defaults(fn=cmd_screen_sync)

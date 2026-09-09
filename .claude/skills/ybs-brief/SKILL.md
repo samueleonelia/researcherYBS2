@@ -40,13 +40,12 @@ one; step 0 rebuilds the agent files at the start of every run.
 
 Every single-call step gets its prompt from `ybs_run.py fill <name> --run <dir>`,
 which renders the prompt file with the fragments, the settings and the run's own
-data already in it, writes it to `<run_dir>/prompts/`, and prints the path. Read
-that file and pass its text as the agent's prompt. Never assemble a prompt by
-hand, and never paste a fragment into one.
-
-**Except `pick` and `write`.** Those two prompts hold every note of the run, and
-those two agents can read. Pass the *path* `fill` printed, not the text. You do
-not open the file, so nothing is retyped and no figure can change on the way.
+data already in it, writes it to `<run_dir>/prompts/`, and prints the path.
+**Pass the path, not the text.** Every single-call agent (`screen`, `cluster`,
+`pick`, `write`) and the counterpoint agent can read, so the prompt you pass is
+one line: `Read <path> and follow it.` You never open the file yourself: nothing
+is retyped, no figure can change on the way, and a 50 KB prompt costs you no
+time. Never assemble a prompt by hand, and never paste a fragment into one.
 
 `fill` exits 1 and names any placeholder it could not fill. That is the one
 failure an agent cannot report, because it does not know what it was meant to
@@ -131,8 +130,11 @@ step 6.
 
 **All sources in one message**, one `ybs4-screener` each.
 
-For each source: `fill screen --run <run_dir> --source <slug>`, read the file it
-names, and pass that text as the prompt.
+Run `fill screen --run <run_dir> --source <slug>` for every source in **one Bash
+call**, one command per source. Each prints a path. Then launch every screener
+in **one message**: six sources, six `Agent` calls in the same message, each
+with the prompt `Read <path> and follow it.` and `run_in_background: true`. Do
+not open the prompt files, and do not launch one screener per turn.
 
 Each screener writes `<run_dir>/screen/<slug>.json` itself and replies with one
 summary line. Do not write that file yourself and do not paste its contents
@@ -194,22 +196,25 @@ call; a give-up is remembered by every later `triage-check` and `triage-list`.
 `fill cluster-select --run <run_dir>` prints either a `file` or `too_long`,
 never both.
 
-**A file:** one `ybs4-cluster` agent, one call. Write its JSON reply to
-`<run_dir>/items/plan.json`.
+**A file:** one `ybs4-cluster` agent, one call, prompt `Read <path> and follow
+it. Reply with the JSON only.` Write its JSON reply to `<run_dir>/items/plan.json`.
 
 **`too_long`:** the kept list is over `cluster_articles_max`, and the output
 says how it was cut into parts. For every part, `fill cluster-select --run
-<run_dir> --part <k>/<n>` and read the file it names. Launch the parts as the
-rolling pool launches anything: up to `agents_active_max` in one message, one
-more as each returns, one `ybs4-cluster` each, `run_in_background: true`,
+<run_dir> --part <k>/<n>`, all parts in one Bash call; each prints a path.
+Launch the parts as the rolling pool launches anything: up to
+`agents_active_max` in one message, one more as each returns, one
+`ybs4-cluster` each with the prompt `Read <path> and follow it. Reply with the
+JSON only.`, `run_in_background: true`,
 description `cluster part <k>/<n>`: the replies arrive as notifications, and
 the description is how each reply finds its file. Write each reply to
 `<run_dir>/items/plan-part<k>.json`. When every part has returned, `fill
 cluster-merge --run <run_dir>`. If it rejects a part, that part's agent gets
 one rerun quoting the problems, its file is rewritten, and `fill cluster-merge`
 runs again; a part rejected twice ends the step the same way a rejected plan
-does, below. Then one `ybs4-cluster` call with the merge
-prompt; write its JSON reply to `<run_dir>/items/plan.json` and log it with
+does, below. Then one `ybs4-cluster` call with the path `fill cluster-merge`
+printed, the same one-line prompt; write its JSON reply to
+`<run_dir>/items/plan.json` and log it with
 `event --type cluster_split --detail "<n> parts"`.
 
 Then:

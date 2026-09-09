@@ -428,3 +428,25 @@ changes waits for one corpus replay against a known day before it is trusted.
 - One live `/ybs-brief morning`, timed, and a side-by-side of its plan and
   brief against 09-08: duplicates missed, second reads not asked for, and
   whether the three sections still read as one brief.
+
+## 2026-09-09 · Live run of Tier A + B: 38 minutes, no failures
+
+**Status:** `main`, run `2026-09-09_morning_142825`
+
+**Done**
+- First live `/ybs-brief morning` on top of Tier A and Tier B (both were in
+  before it started: Tier B landed 12:34, the run started 14:28 local).
+- 38 minutes end to end (12:28:25Z to 13:06:35Z), against 62 on 09-08.
+- 6 of 6 sources screened, 192 articles in window, 120 kept, 68 news items,
+  52 read, 15 picked (5 leads, 5 body, 5 worth attention), 1 counterpoint.
+  X: 5 picks from 32 subjects, 40 tweets read. **0 retries, 0 failures.**
+- The three-writer split ran for real: `brief-leads.md`, `brief-body.md` and
+  `brief-worth.md` written in parallel and joined by `write-stitch` in code.
+- Cluster and pick at medium held: no note struck for a bad figure, no pick
+  trimmed.
+
+**Decisions**
+- Tier A and Tier B are no longer "unreplayed". They ship.
+
+**Next**
+- Push `main` and tag it, so Yaron's `/update` picks the new version up.

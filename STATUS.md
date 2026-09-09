@@ -1,25 +1,25 @@
 # STATUS: researcherYBS2
 
-_Updated: 2026-09-09 · Tier B in, unreplayed_
+_Updated: 2026-09-09 · Tier A + B replayed live, 38 min_
 
 <!-- Rewrite this file in place. Never append. History belongs in DEVLOG.md. Keep under 60 lines. -->
 
 **What this is:** A Claude Code skill (`/ybs-brief`) that builds a morning news brief for Yaron Brook from six sources plus two X lists, and `/ybs-shows` which keeps his show profile current.
 
-**Right now:** on `main`, ahead of the push. Tier A (five speed fixes) and Tier B (shorter plans, medium judges, three writers) are both in and neither has had a live run. The next `/ybs-brief morning` is the timing test and the quality replay for all of it.
+**Right now:** on `main`, ahead of the push. Tier A (five speed fixes) and Tier B (shorter plans, medium judges, three writers) are both in and both ran live in `runs/2026-09-09_morning_142825`: 38 minutes, 0 retries, 0 failures, 15 picks. Ready to push so Yaron's `/update` gets it.
 
 ## Feature areas
 | Area | State | Note |
 |---|---|---|
 | Screen sources (ego browser) | ✅ working | one attempt per source at a time, retry gated by `fill --retry`; untested live |
 | Triage (keep/drop) | ✅ working | batch 10 |
-| Cluster + pick | ⚠️ changed, unreplayed | opus/medium since 09-09; DROPs carry a one-word `why`, five near misses; watch for missed duplicates and missing second reads |
+| Cluster + pick | ✅ working | opus/medium since 09-09; replayed live on 09-09, nothing trimmed |
 | Read + figure check | ✅ working | |
 | Counterpoints (leads only) | ✅ working | |
-| Write the brief | ⚠️ changed, unreplayed | three writers at once, one per section, `write-stitch` joins them in code; stitch reproduces the 09-08 brief byte for byte |
+| Write the brief | ✅ working | three writers at once, one per section, `write-stitch` joins them in code; ran live 09-09 |
 | X lists (`x-lists/`) | ✅ working | FP and Economists; 17-30 min with the read step |
-| Two-list scrape | ⚠️ untested live | the browser loop over two lists needs one real run |
-| X inside `/ybs-brief` | ✅ working | read step tolerates missing notes; `--retry` resumes the failed step; untested live |
+| Two-list scrape | ✅ working | 32 subjects, 40 tweets on the 09-09 run |
+| X inside `/ybs-brief` | ✅ working | read step tolerates missing notes; `--retry` resumes the failed step; ran live 09-09 |
 | X login-wall stop | ✅ new, unit-tested | never seen on real data yet |
 | Show profile (`/ybs-shows`) | ✅ working | agents generated from templates, step 0 rebuilds |
 | Settings | ✅ working | one root `settings.md`; cluster and pick effort carry a dated note |
@@ -30,10 +30,9 @@ _Updated: 2026-09-09 · Tier B in, unreplayed_
 | His standing instructions | ✅ working | `preferences.md`, instructions below the `---` rule |
 
 ## Next up
-1. Live `/ybs-brief morning`, timed: target 25 min; compare its plan and brief with 09-08 (duplicates, second reads, whether the sections read as one brief)
-2. If cluster or pick got quieter: effort back to `high` in `settings.md`, one line in DEVLOG
-3. Blocking `ybs_run.py wait` so the orchestrator stops polling; Guardian sign-in wall gets no retry
-4. Fix the old test failures and make `run-all.sh` run every file
+1. Push `main` and tag it, then tell Yaron to run `/update` and `/setup`
+2. Blocking `ybs_run.py wait` so the orchestrator stops polling; Guardian sign-in wall gets no retry
+3. Fix the old test failures and make `run-all.sh` run every file
 
 ## Known bugs
 - `picks-sync` does not refuse more than 15 picks (2 tests fail)

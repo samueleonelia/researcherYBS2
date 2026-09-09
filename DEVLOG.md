@@ -338,3 +338,43 @@ ALL GOOD after four verifier rounds, then carried out by agents, one per item.
 **Decision**
 - The learning loop stays `preferences.md`: one sentence per correction,
   written by a person. No CLAUDE.md, no self-editing prompts.
+
+## 2026-09-09 · the 62-minute run, and five fixes for it
+
+**Branch** `main`, directly.
+
+**Done**
+- Analysed `runs/2026-09-08_morning_212807` (62 min against a 45 ceiling):
+  `plans/run-2026-09-08-slowdown.md` has the phase table and seven causes;
+  `plans/run-time-under-20.md` says 25 min is the floor without reading
+  less, and what under 20 would cost.
+- `cluster_articles_max` 150 → 200: 153 kept had split into 145 + 8 parts
+  plus a merge, ~10 min for a 3-article overshoot. Nothing was dropped.
+- Screener, cluster and counterpoint agents now read their own prompt:
+  the skill passes `Read <path> and follow it.` and never pastes a 50 KB
+  file through the orchestrator. Screeners and counterpoints launch all
+  in one message.
+- X read step: skips links with a usable note, re-reads the missing ones
+  once, writes a code-marked `status: unavailable` note for what is still
+  missing, keeps every read agent's reply under `read-log/`. `x-start
+  --retry` resumes the failed folder from the failed step instead of a
+  new scrape (the 09-08 retry had cost 29 min).
+- Screen step: `fill screen` records one attempt per source and refuses
+  a second while the first may still run; `--retry` passes only once the
+  first is provably over. Own task space and prompt per attempt, atomic
+  file write, one fetch retry with backoff, self-imposed deadline with a
+  `truncated` file, `screen-sync` ignores stragglers. New setting
+  `screen_timeout_seconds` = 540. Cause: two Times of Israel screens ran
+  at once on 09-08 and the weaker one won.
+- Tests: x-lists all green (test_chain 29 → 34); root suite keeps only
+  its 3 old failures, 20 new checks pass.
+
+**Decisions**
+- Never two screens of one source at once; a retry only after the first
+  attempt is terminated, enforced in code, not prose (Samuele's rule).
+- Target 25 min, not 20: 20 asks the brief to read less.
+
+**Next**
+- One live `/ybs-brief morning`, timed, before any Tier B change.
+- Still open from the slowdown doc: a blocking `wait` instead of polling,
+  the Guardian sign-in wall (no retry, log in once).

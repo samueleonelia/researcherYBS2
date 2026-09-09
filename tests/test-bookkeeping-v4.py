@@ -1037,6 +1037,227 @@ def test_picks(rd):
     check("refuses more leads than the ceiling", has(out, "6 LEAD stories"))
 
 
+def afternoon_run(tmp, env, ids, follows, groups=None):
+    """An afternoon run with a plan and a read list written by hand.
+
+    picks-sync reads three things: the notes on disk, the plan (for the size of
+    each story and the morning story it follows) and the read list (for the
+    group each pick came from). Writing those directly keeps this about the
+    pick and nothing else -- no screen, no triage, no cluster.
+
+    `follows` maps an article id to the base story its item carries forward, or
+    leaves it out for a story the brief being updated never had. `ids` may name
+    a count of articles instead of just an id, as `(id, n)`.
+    """
+    out, _ = run("start", "--slot", "afternoon", expect=0, env=env)
+    rd = Path(out["run_dir"])
+    pairs = [(x, 1) if isinstance(x, str) else x for x in ids]
+    items, read = [], []
+    for k, (aid, n) in enumerate(pairs):
+        siblings = [aid] + [f"{aid}-s{j}" for j in range(1, n)]
+        items.append({"item_id": f"i{k:02d}", "name": aid,
+                      "kind": "cluster" if n > 1 else "single",
+                      "verdict": "READ", "profile": None,
+                      "follows": follows.get(aid), "articles": siblings,
+                      "primary": aid, "read": [aid], "why": "x"})
+        read.append({"id": aid, "item": f"i{k:02d}",
+                     "group": (groups or {}).get(
+                         aid, "follow-read" if follows.get(aid) else "beat-read"),
+                     "profile": None, "follows": follows.get(aid),
+                     "primary": True})
+        (rd / "notes" / f"{aid}.md").write_text(f"HEADLINE: {aid}\n",
+                                                encoding="utf-8")
+    write(rd / "items" / "plan.json", {"items": items, "near_misses": []})
+    write(rd / "items" / "read-list.json", {"read": read})
+    return rd, [aid for aid, _ in pairs]
+
+
+def test_picks_afternoon():
+    """The update's own pick: two tags, a kind on what moved, one line per story.
+
+    Everything runs inside a runs folder of its own, named by YBS_RUNS_DIR, so
+    the morning being updated is one this test wrote and the real runs are
+    neither read nor written.
+    """
+    print("\npicks-sync: the afternoon's two tags")
+    settings, _ = run("settings", expect=0)
+    ceiling = settings["update_picks_max"]
+    tmp = Path(tempfile.mkdtemp(prefix="ybs-runs-"))
+    env = {"YBS_RUNS_DIR": str(tmp)}
+    base_ids = [f"a{100 + i:03d}" for i in range(1, ceiling)]
+    try:
+        base = build_morning(
+            tmp, "2026-x_morning_100000", now_iso(-6),
+            links=[f"https://www.theguardian.com/m/{i}" for i in base_ids],
+            picks=base_ids)
+        base_before = (base / "picks" / "picks.json").read_text()
+
+        # Five afternoon stories: three carrying a morning story forward (two of
+        # them the same one), two the morning never had.
+        follows = {"a001": "m:a101", "a002": "m:a101", "a003": "m:a102"}
+        rd, ids = afternoon_run(tmp, env, ["a001", "a002", "a003", "a004", "a005"],
+                                follows)
+
+        def picks(*kept):
+            """A reply keeping these picks and dropping every other note."""
+            kept_ids = {p["id"] for p in kept}
+            return {"picks": list(kept),
+                    "dropped": [{"id": a, "reason_type": "unchanged",
+                                 "reason": "the morning brief already has it"}
+                                for a in ids if a not in kept_ids]}
+
+        write(rd / "picks" / "picks.json",
+              picks({"id": "a001", "tag": "LEAD", "why": "x"}))
+        out, _ = run("picks-sync", "--run", rd, expect=1)
+        check("the morning's tags are not the afternoon's",
+              has(out, "tag 'LEAD' is not NEW | MOVED"), str(out.get("problems")))
+
+        write(rd / "picks" / "picks.json",
+              picks({"id": "a001", "tag": "MOVED", "why": "x"}))
+        out, _ = run("picks-sync", "--run", rd, expect=1)
+        check("a MOVED story must say how it moved",
+              has(out, "is not one of development"), str(out.get("problems")))
+
+        write(rd / "picks" / "picks.json",
+              picks({"id": "a004", "tag": "MOVED", "kind": "development",
+                     "why": "x"}))
+        out, _ = run("picks-sync", "--run", rd, expect=1)
+        check("a MOVED story whose item follows nothing is refused",
+              has(out, "a004: tagged MOVED"), str(out.get("problems")))
+
+        write(rd / "picks" / "picks.json",
+              picks({"id": "a001", "tag": "NEW", "why": "x"}))
+        out, _ = run("picks-sync", "--run", rd, expect=1)
+        check("and a NEW story whose item follows one is refused too",
+              has(out, "a001: tagged NEW, and its item follows m:a101"),
+              str(out.get("problems")))
+
+        write(rd / "picks" / "picks.json",
+              picks({"id": "a004", "tag": "NEW", "kind": "reversal", "why": "x"}))
+        out, _ = run("picks-sync", "--run", rd, expect=1)
+        check("a kind on a NEW story is a contradiction, not a detail",
+              has(out, "a004: tagged NEW and given kind"), str(out.get("problems")))
+
+        write(rd / "picks" / "picks.json",
+              picks({"id": "a001", "tag": "MOVED", "kind": "development", "why": "x"},
+                    {"id": "a002", "tag": "MOVED", "kind": "confirmation", "why": "x"}))
+        out, _ = run("picks-sync", "--run", rd, expect=1)
+        check("two picks may not follow one morning story, and both are named",
+              has(out, "a002 and a001 both follow m:a101"), str(out.get("problems")))
+
+        write(rd / "picks" / "picks.json",
+              picks({"id": "a001", "tag": "MOVED", "kind": "development", "why": "x"},
+                    {"id": "a003", "tag": "MOVED", "kind": "confirmation", "why": "x"},
+                    {"id": "a004", "tag": "NEW", "why": "x"}))
+        out, _ = run("picks-sync", "--run", rd, expect=0)
+        check("a clean update is accepted, with the unchanged reason",
+              out["picks"] == 3 and out["by_tag"] == {"NEW": 1, "MOVED": 2},
+              str(out))
+        check("nothing leads an update, so step 9 has nothing to launch",
+              out["leads"] == [], str(out.get("leads")))
+        check("the mix counts what came from the morning's own stories",
+              out["mix"] == {"topic": 0, "beat": 1, "maybe": 0, "follow": 2},
+              str(out.get("mix")))
+        counts = json.loads((rd / "run.json").read_text())["counts"]
+        check("run.json records the new stories and the moved ones by kind",
+              counts["new"] == 1 and counts["moved"] == 2
+              and counts["moved_by_kind"] == {"development": 1, "confirmation": 1,
+                                              "reversal": 0, "correction": 0},
+              str({k: counts.get(k) for k in ("new", "moved", "moved_by_kind")}))
+
+        write(rd / "picks" / "picks.json", picks())
+        out, _ = run("picks-sync", "--run", rd, expect=0)
+        check("an update that picked nothing is not a failure: nothing moved",
+              out["picks"] == 0 and out["leads"] == [] and not out["problems"],
+              str(out))
+
+        check("the brief being updated is never written to",
+              (base / "picks" / "picks.json").read_text() == base_before)
+
+        # Over the ceiling: a NEW goes before a MOVED, and the smallest first.
+        print("\npicks-sync: trimming an update")
+        time.sleep(1.1)          # a run id names the second it started in
+        moved = [f"a{i:03d}" for i in range(1, ceiling)]
+        follows = {aid: f"m:{b}" for aid, b in zip(moved, base_ids)}
+        rd2, _ = afternoon_run(
+            tmp, env, moved + [("n001", 5), ("n002", 1), ("n003", 3)], follows)
+        write(rd2 / "picks" / "picks.json", {
+            "picks": [{"id": a, "tag": "MOVED", "kind": "development", "why": "x"}
+                      for a in moved]
+                     + [{"id": n, "tag": "NEW", "why": "x"}
+                        for n in ("n001", "n002", "n003")],
+            "dropped": []})
+        out, _ = run("picks-sync", "--run", rd2, expect=0)
+        check(f"an update is cut back to {ceiling} stories",
+              out["picks"] == ceiling, str(out.get("picks")))
+        check("the new stories go first, the smallest of them before the rest",
+              out["trimmed"] == ["n002", "n003"], str(out.get("trimmed")))
+        check("and every story that moved is still there",
+              out["by_tag"] == {"NEW": 1, "MOVED": ceiling - 1}, str(out.get("by_tag")))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_pick_prompt_per_slot():
+    """`fill pick` renders the slot's own prompt into the same file.
+
+    Step 7's launch line names `prompts/pick.md` in both slots, so the file the
+    orchestrator hands over never changes name. What is inside it does: the
+    morning asks which stories reach the brief, the afternoon asks which of them
+    moved. A `fill counterpoint` on an update is refused, because an update has
+    no lead for one to hang under.
+    """
+    print("\nfill pick: one file, one prompt per slot")
+    tmp = Path(tempfile.mkdtemp(prefix="ybs-runs-"))
+    env = {"YBS_RUNS_DIR": str(tmp)}
+    try:
+        build_morning(tmp, "2026-x_morning_100000", now_iso(-6),
+                      links=["https://www.theguardian.com/m/1"], picks=["a101"])
+
+        rd, _ = afternoon_run(tmp, env, ["a001", "a002"], {"a001": "m:a101"})
+        out, _ = run("fill", "pick", "--run", rd, expect=0)
+        check("the afternoon writes its prompt to prompts/pick.md",
+              Path(out["file"]) == (rd / "prompts" / "pick.md").resolve(),
+              str(out.get("file")))
+        text = Path(out["file"]).read_text()
+        check("and it is the update's prompt, not the morning's",
+              "Ask each note one question" in text and "at 9am" not in text,
+              text[:160])
+        check("the morning's stories are in it, with the fields the note carried",
+              "m:a101 · LEAD · the morning's story a101" in text
+              and "WHAT'S NEW: what a101 carried at ten" in text,
+              text[text.find("m:a101"):][:200])
+        check("and its dropped list says the morning dropped nothing",
+              "That brief dropped nothing" in text)
+        check("no placeholder is left unfilled", out["unfilled"] == [], str(out))
+
+        write(rd / "picks" / "picks.json", {
+            "picks": [{"id": "a001", "tag": "MOVED", "kind": "development",
+                       "why": "x"}],
+            "dropped": [{"id": "a002", "reason_type": "unchanged",
+                         "reason": "the morning brief already has it"}]})
+        _, r = run("fill", "counterpoint", "--run", rd, "--article", "a001",
+                   expect=2, env=env)
+        check("a MOVED story gets no counterpoint",
+              "counterpoints run for LEAD stories only" in r.stderr,
+              r.stderr.strip()[:160])
+
+        time.sleep(1.1)          # a run id names the second it started in
+        out, _ = run("start", "--slot", "morning", expect=0, env=env)
+        rd = Path(out["run_dir"])
+        write(rd / "items" / "read-list.json", {"read": [
+            {"id": "a001", "item": "i00", "group": "beat-read", "profile": None,
+             "follows": None, "primary": True}]})
+        (rd / "notes" / "a001.md").write_text("HEADLINE: a001\n", encoding="utf-8")
+        out, _ = run("fill", "pick", "--run", rd, expect=0)
+        text = Path(out["file"]).read_text()
+        check("a morning run still gets the morning's own pick prompt",
+              "at 9am" in text and "Ask each note one question" not in text,
+              text[:160])
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def test_pick_groups():
     """A beat story may not be taken while a topic story was passed over."""
     print("\npicks-sync: the groups decide the order")
@@ -1644,6 +1865,8 @@ def main():
         test_cluster_parts()
         test_read_list(rd)
         test_picks(rd)
+        test_picks_afternoon()
+        test_pick_prompt_per_slot()
         test_pick_groups()
         test_checks(rd)
         test_counterpoint_fill(rd)

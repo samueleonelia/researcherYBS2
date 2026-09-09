@@ -66,8 +66,10 @@ RUN_VARS = {
     "DATE", "SLOT", "RUN_DIR", "WINDOW_START", "WINDOW_END",
     "SOURCE_NAME", "SLUG", "SOURCE_URL", "MARKER", "MARKER_JSON", "SOURCE_JSON",
     "ATTEMPT", "TASK_SPACE",
-    "ARTICLES", "NOTES", "PICKS", "COUNTERPOINTS", "TEMPLATE", "SECTION_JOB",
+    "ARTICLES", "NOTES", "NOTE_IDS", "NOTE_COUNT",
+    "PICKS", "COUNTERPOINTS", "TEMPLATE", "SECTION_JOB",
     "PART_NOTE", "PART_ITEMS", "PARTS", "SLOT_JOB", "BASE_TIME",
+    "BASE_STORIES", "BASE_DROPPED",
     "ARTICLE_ID", "WHAT_HAPPENED", "PRINCIPLE", "ANGLE", "ITEM_POOL",
     "AUDIT_LINE", "X_SECTION",
 }
@@ -79,7 +81,7 @@ def namespace_names():
     """Every name the script can fill, asked of the script itself."""
     names = {"BEATS", "LENS", "CRITERIA_FACTORS", "CRITERIA_LABELS", "CRITERIA_TAGS",
              "AGENT_RULES", "AGENT_RULES_BROWSER", "AGENT_RULES_JSON", "AGENT_RULES_FILE",
-             "ITEM_SHAPE", "PRINCIPLES", "PREFERENCES",
+             "ITEM_SHAPE", "PICK_RULES", "PRINCIPLES", "PREFERENCES",
              "PROFILE", "PROFILE_MOVES", "PROFILE_DATE", "PROFILE_SHOWS"}
     settings, _ = run("settings")
     names |= {f"settings.{k}" for k in settings}

@@ -54,8 +54,6 @@ for _d in (Path.home() / ".local" / "bin", Path.home() / ".local" / "node" / "bi
     if _d.is_dir() and str(_d) not in os.environ.get("PATH", "").split(os.pathsep):
         os.environ["PATH"] = f"{_d}{os.pathsep}{os.environ.get('PATH', '')}"
 
-TAGS = ("LEAD", "BODY", "WORTH")
-
 
 # ---------------------------------------------------------------- basics
 
@@ -191,6 +189,19 @@ def sections_of(run: dict) -> tuple:
 def tag_of(run: dict, section: str) -> str:
     """The pick tag that belongs in one section of this run's slot."""
     return TAG_OF_SECTION[run["slot"]][section]
+
+
+def tags_of(run: dict) -> tuple:
+    """Every tag a pick of this run may carry, in the template's section order.
+
+    The morning ranks a story and the afternoon says whether it is new or moved,
+    so the two slots do not share a vocabulary. Reading the tags off the section
+    table is how they cannot drift: a tag exists because a section holds it.
+    """
+    slot = run.get("slot")
+    if slot not in WRITE_SECTIONS:
+        die(f"unknown slot {slot!r}; the slots are {', '.join(WRITE_SECTIONS)}")
+    return tuple(TAG_OF_SECTION[slot][s] for s in WRITE_SECTIONS[slot])
 
 
 SCHEMA = {
@@ -449,6 +460,7 @@ def namespace(shows_dir: Path = None, need_profile: bool = True) -> dict:
         "AGENT_RULES": fragment("agent-rules", "every agent"),
         "AGENT_RULES_FILE": fragment("agent-rules", "file agents"),
         "ITEM_SHAPE": fragment("item-shape"),
+        "PICK_RULES": fragment("pick-rules"),
         "AGENT_RULES_BROWSER": fragment("agent-rules", "browser agents"),
         "AGENT_RULES_JSON": fragment("agent-rules", "json agents"),
         "PRINCIPLES": fragment("principles"),
@@ -731,6 +743,76 @@ def slot_job(run_dir: Path, run: dict) -> str:
             f"{base_dir / 'picks' / 'picks.json'}")
     return "\n\n".join([SLOT_JOB_HEAD, "\n".join(lines),
                         SLOT_JOB_RULES.format(floor=NEW_ITEM_ARTICLES_MIN)])
+
+
+# What the update's pick is shown of each story the brief it follows ran. Four
+# fields, in the note's own order: what was established, what was new then, what
+# was already shaky, and what was missing. Together they are the thing an
+# afternoon note is measured against, and nothing else in the base note is.
+BASE_STORY_FIELDS = ("WHAT HAPPENED", "WHAT'S NEW", "WEAK SPOTS",
+                     "WHAT'S NOT HERE")
+
+
+def base_run_dir(run: dict) -> Path:
+    """The folder of the brief this run updates."""
+    return Path((run.get("base") or {}).get("run_dir") or "")
+
+
+def base_stories(run: dict) -> str:
+    """The stories of the brief being updated, in the order that brief ran them.
+
+    An update cannot ask "did this move?" without the thing it is moving
+    against, so every base pick arrives here whole: its id in the `m:<id>` form
+    the update writes everywhere, its tag, its headline, its URL, and the four
+    fields of its own note. The order is the base run's pick order, because the
+    update is written in that order too.
+    """
+    base_dir = base_run_dir(run)
+    picks = (load_json(base_dir / "picks" / "picks.json") or {}).get("picks") or []
+    arts = {r["id"]: r for r in
+            ((load_json(base_dir / "articles.json") or {}).get("articles") or [])}
+    out = []
+    for p in picks:
+        aid = p.get("id")
+        note = base_dir / "notes" / f"{aid}.md"
+        text = note.read_text(encoding="utf-8") if note.exists() else ""
+        headline = re.sub(r"\s+", " ", note_field(text, "HEADLINE")).strip()
+        out.append(f"m:{aid} · {p.get('tag') or '-'} · {headline or '-'}")
+        out.append(f"     {arts.get(aid, {}).get('url', '-')}")
+        for field in BASE_STORY_FIELDS:
+            value = note_field(text, field)
+            out.append(f"{field}: {value}" if value else f"{field}: -")
+        out.append("")
+    if not out:
+        die(f"the run this update follows has no picks in "
+            f"{base_dir / 'picks' / 'picks.json'}")
+    return "\n".join(out).strip()
+
+
+def base_dropped(run: dict) -> str:
+    """What the brief being updated read and then left out, and why.
+
+    A morning drop was decided with the whole article in front of somebody, so
+    the update's pick is shown it: a second headline about the same nothing must
+    not quietly undo the decision. A morning that dropped nothing says so in one
+    line, because an empty block in a prompt reads as a hole.
+    """
+    base_dir = base_run_dir(run)
+    dropped = (load_json(base_dir / "picks" / "picks.json") or {}).get("dropped") or []
+    lines = []
+    for d in dropped:
+        aid = d.get("id")
+        note = base_dir / "notes" / f"{aid}.md"
+        headline = ""
+        if note.exists():
+            headline = re.sub(
+                r"\s+", " ", note_field(note.read_text(encoding="utf-8"),
+                                        "HEADLINE")).strip()
+        lines.append(f"m:{aid} · {headline or '-'} · "
+                     f"{d.get('reason_type') or '-'}: {d.get('reason') or '-'}")
+    if not lines:
+        return "That brief dropped nothing: every story it read reached it."
+    return "\n".join(lines)
 
 
 BASE_ID = re.compile(r"^m:(.+)$")
@@ -1245,6 +1327,14 @@ def cmd_fill(args):
         ns["NOTES"], note_ids = notes_block(run_dir)
         ns["NOTE_IDS"] = " ".join(note_ids)
         ns["NOTE_COUNT"] = str(len(note_ids))
+        if run.get("slot") == "afternoon":
+            # The update asks a different question of the same notes -- did this
+            # move? -- so it is a different prompt file. What it renders into
+            # keeps the name `pick`, so step 7's launch line is one line in both
+            # slots and the orchestrator never has to know which slot it is on.
+            src = skill_dir() / "prompts" / "pick-update.md"
+            ns["BASE_STORIES"] = base_stories(run)
+            ns["BASE_DROPPED"] = base_dropped(run)
     elif name == "counterpoint":
         if not args.article:
             die("fill counterpoint needs --article <id>")
@@ -1333,6 +1423,7 @@ POOL = SETTINGS["agents_active_max"]
 TRIAGE_BATCH = SETTINGS["triage_batch_size"]
 ITEM_FLOOR = SETTINGS["maybe_below_reads"]
 MAX_PICKS = SETTINGS["picks_max"]
+UPDATE_PICKS_MAX = SETTINGS["update_picks_max"]
 LEAD_MAX = SETTINGS["lead_max"]
 WORTH_MAX = SETTINGS["worth_max"]
 MAYBE_SHARE_MAX = SETTINGS["maybe_share_max"]
@@ -2156,19 +2247,30 @@ def cmd_check_sync(args):
 # ---------------------------------------------------------------- pick
 
 REASON_TYPES = tuple(SCHEMA["reason_type"]["all"].split(" | "))
+# The second label an update puts on a story it kept: how the story moved. Only
+# a MOVED pick carries one, and the four are the whole vocabulary.
+KINDS = tuple(SCHEMA["tag"]["kind"].split(" | "))
 
 
 def cmd_picks_sync(args):
-    """Validate picks/picks.json against the ceilings, then trim to picks_max.
+    """Validate picks/picks.json against the slot's tags and ceilings, then trim.
 
     Every ceiling here is a ceiling. A brief with two leads is right when only
-    two stories deserve to lead, so nothing checks for a minimum.
+    two stories deserve to lead, so nothing checks for a minimum. An update with
+    no picks at all is right too: nothing moved between the two briefs.
 
-    A reply over picks_max is not a failure: code trims it, discarding the
+    A reply over the ceiling is not a failure: code trims it, discarding the
     smallest stories first. A LEAD is never trimmed. Among the rest, the pick
     whose news item holds the fewest articles goes first; ties fall to the
     lower group, then to the pick the agent ranked last. Trimmed picks move to
     a "trimmed" list in the file, so a re-run of this check is a no-op.
+
+    An afternoon run answers to the same shape with the update's own vocabulary:
+    `NEW` and `MOVED` instead of the morning's three tags, `update_picks_max`
+    instead of `picks_max`, a `kind` on every MOVED pick, and the item's
+    `follows` agreeing with the tag. It trims a NEW before a MOVED, because the
+    movement is the thing an update exists to carry. The brief being updated is
+    only ever read here, never written.
 
     Expected shape:
       {"picks": [{"id": "a003", "tag": "LEAD", "why": "..."}],
@@ -2180,12 +2282,22 @@ def cmd_picks_sync(args):
     p = load_json(run_dir / "picks" / "picks.json")
     if not p or "picks" not in p:
         die("no picks/picks.json with a 'picks' list")
+    run = load_run(run_dir)
+    slot = run.get("slot")
+    afternoon = slot == "afternoon"
+    tags = tags_of(run)
+    ceiling = UPDATE_PICKS_MAX if afternoon else MAX_PICKS
     notes = {f.stem for f in (run_dir / "notes").glob("*.md")}
     groups = {r["id"]: r.get("group") for r in
               ((load_json(run_dir / "items" / "read-list.json") or {}).get("read") or [])}
+    # The plan is where an article's news item lives, and with it both the size
+    # of the story and, in an update, the morning story it follows.
+    items = (load_json(run_dir / "items" / "plan.json") or {}).get("items") or []
+    item_of = {a: it for it in items for a in (it.get("articles") or [])}
 
     problems, seen = [], set()
-    counts = {t: 0 for t in TAGS}
+    counts = {t: 0 for t in tags}
+    followed = {}                    # base story -> the one pick that follows it
     for it in p["picks"]:
         aid, tag = it.get("id"), (it.get("tag") or "").upper()
         if aid not in notes:
@@ -2193,16 +2305,42 @@ def cmd_picks_sync(args):
         if aid in seen:
             problems.append(f"{aid}: picked twice")
         seen.add(aid)
-        if tag not in TAGS:
-            # The tags are per slot now, and this check is still the morning's:
-            # the afternoon's own tags and ceilings come with `pick-update.md`.
-            problems.append(f"{aid}: tag '{tag}' is not {SCHEMA['tag']['morning']}")
+        if tag not in tags:
+            problems.append(f"{aid}: tag '{tag}' is not {SCHEMA['tag'][slot]}")
         else:
             counts[tag] += 1
-    if counts["LEAD"] > LEAD_MAX:
-        problems.append(f"{counts['LEAD']} LEAD stories; at most {LEAD_MAX}")
-    if counts["WORTH"] > WORTH_MAX:
-        problems.append(f"{counts['WORTH']} WORTH stories; at most {WORTH_MAX}")
+        if not afternoon or tag not in tags:
+            continue
+        kind = (it.get("kind") or "").strip().lower()
+        follows = item_of.get(aid, {}).get("follows")
+        if tag == "MOVED":
+            if kind not in KINDS:
+                problems.append(f"{aid}: kind {kind or '(none)'!r} is not one of "
+                                f"{SCHEMA['tag']['kind']}")
+            if not follows:
+                problems.append(f"{aid}: tagged MOVED, and its item follows no "
+                                f"story of the brief being updated")
+            elif follows in followed:
+                # One base story, one update line. Two would read as two
+                # separate developments of the same thing.
+                problems.append(f"{aid} and {followed[follows]} both follow "
+                                f"{follows}; keep the one carrying the movement")
+            else:
+                followed[follows] = aid
+        else:
+            if kind:
+                problems.append(f"{aid}: tagged NEW and given kind {kind!r}; a "
+                                f"kind says how a story of the brief moved, and "
+                                f"nothing of this one was in it")
+            if follows:
+                problems.append(f"{aid}: tagged NEW, and its item follows "
+                                f"{follows}; a story that follows one of the "
+                                f"brief's own is MOVED")
+    if not afternoon:
+        if counts["LEAD"] > LEAD_MAX:
+            problems.append(f"{counts['LEAD']} LEAD stories; at most {LEAD_MAX}")
+        if counts["WORTH"] > WORTH_MAX:
+            problems.append(f"{counts['WORTH']} WORTH stories; at most {WORTH_MAX}")
 
     dropped = {}
     for d in p.get("dropped", []):
@@ -2221,50 +2359,76 @@ def cmd_picks_sync(args):
     # A reply over the ceiling is trimmed, never failed — but only a reply that
     # passed every check above, so a rejected reply reaches the rerun intact.
     trimmed_now = []
-    if not problems and len(p["picks"]) > MAX_PICKS:
-        if counts["LEAD"] > MAX_PICKS:
-            die(f"{counts['LEAD']} LEAD picks but picks_max is {MAX_PICKS}; "
+    if not problems and len(p["picks"]) > ceiling:
+        if not afternoon and counts["LEAD"] > ceiling:
+            die(f"{counts['LEAD']} LEAD picks but picks_max is {ceiling}; "
                 "lead_max in settings.md must not exceed picks_max")
-        items = (load_json(run_dir / "items" / "plan.json") or {}).get("items") or []
-        item_of = {a: it for it in items for a in (it.get("articles") or [])}
         order = {it["id"]: i for i, it in enumerate(p["picks"])}
 
         def trim_key(it):
+            tag = (it.get("tag") or "").upper()
+            # The morning keeps every LEAD, which is why they are out of
+            # `cuttable` below. The afternoon has no untouchable tag, so the
+            # tag is the first thing sorted on instead: a NEW goes before a
+            # MOVED, because an update is for what moved.
+            new_first = 0 if (afternoon and tag == "NEW") else 1
             n_articles = len(item_of.get(it["id"], {}).get("articles") or [it["id"]])
             g = groups.get(it["id"])
             g_rank = GROUP_ORDER.index(g) if g in GROUP_ORDER else len(GROUP_ORDER)
-            return (n_articles, -g_rank, -order[it["id"]])
+            return (new_first, n_articles, -g_rank, -order[it["id"]])
 
         cuttable = sorted((it for it in p["picks"]
-                           if (it.get("tag") or "").upper() != "LEAD"), key=trim_key)
-        for it in cuttable[:len(p["picks"]) - MAX_PICKS]:
+                           if afternoon or (it.get("tag") or "").upper() != "LEAD"),
+                          key=trim_key)
+        over = "update_picks_max" if afternoon else "picks_max"
+        for it in cuttable[:len(p["picks"]) - ceiling]:
             trimmed_now.append({
                 "id": it["id"], "tag": (it.get("tag") or "").upper(),
                 "articles": len(item_of.get(it["id"], {}).get("articles") or [it["id"]]),
-                "reason": "trimmed by code: over picks_max, fewest articles first"})
+                "reason": f"trimmed by code: over {over}, fewest articles first"})
         cut_ids = {t["id"] for t in trimmed_now}
         p["picks"] = [it for it in p["picks"] if it["id"] not in cut_ids]
         p["trimmed"] = p.get("trimmed", []) + trimmed_now
         write_json(run_dir / "picks" / "picks.json", p)
         log_event(run_dir, "picks_trimmed",
-                  f"{len(trimmed_now)} trimmed to {MAX_PICKS}: "
+                  f"{len(trimmed_now)} trimmed to {ceiling}: "
                   + ", ".join(sorted(cut_ids)))
         seen = {it["id"] for it in p["picks"]}
-        counts = {t: 0 for t in TAGS}
+        counts = {t: 0 for t in tags}
         for it in p["picks"]:
             counts[(it.get("tag") or "").upper()] += 1
 
     mix = {"topic": 0, "beat": 0, "maybe": 0}
+    if afternoon:
+        # An update's own mix question is how much of it came from the brief it
+        # follows, so the followers are counted as themselves rather than
+        # falling into the beat bucket they would otherwise land in.
+        mix["follow"] = 0
     for aid in seen:
         g = groups.get(aid) or ""
-        mix["maybe" if g.endswith("maybe") else
-            ("topic" if g.startswith("topic") else "beat")] += 1
+        if afternoon and g.startswith("follow"):
+            mix["follow"] += 1
+        else:
+            mix["maybe" if g.endswith("maybe") else
+                ("topic" if g.startswith("topic") else "beat")] += 1
 
     data = load_run(run_dir)
-    data["counts"].update({"picks": len(p["picks"]), "leads": counts["LEAD"],
-                           "worth": counts["WORTH"], "body": counts["BODY"],
-                           "picks_dropped": len(dropped), "picks_mix": mix,
-                           "picks_trimmed": len(p.get("trimmed", []))})
+    record = {"picks": len(p["picks"]), "picks_dropped": len(dropped),
+              "picks_mix": mix, "picks_trimmed": len(p.get("trimmed", []))}
+    if afternoon:
+        by_kind = {k: 0 for k in KINDS}
+        for it in p["picks"]:
+            kind = (it.get("kind") or "").strip().lower()
+            # A kind outside the four is already a problem above; the counts
+            # record what the run really holds and invent no bucket for it.
+            if (it.get("tag") or "").upper() == "MOVED" and kind in by_kind:
+                by_kind[kind] += 1
+        record.update({"new": counts["NEW"], "moved": counts["MOVED"],
+                       "moved_by_kind": by_kind})
+    else:
+        record.update({"leads": counts["LEAD"], "worth": counts["WORTH"],
+                       "body": counts["BODY"]})
+    data["counts"].update(record)
     save_run(run_dir, data)
     print(json.dumps({"picks": len(p["picks"]), "by_tag": counts, "mix": mix,
                       "dropped": len(dropped),

@@ -27,7 +27,7 @@ settings`, `python3 x-lists/x_settings.py`, or `python3
 | agents_active_max | 15 | agents working at the same time in a pooled step |
 | retries_max | 1 | times one agent may be launched again after a failure |
 | read_items_max | 45 | items that may be read in one run |
-| cluster_articles_max | 150 | articles one cluster call may take; a longer kept list is cut into parts and merged |
+| cluster_articles_max | 200 | articles one cluster call may take; a longer kept list is cut into parts and merged |
 | triage_batch_size | 10 | articles one triage agent may sort; a batch may hold fewer |
 | maybe_below_reads | 30 | MAYBEs may be added only while the READ count is under this, and only up to it |
 | maybe_share_max | 50% | MAYBEs never exceed this share of the READ count |

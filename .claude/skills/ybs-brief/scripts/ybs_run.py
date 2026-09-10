@@ -1488,6 +1488,11 @@ def cmd_fill(args):
             src = skill_dir() / "prompts" / "pick-update.md"
             ns["BASE_STORIES"] = base_stories(run)
             ns["BASE_DROPPED"] = base_dropped(run)
+        elif run.get("slot") == "evening":
+            # The evening's question is the third one: is this an achievement
+            # now that the article has been read, and how far has it got? The
+            # notes are the whole of what it needs to answer.
+            src = skill_dir() / "prompts" / "pick-evening.md"
     elif name == "counterpoint":
         if not args.article:
             die("fill counterpoint needs --article <id>")
@@ -1581,6 +1586,7 @@ TRIAGE_BATCH = SETTINGS["triage_batch_size"]
 ITEM_FLOOR = SETTINGS["maybe_below_reads"]
 MAX_PICKS = SETTINGS["picks_max"]
 UPDATE_PICKS_MAX = SETTINGS["update_picks_max"]
+ACHIEVEMENTS_MAX = SETTINGS["achievements_max"]
 LEAD_MAX = SETTINGS["lead_max"]
 WORTH_MAX = SETTINGS["worth_max"]
 MAYBE_SHARE_MAX = SETTINGS["maybe_share_max"]
@@ -2543,6 +2549,18 @@ REASON_TYPES = tuple(SCHEMA["reason_type"]["all"].split(" | "))
 # a MOVED pick carries one, and the four are the whole vocabulary.
 KINDS = tuple(SCHEMA["tag"]["kind"].split(" | "))
 
+# The second word the evening puts on a pick: how far the thing has actually
+# got, from a result people are living with down to something only announced.
+# Every pick of an evening run carries one, and the five are the whole
+# vocabulary.
+LABELS = tuple(SCHEMA["tag"]["label"].split(" | "))
+
+# The ceiling each slot's pick answers to, under the name settings.md gives it,
+# so the trim can say which row of the file it obeyed.
+PICKS_CEILING = {"morning": ("picks_max", MAX_PICKS),
+                 "afternoon": ("update_picks_max", UPDATE_PICKS_MAX),
+                 "evening": ("achievements_max", ACHIEVEMENTS_MAX)}
+
 # How a story of the update's second section opens: the kind it was picked with,
 # capitalised, then ` - `. The stitch is where that is checked, and the kinds
 # come from the same one list the pick is checked against.
@@ -2570,6 +2588,12 @@ def cmd_picks_sync(args):
     movement is the thing an update exists to carry. The brief being updated is
     only ever read here, never written.
 
+    An evening run answers to the shape a third time, in the report's own
+    vocabulary: one tag, `ACHIEVEMENT`, `achievements_max` instead of
+    `picks_max`, and a `label` on every pick saying how far the thing has got.
+    No pick carries a kind and no item follows anything, because the evening
+    reports today's own achievements and not the movement of an earlier story.
+
     Expected shape:
       {"picks": [{"id": "a003", "tag": "LEAD", "why": "..."}],
        "dropped": [{"id": "a007", "reason_type": "evidence", "reason": "..."}],
@@ -2583,8 +2607,9 @@ def cmd_picks_sync(args):
     run = load_run(run_dir)
     slot = run.get("slot")
     afternoon = slot == "afternoon"
+    evening = slot == "evening"
     tags = tags_of(run)
-    ceiling = UPDATE_PICKS_MAX if afternoon else MAX_PICKS
+    over, ceiling = PICKS_CEILING[slot]
     notes = {f.stem for f in (run_dir / "notes").glob("*.md")}
     groups = {r["id"]: r.get("group") for r in
               ((load_json(run_dir / "items" / "read-list.json") or {}).get("read") or [])}
@@ -2596,19 +2621,13 @@ def cmd_picks_sync(args):
     problems, seen = [], set()
     counts = {t: 0 for t in tags}
     followed = {}                    # base story -> the one pick that follows it
-    for it in p["picks"]:
-        aid, tag = it.get("id"), (it.get("tag") or "").upper()
-        if aid not in notes:
-            problems.append(f"{aid}: picked but has no note")
-        if aid in seen:
-            problems.append(f"{aid}: picked twice")
-        seen.add(aid)
-        if tag not in tags:
-            problems.append(f"{aid}: tag '{tag}' is not {SCHEMA['tag'][slot]}")
-        else:
-            counts[tag] += 1
-        if not afternoon or tag not in tags:
-            continue
+
+    # What one slot asks of one pick, beyond the tag every slot checks. Each
+    # slot's rules sit in one place, so a reader of the afternoon's never has
+    # to hold the evening's in mind. The morning asks nothing more: a rank is
+    # the whole of what it says about a story.
+    def afternoon_pick(aid, it, tag):
+        """NEW or MOVED, with the kind and the item's `follows` agreeing."""
         kind = (it.get("kind") or "").strip().lower()
         follows = item_of.get(aid, {}).get("follows")
         if tag == "MOVED":
@@ -2634,7 +2653,41 @@ def cmd_picks_sync(args):
                 problems.append(f"{aid}: tagged NEW, and its item follows "
                                 f"{follows}; a story that follows one of the "
                                 f"brief's own is MOVED")
-    if not afternoon:
+
+    def evening_pick(aid, it, tag):
+        """ACHIEVEMENT, with a label saying how far the thing has got."""
+        label = (it.get("label") or "").strip().lower()
+        if label not in LABELS:
+            problems.append(f"{aid}: label {label or '(none)'!r} is not one of "
+                            f"{SCHEMA['tag']['label']}")
+        kind = (it.get("kind") or "").strip().lower()
+        if kind:
+            problems.append(f"{aid}: given kind {kind!r}; a kind says how a "
+                            f"story of an earlier brief moved, and an evening "
+                            f"story moved nothing: it says how far it has got, "
+                            f"in its label")
+        follows = item_of.get(aid, {}).get("follows")
+        if follows:
+            problems.append(f"{aid}: its item follows {follows}; an evening "
+                            f"story follows nothing, it is an achievement "
+                            f"reported today")
+
+    slot_pick = {"afternoon": afternoon_pick, "evening": evening_pick}.get(slot)
+
+    for it in p["picks"]:
+        aid, tag = it.get("id"), (it.get("tag") or "").upper()
+        if aid not in notes:
+            problems.append(f"{aid}: picked but has no note")
+        if aid in seen:
+            problems.append(f"{aid}: picked twice")
+        seen.add(aid)
+        if tag not in tags:
+            problems.append(f"{aid}: tag '{tag}' is not {SCHEMA['tag'][slot]}")
+        else:
+            counts[tag] += 1
+        if slot_pick and tag in tags:
+            slot_pick(aid, it, tag)
+    if slot == "morning":
         if counts["LEAD"] > LEAD_MAX:
             problems.append(f"{counts['LEAD']} LEAD stories; at most {LEAD_MAX}")
         if counts["WORTH"] > WORTH_MAX:
@@ -2658,7 +2711,7 @@ def cmd_picks_sync(args):
     # passed every check above, so a rejected reply reaches the rerun intact.
     trimmed_now = []
     if not problems and len(p["picks"]) > ceiling:
-        if not afternoon and counts["LEAD"] > ceiling:
+        if slot == "morning" and counts["LEAD"] > ceiling:
             die(f"{counts['LEAD']} LEAD picks but picks_max is {ceiling}; "
                 "lead_max in settings.md must not exceed picks_max")
         order = {it["id"]: i for i, it in enumerate(p["picks"])}
@@ -2668,7 +2721,9 @@ def cmd_picks_sync(args):
             # The morning keeps every LEAD, which is why they are out of
             # `cuttable` below. The afternoon has no untouchable tag, so the
             # tag is the first thing sorted on instead: a NEW goes before a
-            # MOVED, because an update is for what moved.
+            # MOVED, because an update is for what moved. The evening has one
+            # tag and nothing to rank by it, so every pick starts level here
+            # and the size of the story decides.
             new_first = 0 if (afternoon and tag == "NEW") else 1
             n_articles = len(item_of.get(it["id"], {}).get("articles") or [it["id"]])
             g = groups.get(it["id"])
@@ -2676,9 +2731,9 @@ def cmd_picks_sync(args):
             return (new_first, n_articles, -g_rank, -order[it["id"]])
 
         cuttable = sorted((it for it in p["picks"]
-                           if afternoon or (it.get("tag") or "").upper() != "LEAD"),
+                           if slot != "morning"
+                           or (it.get("tag") or "").upper() != "LEAD"),
                           key=trim_key)
-        over = "update_picks_max" if afternoon else "picks_max"
         for it in cuttable[:len(p["picks"]) - ceiling]:
             trimmed_now.append({
                 "id": it["id"], "tag": (it.get("tag") or "").upper(),
@@ -2723,6 +2778,16 @@ def cmd_picks_sync(args):
                 by_kind[kind] += 1
         record.update({"new": counts["NEW"], "moved": counts["MOVED"],
                        "moved_by_kind": by_kind})
+    elif evening:
+        by_label = {l: 0 for l in LABELS}
+        for it in p["picks"]:
+            label = (it.get("label") or "").strip().lower()
+            # A label outside the five is already a problem above; the counts
+            # record what the run really holds and invent no bucket for it.
+            if label in by_label:
+                by_label[label] += 1
+        record.update({"achievements": counts["ACHIEVEMENT"],
+                       "achievements_by_label": by_label})
     else:
         record.update({"leads": counts["LEAD"], "worth": counts["WORTH"],
                        "body": counts["BODY"]})

@@ -1407,6 +1407,48 @@ def afternoon_run(tmp, env, ids, follows, groups=None):
     return rd, [aid for aid, _ in pairs]
 
 
+def evening_run(tmp, env, ids, groups=None):
+    """An evening run with a plan, a read list and its notes written by hand.
+
+    The same trick as `afternoon_run`, for the third slot: picks-sync reads the
+    notes, the plan and the read list, so writing those three directly keeps a
+    test about the pick and nothing else -- no pool, no triage, no cluster. The
+    morning is written here too, because `start --slot evening` refuses without
+    one and nothing about that morning reaches the pick; one kept article is
+    the whole of it.
+
+    Every item follows nothing, which is what an evening item is: tonight's
+    report carries no story forward. `ids` may name a count of articles instead
+    of just an id, as `(id, n)`.
+    """
+    build_morning(tmp, "2026-x_morning_100000", now_iso(-6),
+                  links=["https://www.theguardian.com/m/1"], kept=["a001"])
+    out, _ = run("start", "--slot", "evening", expect=0, env=env)
+    rd = Path(out["run_dir"])
+    pairs = [(x, 1) if isinstance(x, str) else x for x in ids]
+    items, read = [], []
+    for k, (aid, n) in enumerate(pairs):
+        siblings = [aid] + [f"{aid}-s{j}" for j in range(1, n)]
+        items.append({"item_id": f"i{k:02d}", "name": aid,
+                      "kind": "cluster" if n > 1 else "single",
+                      "verdict": "READ", "profile": None,
+                      "follows": None, "articles": siblings,
+                      "primary": aid, "read": [aid], "why": "x"})
+        read.append({"id": aid, "item": f"i{k:02d}",
+                     "group": (groups or {}).get(aid, "beat-read"),
+                     "profile": None, "follows": None, "primary": True})
+        (rd / "notes" / f"{aid}.md").write_text(
+            f"HEADLINE: {aid}\nSCALE AND STAGE: not stated\n", encoding="utf-8")
+    write(rd / "items" / "plan.json", {"items": items, "near_misses": []})
+    write(rd / "items" / "read-list.json", {"read": read})
+    write(rd / "articles.json", {"articles": [
+        {"id": a, "source": "Guardian", "url": f"https://example.com/{a}",
+         "title": f"headline of {a}", "description": "d", "category": "world",
+         "published": now_iso(-1), "also_in": []}
+        for it in items for a in it["articles"]]})
+    return rd, [aid for aid, _ in pairs]
+
+
 def test_picks_afternoon():
     """The update's own pick: two tags, a kind on what moved, one line per story.
 
@@ -1533,14 +1575,142 @@ def test_picks_afternoon():
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def test_picks_evening():
+    """The report's own pick: one tag, a label on every story, and zero allowed.
+
+    The evening says two things about a story and no more: that it happened,
+    which is the tag, and how far it has got, which is the label. Everything the
+    afternoon asks -- a kind, a story of an earlier brief carried forward -- is
+    refused here, because tonight's report follows nothing. The five labels are
+    read out of the script, so this test never restates them.
+
+    Everything runs inside a runs folder of its own, named by YBS_RUNS_DIR.
+    """
+    print("\npicks-sync: the evening's one tag and five labels")
+    settings, _ = run("settings", expect=0)
+    ceiling = settings["achievements_max"]
+    labels_line, _ = run("schema", "--key", "tag.label", expect=0)
+    labels = labels_line.strip().split(" | ")
+    tmp = Path(tempfile.mkdtemp(prefix="ybs-runs-"))
+    env = {"YBS_RUNS_DIR": str(tmp)}
+    try:
+        rd, ids = evening_run(tmp, env, ["a001", "a002", "a003", "a004"])
+
+        def picks(*kept):
+            """A reply keeping these picks and dropping every other note."""
+            kept_ids = {p["id"] for p in kept}
+            return {"picks": list(kept),
+                    "dropped": [{"id": a, "reason_type": "not-achievement",
+                                 "reason": "read in full, it is a pledge"}
+                                for a in ids if a not in kept_ids]}
+
+        for wrong in ("LEAD", "NEW"):
+            write(rd / "picks" / "picks.json",
+                  picks({"id": "a001", "tag": wrong, "label": labels[0],
+                         "why": "x"}))
+            out, _ = run("picks-sync", "--run", rd, expect=1)
+            check(f"a {wrong} is no tag of the evening, and it is told which is",
+                  has(out, f"tag '{wrong}' is not ACHIEVEMENT"),
+                  str(out.get("problems")))
+
+        write(rd / "picks" / "picks.json",
+              picks({"id": "a001", "tag": "ACHIEVEMENT", "why": "x"}))
+        out, _ = run("picks-sync", "--run", rd, expect=1)
+        check("a story with no label says nothing about how far it has got",
+              has(out, "label '(none)' is not one of"), str(out.get("problems")))
+
+        write(rd / "picks" / "picks.json",
+              picks({"id": "a001", "tag": "ACHIEVEMENT", "label": "shipped",
+                     "why": "x"}))
+        out, _ = run("picks-sync", "--run", rd, expect=1)
+        check("and a label of its own invention is refused, with the five named",
+              has(out, "label 'shipped' is not one of")
+              and any(labels_line.strip() in p for p in out["problems"]),
+              str(out.get("problems")))
+
+        write(rd / "picks" / "picks.json",
+              picks({"id": "a001", "tag": "ACHIEVEMENT", "label": labels[0],
+                     "kind": "development", "why": "x"}))
+        out, _ = run("picks-sync", "--run", rd, expect=1)
+        check("a kind belongs to a story that moved, and nothing moved tonight",
+              has(out, "a001: given kind 'development'"), str(out.get("problems")))
+
+        plan = json.loads((rd / "items" / "plan.json").read_text())
+        plan["items"][0]["follows"] = "m:a101"
+        write(rd / "items" / "plan.json", plan)
+        write(rd / "picks" / "picks.json",
+              picks({"id": "a001", "tag": "ACHIEVEMENT", "label": labels[0],
+                     "why": "x"}))
+        out, _ = run("picks-sync", "--run", rd, expect=1)
+        check("a pick whose item follows a morning story is refused",
+              has(out, "a001: its item follows m:a101"), str(out.get("problems")))
+        plan["items"][0]["follows"] = None
+        write(rd / "items" / "plan.json", plan)
+
+        write(rd / "picks" / "picks.json",
+              picks({"id": "a001", "tag": "ACHIEVEMENT", "label": labels[0],
+                     "why": "x"},
+                    {"id": "a002", "tag": "ACHIEVEMENT", "label": labels[1],
+                     "why": "x"},
+                    {"id": "a003", "tag": "ACHIEVEMENT", "label": labels[0],
+                     "why": "x"}))
+        out, _ = run("picks-sync", "--run", rd, expect=0)
+        check("a clean report is accepted, on the one tag it has",
+              out["picks"] == 3 and out["by_tag"] == {"ACHIEVEMENT": 3},
+              str(out))
+        check("and not-achievement is a reason a note may be dropped for",
+              out["dropped"] == 1 and not out["problems"], str(out))
+        check("nothing leads the report, so step 9 has nothing to launch",
+              out["leads"] == [], str(out.get("leads")))
+        check("the mix is the morning's three buckets, and grows no fourth",
+              out["mix"] == {"topic": 0, "beat": 3, "maybe": 0},
+              str(out.get("mix")))
+        counts = json.loads((rd / "run.json").read_text())["counts"]
+        check("run.json records how many achievements the report holds",
+              counts["achievements"] == 3, str(counts.get("achievements")))
+        check("and how many of each label, every one of the five a key",
+              counts["achievements_by_label"] == dict(
+                  {l: 0 for l in labels}, **{labels[0]: 2, labels[1]: 1}),
+              str(counts.get("achievements_by_label")))
+
+        write(rd / "picks" / "picks.json", picks())
+        out, _ = run("picks-sync", "--run", rd, expect=0)
+        check("a day with no achievement in it is a report, not a failure",
+              out["picks"] == 0 and out["leads"] == [] and not out["problems"],
+              str(out))
+
+        # Over the ceiling: trimmed, not failed, and the smallest news go first.
+        print("\npicks-sync: trimming the evening")
+        time.sleep(1.1)          # a run id names the second it started in
+        sizes = {"a001": 5, "a002": 1, "a003": 4, "a004": 2, "a005": 3,
+                 "a006": 6, "a007": 7}
+        rd2, ids2 = evening_run(tmp, env, list(sizes.items()))
+        write(rd2 / "picks" / "picks.json", {
+            "picks": [{"id": a, "tag": "ACHIEVEMENT", "label": labels[0],
+                       "why": "x"} for a in ids2],
+            "dropped": []})
+        out, _ = run("picks-sync", "--run", rd2, expect=0)
+        check(f"a report is cut back to {ceiling} stories",
+              out["picks"] == ceiling, str(out.get("picks")))
+        check("the stories with the fewest articles behind them are the ones cut",
+              out["trimmed"] == ["a002", "a004"], str(out.get("trimmed")))
+        check("and the label counts follow what is left",
+              json.loads((rd2 / "run.json").read_text())["counts"]
+              ["achievements_by_label"][labels[0]] == ceiling,
+              str(json.loads((rd2 / "run.json").read_text())["counts"]))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def test_pick_prompt_per_slot():
     """`fill pick` renders the slot's own prompt into the same file.
 
-    Step 7's launch line names `prompts/pick.md` in both slots, so the file the
+    Step 7's launch line names `prompts/pick.md` in every slot, so the file the
     orchestrator hands over never changes name. What is inside it does: the
     morning asks which stories reach the brief, the afternoon asks which of them
-    moved. A `fill counterpoint` on an update is refused, because an update has
-    no lead for one to hang under.
+    moved, the evening asks which of them were achievements and how far each has
+    got. A `fill counterpoint` on an update is refused, because an update has
+    no lead for one to hang under, and so is one on a report of achievements.
     """
     print("\nfill pick: one file, one prompt per slot")
     tmp = Path(tempfile.mkdtemp(prefix="ybs-runs-"))
@@ -1589,6 +1759,36 @@ def test_pick_prompt_per_slot():
         check("a morning run still gets the morning's own pick prompt",
               "at 9am" in text and "Ask each note one question" not in text,
               text[:160])
+
+        time.sleep(1.1)          # a run id names the second it started in
+        rd, _ = evening_run(tmp, env, ["a001", "a002"])
+        out, _ = run("fill", "pick", "--run", rd, expect=0)
+        check("the evening writes its prompt to prompts/pick.md too",
+              Path(out["file"]) == (rd / "prompts" / "pick.md").resolve(),
+              str(out.get("file")))
+        text = Path(out["file"]).read_text()
+        check("and it is the report's own prompt, neither of the other two",
+              "Ask each note two questions" in text
+              and "Ask each note one question" not in text
+              and "at 9am" not in text, text[:160])
+        check("no placeholder is left unfilled in it either",
+              out["unfilled"] == [], str(out))
+
+        _, r = run("fill", "write", "--run", rd, "--section", "leads", expect=2)
+        check("a morning section is refused in a report of achievements",
+              "is not a section of a evening run" in r.stderr,
+              r.stderr.strip()[:200])
+
+        write(rd / "picks" / "picks.json", {
+            "picks": [{"id": "a001", "tag": "ACHIEVEMENT",
+                       "label": "emerging", "why": "x"}],
+            "dropped": [{"id": "a002", "reason_type": "not-achievement",
+                         "reason": "read in full, it is a pledge"}]})
+        _, r = run("fill", "counterpoint", "--run", rd, "--article", "a001",
+                   expect=2, env=env)
+        check("the whole report is the counterpoint, so no story gets one",
+              "counterpoints run for LEAD stories only" in r.stderr,
+              r.stderr.strip()[:160])
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -2489,6 +2689,7 @@ def main():
         test_read_list(rd)
         test_picks(rd)
         test_picks_afternoon()
+        test_picks_evening()
         test_pick_prompt_per_slot()
         test_pick_groups()
         test_checks(rd)

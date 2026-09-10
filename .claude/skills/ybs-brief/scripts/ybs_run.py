@@ -13,8 +13,11 @@ Commands
   fill NAME --run DIR      render one single-call prompt, run data included
   sources                  print the sources listed in sources.md as JSON
   start --slot SLOT        create the run folder, compute the time window; an
-                           afternoon run also finds the morning it updates
+                           afternoon run also finds the morning it updates, and
+                           an evening run the two runs it pools
   screen-sync --run DIR    fold every screen/<slug>.json into articles.json
+  pool-sync --run DIR      the evening's own step 2: pool what the day's earlier
+                           runs kept at triage into this run's articles.json
   triage-list --run DIR    freeze the article list, print one launch line per article
   triage-check --run DIR   verify every article has its own one-line verdict file
   triage-replay --run DIR  replay the section filter over a finished run, and diff
@@ -163,14 +166,17 @@ PASS_THROUGH = {"AUDIT_LINE", "X_SECTION"}
 
 # The sections of the brief, per slot, in the order their template prints them,
 # and the pick tag that belongs in each. A slot is a different brief, not a
-# different pipeline: the morning runs three sections and the afternoon two, and
-# every step that asks "which sections?" or "which tag?" asks these two tables
-# rather than carrying its own answer. Tag -> section is by position, so the
-# first `##` section of a template holds the first tag listed here.
+# different pipeline: the morning runs three sections, the afternoon two and the
+# evening one, and every step that asks "which sections?" or "which tag?" asks
+# these two tables rather than carrying its own answer. Tag -> section is by
+# position, so the first `##` section of a template holds the first tag listed
+# here.
 WRITE_SECTIONS = {"morning": ("leads", "body", "worth"),
-                  "afternoon": ("new", "moved")}
+                  "afternoon": ("new", "moved"),
+                  "evening": ("achievements",)}
 TAG_OF_SECTION = {"morning": {"leads": "LEAD", "body": "BODY", "worth": "WORTH"},
-                  "afternoon": {"new": "NEW", "moved": "MOVED"}}
+                  "afternoon": {"new": "NEW", "moved": "MOVED"},
+                  "evening": {"achievements": "ACHIEVEMENT"}}
 
 # Every section name of every slot, morning's first. argparse builds `--section`
 # before any run is known, so its choices are the union; cmd_fill is where a
@@ -194,9 +200,10 @@ def tag_of(run: dict, section: str) -> str:
 def tags_of(run: dict) -> tuple:
     """Every tag a pick of this run may carry, in the template's section order.
 
-    The morning ranks a story and the afternoon says whether it is new or moved,
-    so the two slots do not share a vocabulary. Reading the tags off the section
-    table is how they cannot drift: a tag exists because a section holds it.
+    The morning ranks a story, the afternoon says whether it is new or moved,
+    and the evening only says a story is an achievement, so no two slots share a
+    vocabulary. Reading the tags off the section table is how they cannot drift:
+    a tag exists because a section holds it.
     """
     slot = run.get("slot")
     if slot not in WRITE_SECTIONS:
@@ -230,6 +237,11 @@ SCHEMA = {
         "triage": ("<run_dir>\n"
                    "<id> | [<source>] (<section>) <headline> :: <description>\n"
                    "<id> | [<source>] (<section>) <headline> :: <description>"),
+        # The evening asks the same agent a different question, and the first
+        # line is where it is told which: the run directory, then the slot.
+        "triage_evening": ("<run_dir> | evening\n"
+                           "<id> | [<source>] (<section>) <headline> :: <description>\n"
+                           "<id> | [<source>] (<section>) <headline> :: <description>"),
         "reader": "<id> | <source> | <url> | <run_dir>",
         "reader_saved": "<id> | <source> | <url> | <run_dir> | saved-page",
         "checker": "<id> | <run_dir>",
@@ -248,12 +260,17 @@ SCHEMA = {
         "check": "found | missing",
         "verdict": "READ | MAYBE | DROP",
     },
-    # The tags are per slot, because the two briefs answer different questions:
-    # the morning ranks a story, the afternoon says whether it is new or moved.
-    # `kind` is the afternoon's second label, on a MOVED pick only.
+    # The tags are per slot, because the briefs answer different questions: the
+    # morning ranks a story, the afternoon says whether it is new or moved, the
+    # evening says only that a story is an achievement. `kind` is the
+    # afternoon's second label, on a MOVED pick only; `label` is the evening's,
+    # on every pick, and it says how far the thing has actually got.
     "tag": {"morning": "LEAD | BODY | WORTH",
             "afternoon": "NEW | MOVED",
-            "kind": "development | confirmation | reversal | correction"},
+            "evening": "ACHIEVEMENT",
+            "kind": "development | confirmation | reversal | correction",
+            "label": ("demonstrated | emerging | speculative | historical | "
+                      "biographical")},
     "x": {
         "run_dir": "x-lists/runs/<YYYY-MM-DD-HHMM>",
         "log": "<run_dir>/x/x-run.log",
@@ -264,7 +281,8 @@ SCHEMA = {
         "placeholder": "{{X_SECTION}}",
     },
     "reason_type": {
-        "all": "evidence | duplicate | no-development | relevance | unchanged",
+        "all": ("evidence | duplicate | no-development | relevance | unchanged | "
+                "not-achievement"),
         "evidence": "its `WEAK SPOTS`, or a claim nothing supports",
         "duplicate": "the same event as a story you kept",
         "no-development": "nothing happened: a column, a feature, a recap",
@@ -272,6 +290,10 @@ SCHEMA = {
         # The afternoon's own reason: the story is his, and it has not moved.
         "unchanged": ("the morning brief already carries this, and the note "
                       "adds nothing that moves it"),
+        # The evening's own reason: the headline promised an achievement and
+        # the article, read whole, turned out to hold none.
+        "not-achievement": ("read in full, it reports none of the five kinds: "
+                            "a plan, a pledge, a complaint or a setback"),
     },
 }
 
@@ -1326,6 +1348,8 @@ def cmd_fill(args):
     })
 
     if name == "screen":
+        if run.get("slot") == "evening":
+            die(EVENING_NO_SCREEN)
         if not args.source:
             die("fill screen needs --source <slug>")
         found = [(n, s) for n, s in run["sources"].items() if s["slug"] == args.source]
@@ -1661,10 +1685,10 @@ def runs_root() -> Path:
 
 
 def base_record(run_dir: Path, run: dict) -> dict:
-    """What an afternoon run keeps about the morning it updates.
+    """What a later run keeps about an earlier one it is built on.
 
-    Enough to find the morning's own files again, plus the time its template
-    puts on its brief, so the update can say which brief it follows.
+    Enough to find that run's own files again, plus the time its template puts
+    on its brief, so the later one can say which brief it follows or pools.
     """
     tpl = (skill_dir() / "templates" / f"{run.get('slot')}.md").read_text(encoding="utf-8")
     return {"run_id": run.get("run_id"), "run_dir": str(run_dir),
@@ -1672,28 +1696,35 @@ def base_record(run_dir: Path, run: dict) -> dict:
             "time": template_time(tpl)}
 
 
-def find_base(named: str, local_date: str) -> dict:
-    """The morning run an afternoon update follows.
+def find_base(named: str, local_date: str, slot: str = "morning",
+              optional: bool = False):
+    """The earlier run of today a later one is built on.
 
     Either the one `--base` names, or the latest run of today's local date
-    whose slot is morning and whose status is completed. There is no fallback:
-    an afternoon update with nothing to update is not a brief, so with none
-    this dies, naming exactly what it looked for.
+    whose slot is `slot` and whose status is completed. Which slot is asked
+    for is the caller's business: an afternoon update follows the morning, and
+    an evening report is built on both.
+
+    There is normally no fallback -- an afternoon update with nothing to
+    update is not a brief -- so with none this dies, naming exactly what it
+    looked for. `optional` is for the one base a run can do without: an
+    evening with no afternoon behind it is still a report, and that call gets
+    `None` instead of a death.
     """
     if named:
         d = Path(named).resolve()
         if not (d / "run.json").exists():
             die(f"not a run folder (no run.json): {d}")
         r = load_run(d)
-        if r.get("slot") != "morning":
+        if r.get("slot") != slot:
             die(f"--base {d.name} is slot {r.get('slot')!r}; "
-                f"an afternoon update follows a morning run")
+                f"this run is built on a {slot} run")
         if r.get("status") != "completed":
             die(f"--base {d.name} is {r.get('status')!r}; "
-                f"an afternoon update follows a completed morning run")
+                f"this run is built on a completed {slot} run")
         if r.get("local_date") != local_date:
             die(f"--base {d.name} is of {r.get('local_date')}, and today is "
-                f"{local_date}; the update is of today's morning brief")
+                f"{local_date}; it is built on today's {slot} brief")
         return base_record(d, r)
 
     found = []
@@ -1701,13 +1732,15 @@ def find_base(named: str, local_date: str) -> dict:
         r = load_json(d / "run.json")
         if not r:
             continue
-        if (r.get("local_date") == local_date and r.get("slot") == "morning"
+        if (r.get("local_date") == local_date and r.get("slot") == slot
                 and r.get("status") == "completed"):
             found.append((r.get("started_utc") or "", d.name, d, r))
     if not found:
-        die(f"no morning brief to update: nothing under {runs_root()} has "
-            f"local_date {local_date}, slot morning and status completed. "
-            f"Run the morning brief first, or name a run with --base.")
+        if optional:
+            return None
+        die(f"no {slot} brief to update: nothing under {runs_root()} has "
+            f"local_date {local_date}, slot {slot} and status completed. "
+            f"Run the {slot} brief first, or name a run with --base.")
     _, _, d, r = sorted(found)[-1]
     return base_record(d, r)
 
@@ -1722,13 +1755,19 @@ def cmd_start(args):
         print(n, file=sys.stderr)
     now, local = utc_now(), datetime.now()
     local_date = local.strftime("%Y-%m-%d")
-    # The afternoon is an update of one named brief, so the base is settled
-    # before the folder is made: a run that cannot say what it updates is not
-    # started at all.
-    if args.base and args.slot != "afternoon":
-        die("--base names the morning run an afternoon update follows; "
-            "a morning run updates nothing")
-    base = find_base(args.base, local_date) if args.slot == "afternoon" else None
+    # The afternoon updates one named brief and the evening pools two, so the
+    # bases are settled before the folder is made: a run that cannot say what
+    # it is built on is not started at all. The evening's afternoon is the one
+    # base a run may do without -- an evening with none is still a report --
+    # so it is the only one that can come back empty.
+    if args.base and args.slot == "morning":
+        die("--base names the morning run a later run is built on; "
+            "a morning run is built on nothing")
+    base = base_afternoon = None
+    if args.slot in ("afternoon", "evening"):
+        base = find_base(args.base, local_date)
+    if args.slot == "evening":
+        base_afternoon = find_base(None, local_date, "afternoon", optional=True)
 
     # "Today" means since local midnight on this machine, not the last 24 hours.
     midnight_utc = local.replace(hour=0, minute=0, second=0,
@@ -1760,6 +1799,10 @@ def cmd_start(args):
     }
     if base:
         data["base"] = base
+    if args.slot == "evening":
+        # Written even when it is None: the evening's pool is two runs or one,
+        # and pool-sync reads the answer here rather than looking again.
+        data["base_afternoon"] = base_afternoon
     save_run(run_dir, data)
     profile = load_profile()
     data["profile_built"] = profile.get("built_local_date", "unknown")
@@ -1772,11 +1815,18 @@ def cmd_start(args):
                       "window_start_utc": data["window_start_utc"],
                       "window_end_utc": data["window_end_utc"],
                       "base": base,
+                      "base_afternoon": base_afternoon,
                       "sources": list(data["sources"])}, indent=2))
     return 0
 
 
 # ---------------------------------------------------------------- screen-sync
+
+# The evening never opens a front page: its articles were screened this
+# morning and this afternoon. Both halves of the screen step say so in the
+# same words, and this is the one place those words are written.
+EVENING_NO_SCREEN = "an evening run pools two earlier runs; run pool-sync"
+
 
 def cmd_screen_sync(args):
     """Fold every screen/<slug>.json a screener produced into one articles.json.
@@ -1795,6 +1845,8 @@ def cmd_screen_sync(args):
     """
     run_dir = run_dir_of(args)
     data = load_run(run_dir)
+    if data.get("slot") == "evening":
+        die(EVENING_NO_SCREEN)
     if (run_dir / "triage" / "todo.json").exists():
         die("triage ids are already frozen; re-syncing would renumber them")
 
@@ -1910,6 +1962,92 @@ def cmd_screen_sync(args):
            "sources_total": len(data["sources"]), "problems": problems}
     print(json.dumps(out, indent=2, ensure_ascii=False))
     return 1 if problems else 0
+
+
+# ---------------------------------------------------------------- pool-sync
+
+def cmd_pool_sync(args):
+    """Build the evening's articles.json out of what the day's earlier runs kept.
+
+    The evening screens nothing. Its pool is every article the morning, and the
+    afternoon if there was one, sent to triage and kept -- read through
+    `kept_articles()`, so "kept" here means exactly what it meant in that run:
+    an agent's keep, a section's, or one the orchestrator gave up on. An
+    article those runs dropped is not looked at again; an off-beat achievement
+    is not for the show either.
+
+    From there this is `screen-sync` again with the front pages taken out: the
+    same canonical URL is one article, the second sighting only adds its source
+    to `also_in`, and the ids are renumbered a001 upwards, the morning's
+    articles first. Each record keeps its `origin`, the run and the id it came
+    from, so a note or a page saved this morning can still be found. The pool
+    size is recorded as `screened`, because it is the number every later step
+    already asks for by that name.
+    """
+    run_dir = run_dir_of(args)
+    data = load_run(run_dir)
+    slot = data.get("slot")
+    if slot != "evening":
+        die(f"pool-sync is the evening's step 2; this run is slot {slot!r}, "
+            f"and it screens its own sources: run screen-sync")
+    if (run_dir / "triage" / "todo.json").exists():
+        die("triage ids are already frozen; re-syncing would renumber them")
+
+    articles, seen, pooled = [], {}, {"morning": 0, "afternoon": 0}
+    duplicates, bases = 0, []
+    for base_slot, base in (("morning", data.get("base")),
+                            ("afternoon", data.get("base_afternoon"))):
+        if not base:
+            continue
+        base_dir = Path(base["run_dir"])
+        if not (base_dir / "triage" / "verdicts.json").exists():
+            die(f"{base['run_id']} has no triage/verdicts.json: that run never "
+                f"finished triage, so it never said what it kept")
+        for r in kept_articles(base_dir):
+            key = canon(r["url"])
+            if key in seen:
+                # The same URL in both runs. The morning had it first, so the
+                # morning's origin stands and the second run is a co-sighting,
+                # recorded the way screen-sync records one. A source the
+                # record already names is not named again: it is one fact.
+                known = [seen[key]["source"]] + seen[key]["also_in"]
+                if r["source"] not in known:
+                    seen[key]["also_in"].append(r["source"])
+                duplicates += 1
+                continue
+            rec = dict(r)
+            rec["id"] = None
+            rec["also_in"] = list(r.get("also_in") or [])
+            rec["origin"] = {"run_id": base["run_id"], "id": r["id"]}
+            seen[key] = rec
+            articles.append(rec)
+            pooled[base_slot] += 1
+        bases.append({"slot": base_slot, "run_id": base["run_id"],
+                      "run_dir": str(base_dir), "pooled": pooled[base_slot]})
+
+    for i, r in enumerate(articles, 1):
+        r["id"] = f"a{i:03d}"
+
+    write_json(run_dir / "articles.json", {"articles": articles})
+    data["counts"].update({"pooled_morning": pooled["morning"],
+                           "pooled_afternoon": pooled["afternoon"],
+                           "pool_duplicates": duplicates,
+                           "screened": len(articles)})
+    save_run(run_dir, data)
+    log_event(run_dir, "pool_built",
+              f"{len(articles)} articles pooled: {pooled['morning']} from the "
+              f"morning, {pooled['afternoon']} from the afternoon, "
+              + plural(duplicates, "duplicate") + " merged",
+              pooled_morning=pooled["morning"],
+              pooled_afternoon=pooled["afternoon"],
+              pool_duplicates=duplicates)
+
+    print(json.dumps({"articles": len(articles),
+                      "pooled_morning": pooled["morning"],
+                      "pooled_afternoon": pooled["afternoon"],
+                      "pool_duplicates": duplicates,
+                      "bases": bases}, indent=2, ensure_ascii=False))
+    return 0
 
 
 # ---------------------------------------------------------------- triage
@@ -3292,11 +3430,13 @@ def main():
     p = sub.add_parser("start")
     p.add_argument("--slot", default="morning", choices=list(WRITE_SECTIONS))
     p.add_argument("--base", metavar="RUN_DIR",
-                   help="afternoon only: the morning run this update follows; "
-                        "without it the latest completed morning run of today")
+                   help="afternoon and evening: the morning run this one is "
+                        "built on; without it the latest completed morning run "
+                        "of today")
     p.set_defaults(fn=cmd_start)
 
     with_run(sub.add_parser("screen-sync")).set_defaults(fn=cmd_screen_sync)
+    with_run(sub.add_parser("pool-sync")).set_defaults(fn=cmd_pool_sync)
     with_run(sub.add_parser("triage-list")).set_defaults(fn=cmd_triage_list)
     with_run(sub.add_parser("triage-replay")).set_defaults(fn=cmd_triage_replay)
 

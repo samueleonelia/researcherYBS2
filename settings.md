@@ -38,6 +38,7 @@ settings`, `python3 x-lists/x_settings.py`, or `python3
 | worth_max | 5 | stories that may be tagged WORTH |
 | update_picks_max | 20 | stories that may reach the afternoon update, new and moved together |
 | new_item_articles_min | 10 | articles an afternoon item that follows no morning story must hold before it is read; the one floor in this table, and the note under it says so |
+| achievements_max | 5 | human-achievement stories that may reach the evening report; zero is a valid result |
 | words_per_sentence_max | 30 | words in one sentence of the brief |
 | x_wait_minutes_max | 30 | safety timeout only: minutes step 10 waits for the X run before the brief goes out without it. Not a speed target — raise it if the X lists take longer |
 
@@ -67,7 +68,7 @@ populations are where model choice decides the run's bill.
 | pick | opus | medium | 1 |
 | check | haiku | low | one per picked note |
 | counterpoint | opus | high | one per lead |
-| write | opus | high | one per section of the brief (leads, body, worth attention), or of the update, all at once |
+| write | opus | high | one per section of the brief (leads, body, worth attention), or of the update, or the one section of the evening report, all at once |
 
 `pick`, `write` and `cluster` carry judgment that is expensive to get wrong: they
 decide what the brief says. `check` and `screen` are narrow mechanical work.

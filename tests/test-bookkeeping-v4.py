@@ -117,26 +117,37 @@ def test_screen_sync(rd):
     check("assigns stable ids", ids == ["a001", "a002", "a003", "a004"], str(ids))
 
 
-def build_morning(root, run_id, started, status="completed", links=(), picks=()):
-    """One morning run, written by hand, inside a runs folder of a test's own.
+def build_base(root, run_id, started, slot="morning", status="completed",
+               links=(), picks=(), kept=None, source="Guardian"):
+    """One earlier run of the day, written by hand, inside a runs folder of a
+    test's own.
 
-    Enough of a finished run for an afternoon one to follow it: the record, the
+    Enough of a finished run for a later one to be built on it: the record, the
     articles it screened and, when `picks` names any, the stories its brief ran
     with a note each. Those notes are what the update reads back.
+
+    `kept` names the ids triage kept and writes the verdicts.json every later
+    step reads the word "kept" out of; every other link is dropped there. Left
+    out altogether, the run has no verdicts file, which is what a run that never
+    finished triage looks like from outside.
     """
     d = root / run_id
     for sub in ("screen", "triage", "items", "pages", "notes", "checks", "picks"):
         (d / sub).mkdir(parents=True, exist_ok=True)
     write(d / "run.json", {
-        "run_id": run_id, "slot": "morning",
+        "run_id": run_id, "slot": slot,
         "local_date": datetime.now().strftime("%Y-%m-%d"),
         "window_start_utc": now_iso(-8), "window_end_utc": started,
         "started_utc": started, "completed_utc": started,
         "status": status, "sources": {}, "counts": {}, "events": []})
+    ids = [f"a{i:03d}" for i in range(1, len(links) + 1)]
     write(d / "articles.json", {"articles": [
-        {"id": f"a{i:03d}", "source": "Guardian", "url": u, "title": "t",
+        {"id": a, "source": source, "url": u, "title": "t",
          "description": "d", "category": "world", "published": started,
-         "also_in": []} for i, u in enumerate(links, 1)]})
+         "also_in": []} for a, u in zip(ids, links)]})
+    if kept is not None:
+        write(d / "triage" / "verdicts.json",
+              {a: ("keep" if a in kept else "drop") for a in ids})
     if picks:
         write(d / "picks" / "picks.json",
               {"picks": [{"id": a, "tag": "LEAD", "why": "it led"} for a in picks],
@@ -147,6 +158,20 @@ def build_morning(root, run_id, started, status="completed", links=(), picks=())
                 f"WHAT HAPPENED: what {a} established at ten\n"
                 f"WHAT'S NEW: what {a} carried at ten\n", encoding="utf-8")
     return d
+
+
+def build_morning(root, run_id, started, status="completed", links=(), picks=(),
+                  kept=None, source="Guardian"):
+    """The day's morning run: the base an afternoon updates and an evening pools."""
+    return build_base(root, run_id, started, "morning", status, links, picks,
+                      kept, source)
+
+
+def build_afternoon(root, run_id, started, status="completed", links=(), picks=(),
+                    kept=None, source="Guardian"):
+    """The day's afternoon run: the second base an evening pools, when there is one."""
+    return build_base(root, run_id, started, "afternoon", status, links, picks,
+                      kept, source)
 
 
 def test_afternoon_base():
@@ -241,6 +266,193 @@ def test_afternoon_base():
               str(urls))
         check("the other afternoon run is untouched",
               not (rd2 / "articles.json").exists())
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_evening_bases():
+    """The evening is built on the day's earlier runs: the morning it must have,
+    the afternoon it may.
+
+    `start --slot evening` refuses without a completed morning run of today,
+    takes today's latest completed afternoon run when there is one, and writes
+    `base_afternoon: null` when there is none, so pool-sync reads the answer
+    rather than looking again. The whole test runs inside a runs folder of its
+    own, named by YBS_RUNS_DIR.
+    """
+    print("\nstart --slot evening: the runs it is built on")
+    tmp = Path(tempfile.mkdtemp(prefix="ybs-runs-"))
+    env = {"YBS_RUNS_DIR": str(tmp)}
+    today = datetime.now().strftime("%Y-%m-%d")
+    try:
+        _, r = run("start", "--slot", "evening", expect=2, env=env)
+        check("with no morning run today, the evening refuses to start",
+              "no morning brief to update" in r.stderr, r.stderr.strip()[:200])
+        check("and says exactly what it looked for",
+              today in r.stderr and "slot morning" in r.stderr
+              and "status completed" in r.stderr, r.stderr.strip()[:240])
+
+        early = build_morning(tmp, "2026-x_morning_080000", now_iso(-8),
+                              links=["https://www.theguardian.com/x/early"],
+                              kept=["a001"])
+        morning = build_morning(tmp, "2026-x_morning_100000", now_iso(-6),
+                                links=["https://www.theguardian.com/x/ten"],
+                                kept=["a001"])
+
+        out, _ = run("start", "--slot", "evening", expect=0, env=env)
+        rd = Path(out["run_dir"])
+        check("with no afternoon behind it, the evening is still a report",
+              out["base"]["run_id"] == "2026-x_morning_100000"
+              and out["base_afternoon"] is None,
+              str(out.get("base_afternoon")))
+        check("and run.json records the afternoon it did not find as null",
+              json.loads((rd / "run.json").read_text())["base_afternoon"] is None,
+              str(json.loads((rd / "run.json").read_text()).get("base_afternoon")))
+
+        build_afternoon(tmp, "2026-x_afternoon_160000", now_iso(-2),
+                        links=["https://reason.com/x/four"], kept=["a001"])
+        build_afternoon(tmp, "2026-x_afternoon_170000", now_iso(-1),
+                        status="running")
+
+        time.sleep(1.1)          # a run id names the second it started in
+        out, _ = run("start", "--slot", "evening", expect=0, env=env)
+        rd = Path(out["run_dir"])
+        check("today's completed afternoon run is taken as the second base",
+              out["base_afternoon"]["run_id"] == "2026-x_afternoon_160000",
+              str(out.get("base_afternoon")))
+        check("an afternoon run that never completed is not pooled",
+              "170000" not in str(out["base_afternoon"]),
+              str(out["base_afternoon"]))
+        check("the second base carries the time its own template puts on it",
+              out["base_afternoon"]["time"] == "16:00",
+              str(out["base_afternoon"].get("time")))
+        check("run.json records both bases",
+              json.loads((rd / "run.json").read_text())["base_afternoon"]
+              == out["base_afternoon"])
+
+        time.sleep(1.1)
+        out, _ = run("start", "--slot", "evening", "--base", early, expect=0,
+                     env=env)
+        check("--base names the morning to pool, and the afternoon is still found",
+              Path(out["base"]["run_dir"]) == early.resolve()
+              and out["base_afternoon"]["run_id"] == "2026-x_afternoon_160000",
+              str(out["base"]))
+
+        _, r = run("start", "--slot", "morning", "--base", morning, expect=2,
+                   env=env)
+        check("a morning run is built on nothing, so --base still dies there",
+              "a morning run is built on nothing" in r.stderr,
+              r.stderr.strip()[:200])
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_pool_sync():
+    """The evening's step 2: what two earlier runs kept, pooled into one list.
+
+    No front page is opened. Every article the morning and the afternoon sent to
+    triage and kept is merged by url, renumbered from a001 with the morning's
+    first, and each record keeps the run and the id it came from. Everything
+    runs inside a runs folder of its own, named by YBS_RUNS_DIR.
+    """
+    print("\npool-sync: the day's kept articles, pooled")
+    tmp = Path(tempfile.mkdtemp(prefix="ybs-runs-"))
+    env = {"YBS_RUNS_DIR": str(tmp)}
+    shared = "https://www.theguardian.com/x/shared"
+    try:
+        build_morning(tmp, "2026-x_morning_100000", now_iso(-6), links=[
+            shared,
+            "https://www.theguardian.com/x/one",
+            "https://www.theguardian.com/x/two",
+            "https://www.theguardian.com/x/off-beat"],
+            kept=["a001", "a002", "a003"])
+        build_afternoon(tmp, "2026-x_afternoon_160000", now_iso(-2),
+                        source="Reason",
+                        links=["https://reason.com/x/fresh",
+                               shared + "?utm=1",
+                               "https://reason.com/x/off-beat"],
+                        kept=["a001", "a002"])
+
+        out, _ = run("start", "--slot", "evening", expect=0, env=env)
+        rd = Path(out["run_dir"])
+        out, _ = run("pool-sync", "--run", rd, expect=0)
+        arts = json.loads((rd / "articles.json").read_text())["articles"]
+
+        check("the ids run a001 upwards, the morning's articles first",
+              [a["id"] for a in arts] == ["a001", "a002", "a003", "a004"]
+              and [a["url"] for a in arts] == [
+                  shared, "https://www.theguardian.com/x/one",
+                  "https://www.theguardian.com/x/two",
+                  "https://reason.com/x/fresh"],
+              str([a["url"] for a in arts]))
+        check("every record says which run and which id it came from",
+              all(a["origin"]["run_id"] and a["origin"]["id"] for a in arts)
+              and arts[2]["origin"] == {"run_id": "2026-x_morning_100000",
+                                        "id": "a003"}
+              and arts[3]["origin"] == {"run_id": "2026-x_afternoon_160000",
+                                        "id": "a001"},
+              str([a["origin"] for a in arts]))
+        check("a url both runs kept is pooled once, as the morning's record",
+              arts[0]["origin"] == {"run_id": "2026-x_morning_100000",
+                                    "id": "a001"}
+              and arts[0]["also_in"] == ["Reason"], str(arts[0]))
+        check("an article its own run dropped at triage is not looked at again",
+              not [a for a in arts if "off-beat" in a["url"]],
+              str([a["url"] for a in arts]))
+        check("the counts say where the pool came from",
+              (out["articles"], out["pooled_morning"], out["pooled_afternoon"],
+               out["pool_duplicates"]) == (4, 3, 1, 1), str(out))
+        counts = json.loads((rd / "run.json").read_text())["counts"]
+        check("and run.json carries the pool size as the number screened",
+              counts["screened"] == 4 and counts["pooled_morning"] == 3
+              and counts["pooled_afternoon"] == 1
+              and counts["pool_duplicates"] == 1, str(counts))
+
+        # A base that never finished triage never said what it kept.
+        time.sleep(1.1)          # a run id names the second it started in
+        half = build_morning(tmp, "2026-x_morning_110000", now_iso(-5),
+                             links=["https://www.theguardian.com/x/eleven"])
+        out, _ = run("start", "--slot", "evening", "--base", half, expect=0,
+                     env=env)
+        rd2 = Path(out["run_dir"])
+        _, r = run("pool-sync", "--run", rd2, expect=2)
+        check("a base with no verdicts.json stops the pool, and is named",
+              "2026-x_morning_110000" in r.stderr and "verdicts.json" in r.stderr,
+              r.stderr.strip()[:200])
+        check("and nothing is pooled from the run that did finish",
+              not (rd2 / "articles.json").exists())
+
+        time.sleep(1.1)
+        out, _ = run("start", "--slot", "morning", expect=0, env=env)
+        _, r = run("pool-sync", "--run", Path(out["run_dir"]), expect=2)
+        check("a morning run screens its own sources, so pool-sync refuses it",
+              "run screen-sync" in r.stderr, r.stderr.strip()[:200])
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_evening_no_screen():
+    """Nothing in the evening opens a front page, and both halves of the screen
+    step refuse it in the same words, which are written once in the script."""
+    print("\nscreen-sync and fill screen: refused by name in the evening")
+    tmp = Path(tempfile.mkdtemp(prefix="ybs-runs-"))
+    env = {"YBS_RUNS_DIR": str(tmp)}
+    try:
+        build_morning(tmp, "2026-x_morning_100000", now_iso(-6),
+                      links=["https://www.theguardian.com/x/ten"], kept=["a001"])
+        out, _ = run("start", "--slot", "evening", expect=0, env=env)
+        rd = Path(out["run_dir"])
+        told = script_const("EVENING_NO_SCREEN")
+        check("the refusal is one sentence, and it names the command to run",
+              bool(told) and "pool-sync" in told, repr(told))
+        _, r = run("screen-sync", "--run", rd, expect=2)
+        check("screen-sync sends an evening run to pool-sync", told in r.stderr,
+              r.stderr.strip()[:200])
+        _, r = run("fill", "screen", "--run", rd, "--source", "guardian", expect=2)
+        check("and fill screen refuses before it asks which source",
+              told in r.stderr, r.stderr.strip()[:200])
+        check("neither of them wrote an articles.json",
+              not (rd / "articles.json").exists())
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -2143,6 +2355,9 @@ def main():
         test_sources_third_part()
         test_screen_sync(rd)
         test_afternoon_base()
+        test_evening_bases()
+        test_pool_sync()
+        test_evening_no_screen()
         test_screen_attempts()
         test_screen_stragglers()
         test_screen_prompt_is_safe_to_retry()

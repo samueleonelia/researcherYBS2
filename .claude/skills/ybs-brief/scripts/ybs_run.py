@@ -272,7 +272,7 @@ SCHEMA = {
             "label": ("demonstrated | emerging | speculative | historical | "
                       "biographical")},
     "x": {
-        "run_dir": "x-lists/runs/<YYYY-MM-DD-HHMM>",
+        "run_dir": "runs/x/<YYYY-MM-DD-HHMM>",
         "log": "<run_dir>/x/x-run.log",
         "brief": "<x_run_dir>/brief.md",
         "record": ("run.json 'x': run_dir, pid, log, started_utc, status, "
@@ -2856,7 +2856,7 @@ def cmd_picks_sync(args):
 
 # ---------------------------------------------------------------- the X run
 #
-# The X-list pipeline is one command of its own, `x-lists/x_run.py`, and nothing
+# The X-list pipeline is one command of its own, `.claude/skills/ybs-brief/x-lists/x_run.py`, and nothing
 # here reaches inside it: this launches it, waits for it, and copies the brief it
 # wrote under the article brief. Every number it obeys lives in
 # `settings.md` under `## X numbers`; the only number here is how long step 10
@@ -2868,7 +2868,7 @@ X_LOG_MARK = "=== x-start"   # one launch's output starts below this line
 
 
 def x_lists_dir() -> Path:
-    return project_root() / "x-lists"
+    return project_root() / ".claude" / "skills" / "ybs-brief" / "x-lists"
 
 
 def x_script() -> Path:
@@ -2881,12 +2881,12 @@ def x_script() -> Path:
 
 
 def new_x_run_dir() -> Path:
-    """x-lists/runs/<YYYY-MM-DD-HHMM>, UTC, with -2, -3 on a collision.
+    """runs/x/<YYYY-MM-DD-HHMM>, UTC, with -2, -3 on a collision.
 
     The same name `x_run.py` gives itself, because its write step reads the
     run's date and time out of the folder name.
     """
-    root = x_lists_dir() / "runs"
+    root = project_root() / "runs" / "x"
     base = utc_now().strftime("%Y-%m-%d-%H%M")
     candidate, n = root / base, 2
     while candidate.exists():

@@ -48,7 +48,7 @@ sys.path.insert(0, str(ROOT))
 import x_run  # noqa: E402
 from x_settings import load_settings  # noqa: E402
 
-SETTINGS_PATH = ROOT.parent / "settings.md"   # one settings.md, at the project root
+SETTINGS_PATH = ROOT.parents[3] / "settings.md"   # one settings.md, at the project root
 
 
 class TestRunDir(unittest.TestCase):
@@ -683,7 +683,7 @@ class TestStepWrite(unittest.TestCase):
                 return "wrote 1 item, 1 TRENDING, 0 CURIOUS"
 
             with mock.patch.object(x_run, "call_claude", side_effect=fake_call_claude):
-                x_run.step_write(run_dir, settings, ROOT.parent)
+                x_run.step_write(run_dir, settings, ROOT.parents[3])
 
             self.assertTrue((run_dir / "brief.md").exists())
             prompt = captured["prompt"]
@@ -725,7 +725,7 @@ class TestStepWrite(unittest.TestCase):
                     mock.patch.object(x_run, "call_claude") as mock_call:
                 mock_die.side_effect = SystemExit(1)
                 with self.assertRaises(SystemExit):
-                    x_run.step_write(run_dir, settings, ROOT.parent)
+                    x_run.step_write(run_dir, settings, ROOT.parents[3])
                 mock_call.assert_not_called()
                 self.assertIn("111", mock_die.call_args[0][0])
 

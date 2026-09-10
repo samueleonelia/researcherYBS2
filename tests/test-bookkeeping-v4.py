@@ -2344,7 +2344,7 @@ def test_audit_and_close(rd):
 # Nothing here touches the browser, the network or the real x_run.py: YBS_X_RUN
 # points x-start at a stub that does in a second what the chain does in six
 # minutes. The X run folders the stubs create are removed again, and they are
-# the only thing under x-lists/ these tests ever write.
+# the only thing under runs/x/ these tests ever write.
 
 X_BRIEF = """# What the list is moving on
 
@@ -2422,7 +2422,7 @@ def x_dirs_of(rd):
 
 def drop_x(*dirs):
     for d in dirs:
-        if d and d.parent.name == "runs" and d.parent.parent.name == "x-lists":
+        if d and d.parent.name == "x" and d.parent.parent.name == "runs":
             shutil.rmtree(d, ignore_errors=True)
 
 
@@ -2435,9 +2435,10 @@ def test_x_start(tmp):
         started.append(Path(out["x_run_dir"]))
         check("launches and says so", out["status"] == "running" and out["launched"],
               str(out))
-        check("the X run folder is named for the minute, under x-lists/runs",
+        check("the X run folder is named for the minute, under runs/x",
               re.fullmatch(r"\d{4}-\d{2}-\d{2}-\d{4}(-\d+)?", Path(out["x_run_dir"]).name)
-              is not None and Path(out["x_run_dir"]).parent.parent.name == "x-lists",
+              is not None and Path(out["x_run_dir"]).parent.name == "x"
+              and Path(out["x_run_dir"]).parent.parent.name == "runs",
               out["x_run_dir"])
         x = json.loads((rd / "run.json").read_text())["x"]
         check("records the folder, the pid and the log",

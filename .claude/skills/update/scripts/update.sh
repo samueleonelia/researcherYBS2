@@ -23,8 +23,7 @@ sources.md"
 # them, so they are named here: one line per retirement.
 # RETIRED_BACKUP is the same thing for a file the user was allowed to edit: it
 # is renamed beside where it was, so an edit is never thrown away in silence.
-RETIRED="x-lists/GOAL.md
-x-lists/RUNLOG.md"
+RETIRED=""
 RETIRED_BACKUP=".claude/skills/ybs-shows/settings.md"
 
 say() { printf '%s\n' "$1"; }
@@ -97,6 +96,13 @@ main() {
       rm -f "$root/$f"
     fi
   done
+
+  # The X engine moved inside the ybs-brief skill on 2026-09-10. The old
+  # folder at the root is code only; its run scratch is regenerated.
+  if [ -d "$root/x-lists" ] && [ -d "$root/.claude/skills/ybs-brief/x-lists" ]; then
+    rm -rf "$root/x-lists"
+    say "Removed the old x-lists folder: the X engine now lives inside the ybs-brief skill."
+  fi
 
   # shows/ is kept whole, but a new version may ship new digests, and those are
   # part of the code, not of his archive. Only files he does not have are added.

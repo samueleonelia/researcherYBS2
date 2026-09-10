@@ -3,7 +3,7 @@
 
     python3 x_run.py
 
-creates a fresh run folder `x-lists/runs/<YYYY-MM-DD>-<HHMM>/` (UTC) and
+creates a fresh run folder `runs/x/<YYYY-MM-DD>-<HHMM>/` at the repo root (UTC) and
 drives, in order:
 
     1. x_scrape.py         (script)  ->  tweets.json, page.txt
@@ -99,6 +99,7 @@ from pathlib import Path
 from x_settings import load_settings, default_settings_path
 
 HERE = Path(__file__).resolve().parent
+ROOT = HERE.parents[3]  # the repo root: .claude/skills/ybs-brief/x-lists -> root
 
 STEP_NAMES = {
     1: "scrape",
@@ -250,7 +251,8 @@ def call_claude(prompt_text: str, model: str, effort: str, cwd: Path,
     that stopped early can be read afterwards. Callers that pass nothing
     behave exactly as they did before.
     """
-    cmd = ["claude", "-p", "--model", model, "--effort", effort]
+    # --add-dir last: it is variadic, and the prompt goes over stdin.
+    cmd = ["claude", "-p", "--model", model, "--effort", effort, "--add-dir", str(ROOT)]
     try:
         result = subprocess.run(
             cmd, input=prompt_text, capture_output=True, text=True,
@@ -1042,13 +1044,13 @@ def main():
     settings_path = Path(args.settings).resolve() if args.settings else default_settings_path()
     settings = load_settings(settings_path)
 
-    root = HERE.parent  # the repo root, for read-only lens/profile/preferences
+    root = ROOT  # the repo root, for read-only lens/profile/preferences
 
     if args.run_dir:
         run_dir = Path(args.run_dir).resolve()
         run_dir.mkdir(parents=True, exist_ok=True)
     else:
-        run_dir = new_run_dir(HERE / "runs")
+        run_dir = new_run_dir(ROOT / "runs" / "x")
 
     print(f"run folder: {run_dir}")
     run_chain(run_dir, settings_path, settings, args.from_step, args.only, root)

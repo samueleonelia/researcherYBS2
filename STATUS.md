@@ -1,12 +1,12 @@
 # STATUS: researcherYBS2
 
-_Updated: 2026-09-10 · the evening report of human achievements_
+_Updated: 2026-09-10 · the evening report, and the root cleared_
 
 <!-- Rewrite this file in place. Never append. History belongs in DEVLOG.md. Keep under 60 lines. -->
 
 **What this is:** A Claude Code skill (`/ybs-brief`) that builds a news brief for Yaron Brook from six sources plus two X lists, and `/ybs-shows` which keeps his show profile current.
 
-**Right now:** on branch `evening-human-achievements`, not merged, not pushed. The third slot is in: `/ybs-brief evening` pools the articles the morning and the afternoon kept at triage, asks a different question of them, and writes one report of the day's human achievements with every story labelled for how far it has got. Unit-tested and replayed end to end on scratch fixtures, **never run live**. Behind it sit two things also never run live: the no-marker/wait-for-text fixes from the branch before, and the afternoon update on `main`.
+**Right now:** on branch `evening-human-achievements`, not merged, not pushed. Two things sit on it. First, the third slot: `/ybs-brief evening` pools the articles the morning and the afternoon kept at triage, asks a different question of them, and writes one report of the day's human achievements with every story labelled for how far it has got. Second, the root was cleared today: `plans/` is gone, the X engine moved to `.claude/skills/ybs-brief/x-lists/` and its output to `runs/x/`. That move is done in the working tree and committed by the orchestrator as one commit. Both are unit-tested and replayed on scratch fixtures, **never run live**. Behind them sit the no-marker/wait-for-text fixes from the branch before, and the afternoon update on `main`, also never run live.
 
 ## Feature areas
 | Area | State | Note |
@@ -18,18 +18,18 @@ _Updated: 2026-09-10 · the evening report of human achievements_
 | Read + figure check | ✅ changed, unit-tested | waits up to `read_wait_seconds` for text, then `PAGE_BLANK`; the note now carries `SCALE AND STAGE` |
 | Counterpoints (leads only) | ✅ working | neither the afternoon nor the evening has any: no LEAD tag |
 | Write the brief | ✅ working | one writer per section; `write-stitch` joins them and checks the evening's label prefix and order |
-| X lists (`x-lists/`) | ✅ working | FP and Economists; all three slots run X the same way |
-| X inside `/ybs-brief` | ✅ working | `--retry` resumes the failed step; ran live 09-09 |
+| X lists (`.claude/skills/ybs-brief/x-lists/`) | ✅ working | FP and Economists; moved under the skill today, output now `runs/x/` |
+| X inside `/ybs-brief` | ✅ working | `--retry` resumes the failed step; ran live 09-09, before the move |
 | Afternoon update | ✅ unit-tested | base run, `follows`, NEW/MOVED picks, own audit line; never run live |
 | Evening report | ✅ unit-tested | pool, five kinds, labels, one section, empty-day sentence, own audit line; never run live |
 | Show profile (`/ybs-shows`) | ✅ working | step 0 rebuilds the agent files |
 | Settings | ✅ working | one root `settings.md`; `achievements_max` is the newest row |
 | Test suite | ⚠️ partial | 5 old failures, see bugs; the cluster-example crash stops the prompt suite early |
 | Git remote | ✅ working | github.com/samueleonelia/researcherYBS2 (private) |
-| Install (`/setup`) and update (`/update`) | ✅ working | `/update` keeps runs/, shows/, preferences.md |
+| Install (`/setup`) and update (`/update`) | ✅ working | `/update` keeps runs/, shows/, preferences.md, and now deletes the old root `x-lists/` |
 
 ## Next up
-1. One live `/ybs-brief evening` on a day with a completed morning run, timed (expect 20 to 25 min)
+1. One live `/ybs-brief evening` on a day with a completed morning run, timed (expect 20 to 25 min). It is also the first live test of the moved X engine.
 2. One live `/ybs-brief morning` for the no-marker and wait-for-text fixes
 3. One live `/ybs-brief afternoon` against a real morning run, timed
 4. Merge this branch into `main`, push and tag, then tell Yaron to run `/update`

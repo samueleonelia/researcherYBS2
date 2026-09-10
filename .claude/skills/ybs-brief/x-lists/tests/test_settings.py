@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import x_settings  # noqa: E402
 
 
-REAL_SETTINGS = Path(__file__).resolve().parents[2] / "settings.md"
+REAL_SETTINGS = Path(__file__).resolve().parents[5] / "settings.md"
 
 
 class TestLoadRealSettings(unittest.TestCase):

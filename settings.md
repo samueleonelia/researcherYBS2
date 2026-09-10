@@ -15,7 +15,7 @@ Each job reads its own headings and ignores the others', which is why two of
 them may name a step `cluster`, or a number `retries_max`, without clashing.
 A `#` heading below is a divider for you, not for them. Print what a script
 actually sees with `python3 .claude/skills/ybs-brief/scripts/ybs_run.py
-settings`, `python3 x-lists/x_settings.py`, or `python3
+settings`, `python3 .claude/skills/ybs-brief/x-lists/x_settings.py`, or `python3
 .claude/skills/ybs-shows/scripts/ybs_shows.py settings`.
 
 # The article brief
@@ -82,7 +82,7 @@ not asked for). Put them back to `high` if a replay shows either, and say so in
 
 The X half runs beside the article half and writes the section under Worth
 Yaron's attention. Its steps, and the home of each rule it obeys, are listed in the header of
-`x-lists/x_run.py`.
+`.claude/skills/ybs-brief/x-lists/x_run.py`.
 
 ## X numbers
 

@@ -13,7 +13,7 @@ HERE = Path(__file__).resolve()
 sys.path.insert(0, str(HERE.parents[1]))
 import x_run  # noqa: E402
 
-ROOT = HERE.parents[2]
+ROOT = HERE.parents[5]
 spec = importlib.util.spec_from_file_location(
     "ybs_run", ROOT / ".claude" / "skills" / "ybs-brief" / "scripts" / "ybs_run.py")
 ybs_run = importlib.util.module_from_spec(spec)

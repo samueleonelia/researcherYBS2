@@ -1,6 +1,6 @@
 ---
 name: ybs-brief
-description: Produce a show-ready morning news brief for Yaron Brook from the sources in sources.md. Screens every source's front page in the ego browser with his logged-in sessions, groups the day's stories so one event is read once, reads each chosen article the way a person would, checks every figure against the page it came from, cuts the result to the picks the settings allow and writes the brief. Use when asked to run the morning brief, or when the user types /ybs-brief. Runs the X-list pipeline in x-lists/ at the same time and puts its section under the article brief. Does NOT send email, does NOT read show transcripts, and never schedules itself. `afternoon` writes what changed since that day's morning brief: new stories first, then the morning's stories that moved. `evening` writes the day's human achievements from the articles the two earlier runs kept, each labelled for how far it has got.
+description: Produce a show-ready morning news brief for Yaron Brook from the sources in sources.md. Screens every source's front page in the ego browser with his logged-in sessions, groups the day's stories so one event is read once, reads each chosen article the way a person would, checks every figure against the page it came from, cuts the result to the picks the settings allow and writes the brief. Use when asked to run the morning brief, or when the user types /ybs-brief. Runs its own X-list engine at the same time and puts its section under the article brief. Does NOT send email, does NOT read show transcripts, and never schedules itself. `afternoon` writes what changed since that day's morning brief: new stories first, then the morning's stories that moved. `evening` writes the day's human achievements from the articles the two earlier runs kept, each labelled for how far it has got.
 argument-hint: "morning | afternoon | evening"
 ---
 
@@ -31,7 +31,7 @@ home; never copy it into a prompt or a reply.
 | file names, launch lines, sentinels | `ybs_run.py schema` |
 | the rules of this pipeline | the hard rules at the end of this file |
 | model and effort per agent | `settings.md`, the `## Models` table |
-| the X list: its steps and where each rule lives | `x-lists/x_run.py`, whose header lists them |
+| the X list: its steps and where each rule lives | `.claude/skills/ybs-brief/x-lists/x_run.py`, whose header lists them |
 
 The eight agent files in `.claude/agents/ybs4-*.md` are **generated** from the
 templates in `agents/` and the `## Models` table in `settings.md`. Edit either

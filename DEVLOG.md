@@ -670,3 +670,26 @@ as written.
 - One live `/ybs-brief evening` on a day with a completed morning run, timed.
 - Then merge `evening-human-achievements` into `main`, with the morning and
   afternoon live runs still owed from the two branches behind it.
+
+
+## 2026-09-10 · the root cleared: plans gone, the X engine inside the skill
+
+**Status:** branch `evening-human-achievements`, one commit on top of the
+evening work. No run logic changed: paths, path-derived roots and text only.
+
+**What moved**
+- `plans/` and `x-lists/plans/` were removed earlier today (`65383a1`,
+  `f02e911`), already on the branch.
+- `x-lists/` -> `.claude/skills/ybs-brief/x-lists/` by `git mv`, and its run
+  output -> `runs/x/<YYYY-MM-DD-HHMM>/` at the root, keeping the same stamp,
+  which the write step reads back.
+- Seven sites derive the root from file depth and all seven were re-counted:
+  `x_settings.project_root`, `x_run.ROOT`, `test_settings`, `test_preferences`,
+  `test_chain` (x3), `test_checks`. `x-lists/.gitignore` went; the root one
+  already covers its three lines.
+- `call_claude` passes `--add-dir <root>`: the agents keep their cwd inside the
+  skill but write into `runs/x/`, outside it. `/update` now deletes the stale
+  root `x-lists/` on Yaron's Mac.
+
+**Verified:** `run-all.sh` passes whole; `test-bookkeeping-v4.py` has the same 3
+failures as before the move and no new one. Still never run live.

@@ -349,8 +349,8 @@ is still the best account of that story; the brief just loses one number.
 
 **LEAD stories only.** A counterpoint hangs under a lead, so `fill counterpoint`
 refuses any other tag: `a051 is tagged BODY; counterpoints run for LEAD stories
-only`. That is the rule, not an error to work around. An evening run has no
-leads either.
+only`. That is the rule, not an error to work around. Neither the afternoon nor the
+evening has a lead, so on those slots this step launches nothing.
 
 Each agent looks in one place: the other articles of its lead's own news item.
 The question is whether those reports carry a positive element bearing on the

@@ -62,6 +62,18 @@ writes the line for you. `/update` never overwrites this file.
 `/update` may replace them with a newer version. When it does, it keeps your copy
 beside it ending in `.backup` and says so.
 
+## What each folder is
+
+| Folder or file | What it is | Who touches it |
+|---|---|---|
+| `preferences.md`, `sources.md`, `settings.md` | the three files that steer every run | you |
+| `runs/` | one folder per brief, `brief.md` inside | written by `/ybs-brief`, read by you |
+| `shows/` | your show archive and the topic profile | written by `/ybs-shows` |
+| `.claude/` | the four skills and the agents they launch | Claude, during a run |
+| `x-lists/` | the X-list engine `/ybs-brief` starts on its own | Claude, during a run |
+| `tests/`, `x-lists/tests/` | checks that the project still works, run by `/setup` | nobody |
+| `DEVLOG.md`, `STATUS.md` | the build history and the current state, for whoever maintains this | Samuele |
+
 ## Getting the newest version
 
 Type `/update`, then `/setup`. Your briefs in `runs/` and your show archive in

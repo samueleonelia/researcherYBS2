@@ -20,7 +20,7 @@ Downloads the newest zip from GitHub and replaces the project's files with it.
 
 Three things are never overwritten:
 
-- `runs/` — every brief ever made here
+- `briefs/` — every brief ever made here
 - `shows/` — the transcripts, digests and topic profile
 - `sources.md` and `settings.md` — if the user's copy differs from
   the new one, the script writes the new one and keeps theirs alongside as
@@ -41,5 +41,5 @@ version may need a tool they do not have yet.
 
 1. **Run the script; do not do its job yourself.** Never download files another
    way, never copy them by hand, never merge two versions of a file yourself.
-2. **Never touch `runs/` or `shows/`.**
+2. **Never touch `briefs/` or `shows/`.**
 3. If the script reports a problem, report the problem. Do not retry silently.

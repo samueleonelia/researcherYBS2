@@ -11,7 +11,7 @@ ZIP="https://github.com/samueleonelia/researcherYBS2/archive/refs/heads/main.zip
 # The user's own work. Never replaced, never read, never deleted.
 # preferences.md is his standing instructions to the brief: it ships once, empty,
 # and after that it is his. A push must never overwrite what he taught it.
-KEEP_DIRS="runs shows"
+KEEP_DIRS="briefs shows"
 KEEP_FILES="preferences.md"
 
 # The files the user is allowed to edit. The new version wins, but their copy
@@ -68,6 +68,15 @@ main() {
 
   # Copy everything except the user's own folders. -R over the top: files that
   # only exist here (their notes, an old plan) are left alone.
+  # The briefs folder was called runs/ until 2026-09-10. Rename his, once,
+  # so nothing he made is left behind and nothing is copied over it.
+  if [ -d "$root/runs" ] && [ ! -d "$root/briefs" ]; then
+    mv "$root/runs" "$root/briefs"
+    say "Renamed your runs folder to briefs: same briefs, clearer name."
+  elif [ -d "$root/runs" ] && [ -d "$root/briefs" ]; then
+    say "You have both a runs and a briefs folder. New briefs go to briefs/; runs/ is old and safe to delete."
+  fi
+
   say "Replacing the project files."
   for item in "$new"/* "$new"/.[!.]*; do
     [ -e "$item" ] || continue

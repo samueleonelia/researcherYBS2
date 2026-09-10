@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """ybs_run.py - bookkeeping for the YBS brief pipeline (v2).
 
-This script owns runs/<run-id>/run.json. Nothing else writes that file.
+This script owns briefs/<run-id>/run.json. Nothing else writes that file.
 Everything here is deterministic: no network, no AI, no guessing, and -- unlike
 v1 -- **no page parsing of any kind**. Pages are read by agents in a browser;
 this script only counts, names, validates and logs what they report.
@@ -272,7 +272,7 @@ SCHEMA = {
             "label": ("demonstrated | emerging | speculative | historical | "
                       "biographical")},
     "x": {
-        "run_dir": "runs/x/<YYYY-MM-DD-HHMM>",
+        "run_dir": "briefs/x/<YYYY-MM-DD-HHMM>",
         "log": "<run_dir>/x/x-run.log",
         "brief": "<x_run_dir>/brief.md",
         "record": ("run.json 'x': run_dir, pid, log, started_utc, status, "
@@ -1755,7 +1755,7 @@ def runs_root() -> Path:
     override = os.environ.get("YBS_RUNS_DIR")
     if override:
         return Path(override).expanduser()
-    return project_root() / "runs"
+    return project_root() / "briefs"
 
 
 def base_record(run_dir: Path, run: dict) -> dict:
@@ -2881,12 +2881,12 @@ def x_script() -> Path:
 
 
 def new_x_run_dir() -> Path:
-    """runs/x/<YYYY-MM-DD-HHMM>, UTC, with -2, -3 on a collision.
+    """briefs/x/<YYYY-MM-DD-HHMM>, UTC, with -2, -3 on a collision.
 
     The same name `x_run.py` gives itself, because its write step reads the
     run's date and time out of the folder name.
     """
-    root = project_root() / "runs" / "x"
+    root = project_root() / "briefs" / "x"
     base = utc_now().strftime("%Y-%m-%d-%H%M")
     candidate, n = root / base, 2
     while candidate.exists():

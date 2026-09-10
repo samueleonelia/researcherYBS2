@@ -693,3 +693,18 @@ evening work. No run logic changed: paths, path-derived roots and text only.
 
 **Verified:** `run-all.sh` passes whole; `test-bookkeeping-v4.py` has the same 3
 failures as before the move and no new one. Still never run live.
+
+## 2026-09-10 — runs/ is now briefs/
+
+**Branch:** `evening-human-achievements`, on top of the x-lists move.
+
+- The output folder is named for what it holds, like `shows/`: `runs/` ->
+  `briefs/`, and the X engine's scratch `runs/x/` -> `briefs/x/`. Two code
+  literals in `ybs_run.py` (`runs_root`, `new_x_run_dir`), one in
+  `x_run.py` (standalone default), two test assertions, `.gitignore`,
+  `KEEP_DIRS` in `update.sh`, and the README, STATUS and update SKILL text.
+  `YBS_RUNS_DIR` keeps its name: it is an override, not a path.
+- `/update` renames Yaron's `runs/` to `briefs/` once, before the copy loop,
+  and says so; if he somehow has both, it says which is live.
+- Plan in the session scratchpad, verified YES first round. Tests: X suite
+  green, root suite the same three known failures.

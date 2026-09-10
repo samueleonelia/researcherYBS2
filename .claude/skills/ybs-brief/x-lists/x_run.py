@@ -3,7 +3,7 @@
 
     python3 x_run.py
 
-creates a fresh run folder `runs/x/<YYYY-MM-DD>-<HHMM>/` at the repo root (UTC) and
+creates a fresh run folder `briefs/x/<YYYY-MM-DD>-<HHMM>/` at the repo root (UTC) and
 drives, in order:
 
     1. x_scrape.py         (script)  ->  tweets.json, page.txt
@@ -1050,7 +1050,7 @@ def main():
         run_dir = Path(args.run_dir).resolve()
         run_dir.mkdir(parents=True, exist_ok=True)
     else:
-        run_dir = new_run_dir(ROOT / "runs" / "x")
+        run_dir = new_run_dir(ROOT / "briefs" / "x")
 
     print(f"run folder: {run_dir}")
     run_chain(run_dir, settings_path, settings, args.from_step, args.only, root)

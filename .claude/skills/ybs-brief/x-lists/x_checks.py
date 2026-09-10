@@ -2,7 +2,7 @@
 """x_checks.py - the mechanical, JSON-only finish-line checks for one run.
 
 A run of the X pipeline passes when, in its fresh run folder
-`runs/x/<date>-<time>/`, ten things are true. Seven of them can be
+`briefs/x/<date>-<time>/`, ten things are true. Seven of them can be
 decided from the files alone, and this module holds one function per each:
 checks 1, 2, 3, 4, 5, 8 and the mechanical slice of 10. Each function's own
 docstring states its check in full, so nothing here points elsewhere for the

@@ -6,8 +6,8 @@ tweet_ids from the cluster agent), and rewrites DIR/subjects.json with the
 measures and flags the design calls for. `subject` and `tweet_ids` are
 preserved untouched; nothing here groups or judges relevance.
 
-Standard library only. See plans/x-lists-design.md section 4 and
-plans/interfaces.md for the exact schema before and after this step.
+Standard library only. The schema before and after this step is the one
+x_run.py's header describes.
 """
 
 import argparse

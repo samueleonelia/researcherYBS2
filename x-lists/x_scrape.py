@@ -33,7 +33,7 @@ from x_settings import (load_settings, default_settings_path,  # noqa: E402
 
 TASK_SPACE_NAME = "x-lists scrape"
 
-# The design's field table, plus `promoted` (see plans/interfaces.md).
+# The field table every later step reads, plus `promoted`.
 FIELDS = [
     "id", "url", "list", "lists", "author", "reposted_by", "posted_at",
     "seen_at", "text", "card_title", "quoted_text", "is_reply", "has_link",

@@ -118,13 +118,16 @@ def test_screen_sync(rd):
 
 
 def build_base(root, run_id, started, slot="morning", status="completed",
-               links=(), picks=(), kept=None, source="Guardian"):
+               links=(), picks=(), kept=None, source="Guardian", cat="world"):
     """One earlier run of the day, written by hand, inside a runs folder of a
     test's own.
 
     Enough of a finished run for a later one to be built on it: the record, the
     articles it screened and, when `picks` names any, the stories its brief ran
     with a note each. Those notes are what the update reads back.
+
+    `cat` is the section every one of those articles was filed under, which is
+    `world` unless a test needs an on-beat one.
 
     `kept` names the ids triage kept and writes the verdicts.json every later
     step reads the word "kept" out of; every other link is dropped there. Left
@@ -143,7 +146,7 @@ def build_base(root, run_id, started, slot="morning", status="completed",
     ids = [f"a{i:03d}" for i in range(1, len(links) + 1)]
     write(d / "articles.json", {"articles": [
         {"id": a, "source": source, "url": u, "title": "t",
-         "description": "d", "category": "world", "published": started,
+         "description": "d", "category": cat, "published": started,
          "also_in": []} for a, u in zip(ids, links)]})
     if kept is not None:
         write(d / "triage" / "verdicts.json",
@@ -161,17 +164,17 @@ def build_base(root, run_id, started, slot="morning", status="completed",
 
 
 def build_morning(root, run_id, started, status="completed", links=(), picks=(),
-                  kept=None, source="Guardian"):
+                  kept=None, source="Guardian", cat="world"):
     """The day's morning run: the base an afternoon updates and an evening pools."""
     return build_base(root, run_id, started, "morning", status, links, picks,
-                      kept, source)
+                      kept, source, cat)
 
 
 def build_afternoon(root, run_id, started, status="completed", links=(), picks=(),
-                    kept=None, source="Guardian"):
+                    kept=None, source="Guardian", cat="world"):
     """The day's afternoon run: the second base an evening pools, when there is one."""
     return build_base(root, run_id, started, "afternoon", status, links, picks,
-                      kept, source)
+                      kept, source, cat)
 
 
 def test_afternoon_base():
@@ -707,6 +710,63 @@ def test_triage(rd):
     (rd / "triage" / "a003.verdict.txt").write_text("a003 keep\n")
 
 
+def test_triage_evening():
+    """Tonight the question is a different one, so no section can answer it.
+
+    In the morning an article filed under an on-beat section is kept by code
+    and spends no agent. The evening's pool came through that filter hours ago;
+    asking it again would keep the same article for the same old reason, and
+    the reason tonight is whether it reports a human achievement. So every
+    article goes to an agent, and the launch block's first line says which
+    question the agent is being asked. Everything runs inside a runs folder of
+    its own, named by YBS_RUNS_DIR.
+    """
+    print("\ntriage-list: the evening admits nothing by section")
+    tmp = Path(tempfile.mkdtemp(prefix="ybs-runs-"))
+    env = {"YBS_RUNS_DIR": str(tmp)}
+    try:
+        out, _ = run("start", "--slot", "morning", expect=0, env=env)
+        rd = Path(out["run_dir"]).resolve()      # the head is the resolved path
+        write(rd / "screen" / "guardian.json", {
+            "source": "Guardian", "ok": True, "links": [
+                link("https://www.theguardian.com/x/on-beat", "On beat",
+                     cat="politics"),
+                link("https://www.theguardian.com/x/off-beat", "Off beat")]})
+        run("screen-sync", "--run", rd)
+        out, _ = run("triage-list", "--run", rd, expect=0)
+        check("in the morning a politics article is settled by its section",
+              out["admitted_by_category"] == 1,
+              str(out.get("admitted_by_category")))
+        check("and the morning's launch block opens with the run directory alone",
+              all(e["launch"].splitlines()[0] == str(rd) for e in out["todo"]),
+              out["todo"][0]["launch"][:120])
+
+        # The same article, pooled tonight out of a morning that kept it.
+        time.sleep(1.1)          # a run id names the second it started in
+        build_morning(tmp, "2026-x_morning_100000", now_iso(-6), cat="politics",
+                      links=["https://www.theguardian.com/x/on-beat",
+                             "https://www.theguardian.com/x/two"],
+                      kept=["a001", "a002"])
+        out, _ = run("start", "--slot", "evening", expect=0, env=env)
+        rd = Path(out["run_dir"]).resolve()
+        run("pool-sync", "--run", rd, expect=0)
+        out, _ = run("triage-list", "--run", rd, expect=0)
+        check("in the evening no section admits anything",
+              out["admitted_by_category"] == 0, str(out)[:200])
+        check("so code writes no verdict of its own for the politics article",
+              not (rd / "triage" / "a001.verdict.txt").exists())
+        check("and it is batched for an agent like every other article",
+              sorted(sum((e["ids"] for e in out["todo"]), [])) == ["a001", "a002"],
+              str([e["ids"] for e in out["todo"]]))
+        check("every batch's first line says which question is being asked",
+              bool(out["todo"]) and all(
+                  e["launch"].splitlines()[0] == f"{rd} | evening"
+                  for e in out["todo"]),
+              out["todo"][0]["launch"].splitlines()[0][:160])
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def test_items(rd):
     print("\nitems-sync")
     good = {"items": [
@@ -858,6 +918,63 @@ def test_items_afternoon():
         check("and a note that follows nothing is headed as it always was",
               f"{big[0]} · beat-read" in text and text.count("· follows ") == 1,
               str(text.count("· follows ")))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_items_evening():
+    """The evening updates no brief, so both of the afternoon's rules are off.
+
+    `base_pick_ids` answers `None` for an evening run as it does for a morning
+    one, and everything follows from that single answer: an item claiming to
+    follow a story is refused in the morning's own words, and the floor a new
+    story must clear in an afternoon is never applied. A lone achievement is a
+    whole story tonight; there is no day piling up around it to wait for.
+    Everything runs inside a runs folder of its own, named by YBS_RUNS_DIR.
+    """
+    print("\nitems-sync: the evening follows nothing, and reads a lone story")
+    settings, _ = run("settings", expect=0)
+    floor = settings["new_item_articles_min"]
+    tmp = Path(tempfile.mkdtemp(prefix="ybs-runs-"))
+    env = {"YBS_RUNS_DIR": str(tmp)}
+    try:
+        build_morning(tmp, "2026-x_morning_100000", now_iso(-6),
+                      links=["https://www.theguardian.com/x/one",
+                             "https://www.theguardian.com/x/two"],
+                      kept=["a001", "a002"], picks=["a001"])
+        out, _ = run("start", "--slot", "evening", expect=0, env=env)
+        rd = Path(out["run_dir"])
+        run("pool-sync", "--run", rd, expect=0)
+        run("triage-list", "--run", rd, expect=0)
+        for a in json.loads((rd / "articles.json").read_text())["articles"]:
+            (rd / "triage" / f"{a['id']}.verdict.txt").write_text(
+                f"{a['id']} keep\n")
+        run("triage-check", "--run", rd, expect=0)
+
+        def item(iid, ids, follows=None):
+            return {"item_id": iid, "name": iid, "profile": None,
+                    "kind": "cluster" if len(ids) > 1 else "single",
+                    "verdict": "READ", "follows": follows, "articles": ids,
+                    "primary": ids[0], "read": [ids[0]], "why": "x"}
+
+        plan = {"items": [item("i01", ["a001"]), item("i02", ["a002"])],
+                "near_misses": []}
+
+        follower = json.loads(json.dumps(plan))
+        follower["items"][0]["follows"] = "m:a001"
+        write(rd / "items" / "plan.json", follower)
+        out, _ = run("items-sync", "--run", rd, expect=1)
+        check("an evening item may not follow anything either",
+              has(out, "a morning brief follows nothing"), str(out)[:200])
+
+        write(rd / "items" / "plan.json", plan)
+        out, _ = run("items-sync", "--run", rd, expect=0)
+        check(f"a story of one article clears no floor of {floor}: there is none",
+              out["small_new_items"] == 0 and out["articles_to_read"] == 2,
+              str(out)[:200])
+        check("the counts of the run say so too",
+              json.loads((rd / "run.json").read_text())
+              ["counts"]["small_new_items"] == 0)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -2363,8 +2480,10 @@ def main():
         test_screen_prompt_is_safe_to_retry()
         test_dates()
         test_triage(rd)
+        test_triage_evening()
         test_items(rd)
         test_items_afternoon()
+        test_items_evening()
         test_selection()
         test_cluster_parts()
         test_read_list(rd)

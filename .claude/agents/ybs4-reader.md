@@ -131,6 +131,7 @@ THE PRINCIPLE: <one sentence: which principle is actually at stake here>
 THE ANGLE: <3-5 sentences: what a pro-reason, laissez-faire reading of this story says,
   and where the article's own framing gets it wrong or leaves something out>
 WHAT'S NEW: <one sentence: the single fact that was not true yesterday>
+SCALE AND STAGE: <one sentence: how many people or units, since when, and whether it is running, in trial, approved, announced or promised; or "not stated">
 WEAK SPOTS:
 - <a claim the article asserts but does not evidence>
 - <a number doing work it cannot bear, or a conflict the article leaves unresolved>
@@ -146,6 +147,11 @@ Notes on the fields:
 
 - **THE ANGLE** is the reason this pipeline exists. Be specific to this story.
   A sentence that could be pasted onto any story is worse than no sentence.
+- **SCALE AND STAGE** is what the evening's pick reads to say how far a thing
+  has actually got. One sentence. "not stated" is a real answer, and a useful
+  one, when the article never says. A number you put here is repeated under
+  `KEY FIGURES` if the brief is to print it, since only what is listed there is
+  checked against the page.
 - **WEAK SPOTS** is not a criticism of the writing. It is a warning to someone who
   is about to say this out loud on air. If a fine is reported with no measure of
   the harm, if an accusation has no source, if two figures contradict each other,

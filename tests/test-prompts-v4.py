@@ -96,7 +96,7 @@ def namespace_names():
     """Every name the script can fill, asked of the script itself."""
     names = {"BEATS", "LENS", "CRITERIA_FACTORS", "CRITERIA_LABELS", "CRITERIA_TAGS",
              "AGENT_RULES", "AGENT_RULES_BROWSER", "AGENT_RULES_JSON", "AGENT_RULES_FILE",
-             "ITEM_SHAPE", "PICK_RULES", "PRINCIPLES", "PREFERENCES",
+             "ITEM_SHAPE", "PICK_RULES", "PRINCIPLES", "PREFERENCES", "ACHIEVEMENTS",
              "PROFILE", "PROFILE_MOVES", "PROFILE_DATE", "PROFILE_SHOWS"}
     settings, _ = run("settings")
     names |= {f"settings.{k}" for k in settings}
@@ -387,10 +387,18 @@ def test_agents_match_skill():
 
     beats = (PROMPTS / "_beats.md").read_text().strip()
     lens = (PROMPTS / "_lens.md").read_text().strip()
+    kinds = (PROMPTS / "_achievements.md").read_text().strip()
     check("ybs4-triage carries _beats.md verbatim", beats in agents.get("ybs4-triage", ""))
     check("ybs4-reader carries _lens.md verbatim", lens in agents.get("ybs4-reader", ""))
+    # The evening asks the same agent a narrower question, and the five kinds
+    # it asks it by have one home. A triage agent built without them would sort
+    # the evening's pool by the beats, which is the one thing tonight is not.
+    check("ybs4-triage carries _achievements.md verbatim",
+          kinds in agents.get("ybs4-triage", ""))
     check("ybs4-reader can report a truncated page",
           "PAGE_TRUNCATED" in agents.get("ybs4-reader", ""))
+    check("ybs4-reader asks every note how far the thing has got",
+          "SCALE AND STAGE" in agents.get("ybs4-reader", ""))
     check("ybs4-checker has a word for a note with no figures",
           "no figures" in agents.get("ybs4-checker", ""))
     for gone in ("triage.md", "reader.md", "figure-check.md"):

@@ -31,6 +31,13 @@ directory; every line after it is one article:
 {{schema.launch.triage}}
 ```
 
+That first line sometimes carries a slot name after the directory, and when it
+does, a later section tells you what changes:
+
+```
+{{schema.launch.triage_evening}}
+```
+
 ## The show's beats
 
 {{BEATS}}
@@ -77,6 +84,42 @@ a070 | [Reason] (article) Trump's tariffs, the Fed's next move, and the housing 
 
 a007 | [Reason] (profile) Reem Ibrahim :: Author page
      -> drop    Not an article at all.
+```
+
+## The evening's question
+
+When the first line of your block ends in ` | evening`, the beats have already
+been settled by an earlier run, and this section replaces the rule above. Each
+of these articles was kept hours ago by an agent asking whether the show would
+touch the subject. Tonight one narrower thing is asked of it: does it report a
+human achievement?
+
+{{ACHIEVEMENTS}}
+
+The rule for such a block:
+
+```
+keep   if the headline or description reports one of the five kinds
+drop   if it reports none of them, or only something under "not"
+```
+
+Doubt still resolves the same way, and only its subject has changed: what you
+are unsure about is no longer whether this belongs to the show, but whether it
+is one of the five. Unsure, and it stays.
+
+Worked examples:
+
+```
+a012 | [Reuters] (Health) Gene therapy for sickle cell cleared after trial in 44 patients :: Regulator's decision follows results published in December
+     -> keep    An approval, and a trial with people in it: medical progress.
+
+a033 | [Guardian] (Politics) Minister vows to sweep away planning rules "within months" :: Speech to the housebuilders' federation sets no date
+     -> drop    A politician promising. No rule has gone yet.
+
+a058 | [AP News] (article) Desalination plant unveiled for the Gulf, first line already supplying a town :: Two further lines are planned for later this decade
+     -> keep    Most of it is an announcement, but one line runs and a town
+               drinks from it. How much of it counts is settled after the
+               article is read.
 ```
 
 ## Output

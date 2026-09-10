@@ -482,6 +482,7 @@ def namespace(shows_dir: Path = None, need_profile: bool = True) -> dict:
         "AGENT_RULES": fragment("agent-rules", "every agent"),
         "AGENT_RULES_FILE": fragment("agent-rules", "file agents"),
         "ITEM_SHAPE": fragment("item-shape"),
+        "ACHIEVEMENTS": fragment("achievements"),
         "PICK_RULES": fragment("pick-rules"),
         "AGENT_RULES_BROWSER": fragment("agent-rules", "browser agents"),
         "AGENT_RULES_JSON": fragment("agent-rules", "json agents"),
@@ -735,14 +736,35 @@ A follower item looks like this:
 ```"""
 
 
+SLOT_JOB_EVENING_HEAD = """## What tonight's items are
+
+This run is the evening report of human achievements. Every article in front
+of you was kept this evening because its headline promised one of these five
+kinds:"""
+
+SLOT_JOB_EVENING_RULES = """**The verdict, in tonight's terms:**
+
+- `READ` — the achievement is reported as an event: a result, an approval, a
+  launch, a ruling, a rescue, a number.
+- `MAYBE` — a column or a feature about one.
+- `DROP` — an article that, seen beside the others, reports none of the five.
+
+No item follows anything tonight, so `follows` stays `null` right through."""
+
+
 def slot_job(run_dir: Path, run: dict) -> str:
     """What this run's slot adds to the cluster's job, or nothing.
 
     A morning run renders this empty: it groups a day of articles and there is
     no earlier brief to measure them against. An afternoon run renders the
     stories of the brief it updates, the rule for an article that carries one
-    of them further, and the rule for everything else.
+    of them further, and the rule for everything else. An evening run renders
+    the five kinds it was sorted by, and the same three verdicts asked about
+    those kinds instead of the beats.
     """
+    if run.get("slot") == "evening":
+        return "\n\n".join([SLOT_JOB_EVENING_HEAD, fragment("achievements", "kinds"),
+                            SLOT_JOB_EVENING_RULES])
     if run.get("slot") != "afternoon":
         return ""
     base = run.get("base") or {}
@@ -2069,6 +2091,12 @@ def cmd_triage_list(args):
     generic `article` and `opinion` -- goes to an agent, which reads the
     headline and the description.
 
+    An evening run admits nothing by section. Its articles were sorted by
+    section this morning, and that sorting is how they reached this pool; the
+    question tonight is a different one, and no publisher's section answers
+    it. Every article goes to an agent, and the launch block's first line
+    tells the agent which question it is being asked.
+
     The agents work in batches of `triage_batch_size`, because most of what an
     agent costs is paid before it reads a word. A launch block IS the agent's
     whole prompt: its instructions live in .claude/agents/ybs4-triage.md.
@@ -2083,7 +2111,9 @@ def cmd_triage_list(args):
 
     ids = set(load_json(frozen)["ids"])
     given_up = gave_up(run_dir)
-    beats = beat_categories()
+    evening = load_run(run_dir).get("slot") == "evening"
+    beats = set() if evening else beat_categories()
+    head = f"{run_dir} | evening" if evening else str(run_dir)
 
     def clean(text):
         return re.sub(r"\s+", " ", text or "").replace("|", "/").strip()
@@ -2117,7 +2147,7 @@ def cmd_triage_list(args):
     for i in range(0, len(lines), TRIAGE_BATCH):
         chunk = lines[i:i + TRIAGE_BATCH]
         todo.append({"ids": [ln.split(" | ", 1)[0] for ln in chunk],
-                     "launch": "\n".join([str(run_dir)] + chunk)})
+                     "launch": "\n".join([head] + chunk)})
 
     print(json.dumps({"pool": POOL, "total": len(ids), "done": done,
                       "admitted_by_category": len(admitted),

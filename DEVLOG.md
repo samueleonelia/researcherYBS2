@@ -571,3 +571,102 @@ as written.
 **Next**
 - One live `/ybs-brief morning` on this branch: the audit line should show no
   `session_down`, and any blank page should be listed by name in the failures.
+
+## 2026-09-10 · the evening report of human achievements
+
+**Status:** branch `evening-human-achievements`, four commits (`07f36b2`,
+`c6035f2`, `31e289c`, `7dfd7c8`) plus this one. Not merged, not pushed. Plan:
+`plans/evening-human-achievements.md`, implemented as written.
+
+**Why**
+- The morning and the afternoon report the day's problems. Nothing in the day
+  reported the way out of them. The third slot is that report, and it is built
+  from articles the day already paid to screen and triage.
+- The honesty problem it has to solve: a press release must never read as a
+  solved problem. So every story carries a label for how far it has got, and
+  the label is decided after the article has been read, not from its headline.
+
+**Done**
+- `/ybs-brief evening` runs the same ten steps as the morning. Four things
+  differ and all four are decided in code from `slot: evening` in `run.json`:
+  where the articles come from, what triage is asked, what the pick is asked,
+  and which template says what the report looks like.
+- Wave 1 (`07f36b2`): `achievements_max` (5) in `settings.md`; the evening's
+  launch head, tag, label list and new drop reason in `SCHEMA`; the per-slot
+  section and tag tables; `find_base` taking a slot and an `optional` flag, so
+  an evening needs a morning and may do without an afternoon; `start --slot
+  evening` recording `base` and `base_afternoon`; the new `pool-sync`, which
+  reads what the two earlier runs kept at triage, merges by canonical URL,
+  renumbers, and calls the result screened; `screen-sync` and `fill screen`
+  refusing an evening run by name, so a pooling run never opens a browser.
+- Wave 2 (`c6035f2`): `prompts/_achievements.md`, the one home of the five
+  kinds and of what is none of them; the triage template's evening section,
+  reached when the launch block's first line ends ` | evening`; `triage-list`
+  admitting nothing by section on an evening run and printing that head; the
+  cluster's `{{SLOT_JOB}}` for the evening; and `SCALE AND STAGE` added to the
+  reader's note in every slot, so the field the label is read off exists
+  without a second reader template.
+- Wave 3 (`31e289c`): `prompts/pick-evening.md`, which asks each note two
+  questions in order — is this really one of the five kinds now the article has
+  been read, and how far has the thing got — and takes the label off the table
+  already in `_criteria.md`; `picks-sync` for the evening: one tag
+  (`ACHIEVEMENT`), a label on every pick, no `kind`, no `follows`,
+  `achievements_max` as the ceiling, an empty list a real reply; `fill pick`
+  choosing the evening's prompt so the orchestrator's launch line is unchanged.
+- Wave 4 (`7dfd7c8`): `templates/evening.md` as the whole shape; `POOL_LINE`
+  in `head_vars`, naming the one or two briefs the pool came from by their own
+  clock times; the writer's `ACHIEVEMENT_JOB`; `NO_COUNTERPOINTS` per slot;
+  `write-stitch` checking the label prefix on every heading and that the
+  stories run in the pick's order; `EMPTY_EVENING_LINE` for a day with none;
+  and a third branch in `build_audit_line`, which put each slot's own bits in
+  one branch each and the shared bits in one place.
+- Wave 5: this entry, `SKILL.md`, `README.md`, `STATUS.md`.
+
+**Decisions**
+- No re-screen. The pool is what the two earlier runs kept, and only that. A
+  good-news story published after the afternoon ran is caught tomorrow morning;
+  an article dropped at triage as off-beat is not looked at again, because an
+  off-beat achievement is not for the show either.
+- Labels at pick, not at triage. A headline promises; only the read article
+  says whether it delivered, and how far along it is. `SCALE AND STAGE` and
+  `WEAK SPOTS` are where the answer sits, and a note saying "not stated" cannot
+  be `Demonstrated`.
+- Zero picks is a correct reply. Padding with a press release is the exact
+  failure this report exists to avoid, so the empty path writes the head and
+  one sentence, as the quiet afternoon already does.
+- No counterpoints: the whole report is the counterpoint. And no code-checked
+  tie between a story and a problem of the day — the writer may say in prose
+  which problem a story answers, and nothing checks it.
+- `SCALE AND STAGE` goes into every slot's note rather than an evening-only
+  reader file. One reader form, one field read by name; the morning gains a
+  line it can ignore.
+
+**Verified, without a browser and without a live agent**
+- `tests/test-bookkeeping-v4.py` and `tests/test-prompts-v4.py` gained tests
+  for every wave. The suite is back at its exact pre-branch failure set and no
+  worse: 3 in `test-bookkeeping-v4.py` (2 for `picks-sync` not refusing more
+  than 15 picks, 1 for the beat-over-topic check) and, in
+  `test-prompts-v4.py`, the SKILL.md `50` number and the rotted profile name in
+  the cluster example, which still crashes that file before its last two tests.
+  Checked by running both files at `7b706f3` and on the branch head: the same
+  five, no others. `test-shows-v4.py` passes whole.
+- The whole slot was replayed end to end by hand on scratch fixtures: a fake
+  morning and afternoon run, then `start`, `pool-sync`, `triage-list`,
+  `triage-check`, `fill cluster-select`, `items-sync`, `read-list`, `fill
+  pick`, `picks-sync`, `fill write`, `write-stitch`, `audit-line`, `close`.
+  The empty-picks path too.
+- The morning is unchanged: a finished morning run's rendered prompts under the
+  pre-branch script and under the branch head differ only by the
+  `_item-shape.md` sentence the plan changed.
+
+**Never run live**
+- No `/ybs-brief evening` has been run for real. That is wave 6 of the plan,
+  and it is the acceptance test. Expected 20 to 25 minutes. What to watch: the
+  keep rate at triage (over 40% means the question is too loose), the labels
+  the pick gave against the pages themselves, and whether any heading reads
+  further along than its label.
+
+**Next**
+- One live `/ybs-brief evening` on a day with a completed morning run, timed.
+- Then merge `evening-human-achievements` into `main`, with the morning and
+  afternoon live runs still owed from the two branches behind it.

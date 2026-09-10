@@ -2,7 +2,7 @@
 
 Two skills that build the morning news brief, and two that keep the setup working.
 
-- `/ybs-brief morning` — reads the day's news and writes the brief; `/ybs-brief afternoon` writes what changed since it
+- `/ybs-brief morning` — reads the day's news and writes the brief; `/ybs-brief afternoon` writes what changed since it; `/ybs-brief evening` gathers the good news of the day, saying of each how far along it really is
 - `/ybs-shows` — refreshes what the show has been arguing about lately
 - `/setup` — installs the tools this needs, and checks everything works
 - `/update` — gets the newest version of this project

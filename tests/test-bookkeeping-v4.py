@@ -1936,6 +1936,44 @@ def afternoon_written(tmp, env):
     return rd
 
 
+def evening_labels():
+    """The five labels, in the order the script lists them, read out of it.
+
+    How far a thing has got is one list with one home, so a test that wants to
+    write a heading or read a count asks for the list rather than typing it.
+    """
+    line, _ = run("schema", "--key", "tag.label", expect=0)
+    return line.strip().split(" | ")
+
+
+def evening_written(tmp, env, afternoon=True):
+    """A report with its pick made: three achievements at three different stages.
+
+    The pick hands them over a002, a003, a001, which is neither the order their
+    ids sort in nor the order the notes were written in, so every check below on
+    the order of the report is a real one: a stitch that read the picks in any
+    order but the one it was given would pass here by accident.
+
+    `afternoon` says whether the day had an update behind it, which is the one
+    thing the head line of the report turns on; without one the evening is still
+    a report, and pools the morning alone.
+    """
+    labels = evening_labels()
+    if afternoon:
+        build_afternoon(tmp, "2026-x_afternoon_160000", now_iso(-2),
+                        links=["https://reason.com/x/four"], kept=["a001"])
+    rd, _ = evening_run(tmp, env, ["a001", "a002", "a003"])
+    write(rd / "picks" / "picks.json", {
+        "picks": [{"id": "a002", "tag": "ACHIEVEMENT", "label": labels[0],
+                   "why": "x"},
+                  {"id": "a003", "tag": "ACHIEVEMENT", "label": labels[1],
+                   "why": "x"},
+                  {"id": "a001", "tag": "ACHIEVEMENT", "label": labels[2],
+                   "why": "x"}],
+        "dropped": []})
+    return rd
+
+
 def section_file(rd, name, heading, stories):
     """One writer's reply, written by hand: a heading, then its stories."""
     out = [f"## {heading}", ""]
@@ -2040,6 +2078,114 @@ def test_write_afternoon():
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def test_write_evening():
+    """The report's one writer, and the stitch that checks its one section.
+
+    A report of achievements has no second section to be joined to, so the
+    stitch's whole job here is the two things the reader is owed: every heading
+    says how far its story has got, and the stories stand in the order the pick
+    put them in, furthest along first. Everything runs inside a runs folder of
+    its own, named by YBS_RUNS_DIR, so the runs it pools are ones this test
+    wrote.
+    """
+    print("\nwrite: the evening's one section")
+    labels = evening_labels()
+    tmp = Path(tempfile.mkdtemp(prefix="ybs-runs-"))
+    env = {"YBS_RUNS_DIR": str(tmp)}
+    try:
+        # A day with no update behind it: the head names the one brief it pooled.
+        alone = evening_written(tmp, env, afternoon=False)
+        out, _ = run("fill", "write", "--run", alone, "--section", "achievements",
+                     expect=0)
+        check("with no afternoon behind it the head names the morning alone",
+              "**From:** the morning brief of 10:00\n"
+              in Path(out["file"]).read_text(),
+              Path(out["file"]).read_text().split("**From:**")[1][:80])
+
+        time.sleep(1.1)          # a run id names the second it started in
+        rd = evening_written(tmp, env)
+
+        out, _ = run("fill", "write", "--run", rd, "--section", "achievements",
+                     expect=0)
+        text = Path(out["file"]).read_text()
+        check("no placeholder is left unfilled in the report's write prompt",
+              out["unfilled"] == [], str(out))
+        check("the head of the report names both runs it pooled, by their times",
+              "**From:** the morning brief of 10:00 and the afternoon update "
+              "of 16:00" in text, text[text.find("**From:**"):][:100])
+        check("the writer is asked for the one section the template has",
+              "one section only: `## Human achievements`" in text)
+        check("and one writer, not two or three, is at work on it",
+              "One writer is at work" in text)
+        check("a report carries no counterpoints, and says so in its own words",
+              "the evening report carries no counterpoints" in text)
+        check("every pick arrives with the label its heading has to open with",
+              all(f"{aid} · ACHIEVEMENT · {lab}" in text for aid, lab in
+                  zip(("a002", "a003", "a001"), labels)),
+              text[text.find("a002 ·"):][:80])
+        check("and the writer is told the heading opens with that label",
+              "opens with the pick's label" in text)
+
+        # The stitch: the label on every heading, and the pick's order.
+        section_file(rd, "achievements", "Human achievements",
+                     [(f"{labels[0].capitalize()} - Something was shown to work.",
+                       "a002"),
+                      ("Something else happened.", "a003"),
+                      (f"{labels[2].capitalize()} - Something may yet happen.",
+                       "a001")])
+        out, _ = run("write-stitch", "--run", rd, expect=1)
+        check("a story whose heading says nothing about how far it has got is "
+              "refused",
+              any(f"does not open with {labels[0].capitalize()}" in p
+                  for p in out["problems"]), str(out.get("problems")))
+
+        section_file(rd, "achievements", "Human achievements",
+                     [(f"{labels[2].capitalize()} - Something may yet happen.",
+                       "a001"),
+                      (f"{labels[0].capitalize()} - Something was shown to work.",
+                       "a002"),
+                      (f"{labels[1].capitalize()} - Something is under way.",
+                       "a003")])
+        out, _ = run("write-stitch", "--run", rd, expect=1)
+        check("and so is a section that runs them in an order the pick did not",
+              any("the pick ran them a002, a003, a001" in p
+                  for p in out["problems"]), str(out.get("problems")))
+
+        section_file(rd, "achievements", "Human achievements",
+                     [(f"{labels[0].capitalize()} - Something was shown to work.",
+                       "a002"),
+                      (f"{labels[1].capitalize()} - Something is under way.",
+                       "a003"),
+                      (f"{labels[2].capitalize()} - Something may yet happen.",
+                       "a001")])
+        out, _ = run("write-stitch", "--run", rd, expect=0)
+        text = (rd / "brief.md").read_text()
+        check("a clean report stitches into one section under the date line",
+              out["ok"] and out["sections"] == ["brief-achievements.md"]
+              and 0 < text.find("## Human achievements"), str(out)[:200])
+        check("its head says which briefs it was built from",
+              "**From:** the morning brief of 10:00 and the afternoon update "
+              "of 16:00" in text, text[:200])
+        check("and it ends with the X and audit placeholders, in that order",
+              text.rstrip().endswith("{{X_SECTION}}\n\n{{AUDIT_LINE}}"), text[-80:])
+
+        # Nothing picked at all: the true answer to a day with no achievement.
+        write(rd / "picks" / "picks.json", {"picks": [], "dropped": []})
+        out, _ = run("write-stitch", "--run", rd, expect=0)
+        text = (rd / "brief.md").read_text()
+        empty = script_const("EMPTY_EVENING_LINE")
+        check("a day with no achievement in it is a brief, not a failure",
+              out["ok"] and out["empty"] is True and out["sections"] == [], str(out))
+        check("and it is the head, the one sentence, and no section at all",
+              bool(empty) and empty in text and "## " not in text
+              and "**From:** the morning brief of 10:00" in text, repr(text))
+        check("with the two lines code still fills after it",
+              text.rstrip().endswith("{{X_SECTION}}\n\n{{AUDIT_LINE}}"),
+              repr(text[-60:]))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def test_write_stitch_morning_still_dies():
     """A morning brief with no picks is still a failure, as it always was."""
     print("\nwrite-stitch: a morning with nothing in it")
@@ -2094,6 +2240,71 @@ def test_audit_afternoon():
               "counterpoints" not in line, repr(line)[:500])
         check("and no picks-by-group bit, which is the morning's question",
               "picks by group" not in line, repr(line)[:500])
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_audit_evening():
+    """The report's audit line counts what a report of achievements is judged on.
+
+    Three of the morning's bits are gone, and each is gone for a reason: no
+    front page was opened, so nothing was dropped for having no date and no
+    section admitted anything without an agent; and there is no lead story, so
+    there was no counterpoint to run. The counts and the file that would raise
+    all three are put on the run here, so their absence from the line is a
+    check and not an accident.
+    """
+    print("\naudit-line: the evening's own shape")
+    labels = evening_labels()
+    tmp = Path(tempfile.mkdtemp(prefix="ybs-runs-"))
+    env = {"YBS_RUNS_DIR": str(tmp)}
+    try:
+        rd = evening_written(tmp, env, afternoon=False)
+        run("picks-sync", "--run", rd, expect=0)
+        data = json.loads((rd / "run.json").read_text())
+        data["counts"].update({
+            "sources_ok": 0, "screened": 12, "pooled_morning": 8,
+            "pooled_afternoon": 5, "pool_duplicates": 1, "kept": 9,
+            "kept_by_category": 4, "notes": 4, "notes_struck": 1,
+            "items_by_group": {"beat-read": 3, "beat-maybe": 1}})
+        data["sources"] = {"Guardian": {"undated": 2}}
+        write(rd / "run.json", data)
+        (rd / "picks" / "cp-a002.md").write_text("a counterpoint nobody asked for",
+                                                 encoding="utf-8")
+
+        line, _ = run("audit-line", "--run", rd, expect=0)
+        run_json = json.loads((rd / "run.json").read_text())
+        check("with no afternoon behind it, it opens naming the one run it pooled",
+              line.startswith(
+                  f"Audit (evening, from {run_json['base']['run_id']}): "),
+              repr(line)[:120])
+        check("it says outright that no front page was opened tonight",
+              "no source screened" in line, repr(line)[:200])
+        check("it says where the pool came from, run by run, duplicates and all",
+              "12 articles pooled (8 from the morning, 5 from the afternoon, "
+              "1 duplicate merged)" in line, repr(line)[:300])
+        by_label = run_json["counts"]["achievements_by_label"]
+        want = ("3 human achievements ("
+                + ", ".join(f"{by_label[l]} {l}" for l in labels) + ")")
+        check("it counts the achievements and names all five labels, zeros too",
+              want in line, repr(line)[:500])
+        check("no link was dropped for having no date, because none was screened",
+              "undated" not in line, repr(line)[:500])
+        check("and no article was admitted by its section, so the line says nothing "
+              "about sections", "by section" not in line, repr(line)[:500])
+        check("a report has no lead, so it reports no counterpoints either",
+              "counterpoint" not in line and "picks by group" not in line,
+              repr(line)[:500])
+
+        time.sleep(1.1)          # a run id names the second it started in
+        rd2 = evening_written(tmp, env)
+        run("picks-sync", "--run", rd2, expect=0)
+        line, _ = run("audit-line", "--run", rd2, expect=0)
+        run_json = json.loads((rd2 / "run.json").read_text())
+        check("with an afternoon behind it, both runs it pooled are named",
+              line.startswith(
+                  f"Audit (evening, from {run_json['base']['run_id']} and "
+                  f"{run_json['base_afternoon']['run_id']}): "), repr(line)[:120])
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -2696,8 +2907,10 @@ def main():
         test_counterpoint_fill(rd)
         test_write_sections(rd)
         test_write_afternoon()
+        test_write_evening()
         test_write_stitch_morning_still_dies()
         test_audit_afternoon()
+        test_audit_evening()
         test_audit_and_close(rd)
     finally:
         shutil.rmtree(rd, ignore_errors=True)

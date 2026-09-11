@@ -708,3 +708,50 @@ failures as before the move and no new one. Still never run live.
   and says so; if he somehow has both, it says which is live.
 - Plan in the session scratchpad, verified YES first round. Tests: X suite
   green, root suite the same three known failures.
+
+## 2026-09-11 — a moved story names the morning story it develops
+
+**Branch:** `afternoon-follows-pointer`, off `evening-human-achievements`
+(`eb8b311`). Two commits, not merged, not pushed.
+
+**The problem, from today's real afternoon run**
+`briefs/2026-09-11_afternoon_124518` told him "this morning's brief had crude
+pulling back from its post-May high". That is a paraphrase, and the morning
+brief does not contain those words, so there was nothing he could scan for. The
+writer was already handed a morning pointer, but it was the article's own
+headline out of the morning note, which the morning brief never printed.
+
+**What moved**
+- New `base_pointers()` reads the morning `brief.md` and maps a morning article
+  id to the heading that brief ran it under. It finds a story the way the rest
+  of the code does, by its URL: every URL under a heading names that heading for
+  its article, so a cluster's several URLs all point at the one story. The X
+  section's tweet URLs are in no `articles.json` and resolve to nothing, which
+  needs no special case.
+- `base_line()` hands the writer that heading as `THE MORNING HAD:`, and falls
+  back to the note's headline when the brief is missing or says nothing about
+  the story. A pointer code cannot resolve costs a pointer, never a run, and no
+  heading is ever invented.
+- `templates/afternoon.md` carries the `**Follows:**` line in the shape and one
+  rule saying it is the morning heading copied letter for letter. `MOVED_JOB`
+  tells the writer to print it. `follows_problems()` checks it at the stitch,
+  reusing the "a story is where its URL is" rule the order check already uses,
+  and skips a pick whose heading code itself could not find.
+
+**Verified**
+- Live, on a copy of `briefs/2026-09-11_afternoon_124518` in the scratchpad,
+  never the archived run. Both picks are now handed the real morning headings:
+  `5. Oil falls back to $105 and Asian shares drop as Wall Street posts a fourth
+  straight loss.` and `Houthi rebels took the Red Sea port of Mokha, and Iran
+  then demanded Saudi Arabia lift its blockade.` Today's own section, written
+  without pointers, is refused by `write-stitch` naming both picks; with the two
+  lines pasted in it stitches clean.
+- Ten new checks in `test-bookkeeping-v4.py`, beside the update's other write
+  tests. Suite unchanged otherwise: the same 3 failures in bookkeeping and 2 in
+  prompts, all pre-existing and unrelated.
+
+**Not done**
+- No full pipeline was run: the X half is down on an expired `claude -p` login,
+  which is why both of the last two runs carry `x: failed`.
+- The pointer has never been through a real writer. The next live afternoon is
+  the test of whether it copies the heading or tidies it.

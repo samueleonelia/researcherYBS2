@@ -1974,11 +1974,18 @@ def evening_written(tmp, env, afternoon=True):
     return rd
 
 
-def section_file(rd, name, heading, stories):
-    """One writer's reply, written by hand: a heading, then its stories."""
+def section_file(rd, name, heading, stories, follows=None):
+    """One writer's reply, written by hand: a heading, then its stories.
+
+    `follows` gives the pointer a story carries directly under its heading,
+    by article id. Only the update's moved section has one.
+    """
     out = [f"## {heading}", ""]
     for head, aid in stories:
-        out += [f"### {head}", "", "The story.", "",
+        out.append(f"### {head}")
+        if (follows or {}).get(aid):
+            out.append(f"**Follows:** {follows[aid]}")
+        out += ["", "The story.", "",
                 f"1. [headline of {aid}](https://example.com/{aid}) — Guardian", ""]
     (rd / f"brief-{name}.md").write_text("\n".join(out), encoding="utf-8")
 
@@ -2074,6 +2081,103 @@ def test_write_afternoon():
               and "**Updates:** the morning brief of 10:00" in text, repr(text))
         check("with the two lines code still fills after it",
               text.rstrip().endswith("{{X_SECTION}}\n\n{{AUDIT_LINE}}"), repr(text[-60:]))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def base_brief(base, headings):
+    """The brief a morning run really published, over the articles it ran.
+
+    A morning story is found by the URL under its heading, so a test that wants
+    a pointer resolved has to give the base both halves: the headings that brief
+    printed, and an articles.json whose ids sit on the URLs beneath them.
+    `headings` maps a base pick's id to the heading its story ran under.
+    """
+    arts = [{"id": aid, "source": "Guardian",
+             "url": f"https://www.theguardian.com/m/{aid}", "title": "t",
+             "description": "d", "category": "world", "published": now_iso(-6),
+             "also_in": []} for aid in headings]
+    write(base / "articles.json", {"articles": arts})
+    out = ["**Date:** the morning", "", "## What leads", ""]
+    for a in arts:
+        out += [f"### {headings[a['id']]}", "", "The story as it stood at ten.", "",
+                f"1. [t]({a['url']}) — Guardian", ""]
+    (base / "brief.md").write_text("\n".join(out), encoding="utf-8")
+
+
+def test_write_afternoon_follows():
+    """What a moved story says about the morning story it carries forward.
+
+    The update is read beside the morning brief, so the pointer is that brief's
+    own heading and nothing else: not the article's headline, which that brief
+    never printed, and not a rewording of either. One of the two headings here
+    is numbered, because the morning numbers its leads and the number is part of
+    what he scans for. Everything runs inside a runs folder of its own, named by
+    YBS_RUNS_DIR.
+    """
+    print("\nwrite: the morning story each moved story follows")
+    tmp = Path(tempfile.mkdtemp(prefix="ybs-runs-"))
+    env = {"YBS_RUNS_DIR": str(tmp)}
+    try:
+        rd = afternoon_written(tmp, env)
+        base = tmp / "2026-x_morning_100000"
+        # a001 follows m:a102, a002 follows m:a101, and the morning ran a101 first.
+        heads = {"a101": "2. What the morning led on.",
+                 "a102": "What the morning had under a topic."}
+        stories = [("Confirmation - Something was confirmed.", "a002"),
+                   ("Development - Something developed.", "a001")]
+        pointers = {"a002": heads["a101"], "a001": heads["a102"]}
+        section_file(rd, "new", "New since the morning",
+                     [("Something the morning did not have.", "a003")])
+
+        # 1. No brief to read. The pointer falls back to the note's headline and
+        #    nothing is asked of the writer that code could not work out itself.
+        for case, unreadable in (("no morning brief at all", None),
+                                 ("a morning brief with no story in it",
+                                  "not a brief, and no heading in it\n")):
+            if unreadable:
+                (base / "brief.md").write_text(unreadable, encoding="utf-8")
+            out, _ = run("fill", "write", "--run", rd, "--section", "moved", expect=0)
+            check(f"with {case}, the note's headline stands in",
+                  "THE MORNING HAD: the morning's story a101"
+                  in Path(out["file"]).read_text())
+            section_file(rd, "moved", "What moved", stories)
+            out, _ = run("write-stitch", "--run", rd, expect=0)
+            check(f"and {case} asks no story for a pointer",
+                  out["ok"] is True, str(out.get("problems")))
+
+        # 2. The brief the morning really published.
+        base_brief(base, heads)
+        out, _ = run("fill", "write", "--run", rd, "--section", "moved", expect=0)
+        text = Path(out["file"]).read_text()
+        check("a moved story is handed the heading that brief ran, number and all",
+              all(f"THE MORNING HAD: {h}" in text for h in heads.values()),
+              text[text.find("THE MORNING HAD"):][:200])
+        check("and not the headline of the article, which the brief never printed",
+              "THE MORNING HAD: the morning's story" not in text)
+
+        section_file(rd, "moved", "What moved", stories)
+        out, _ = run("write-stitch", "--run", rd, expect=1)
+        check("a moved story that names no morning story is refused",
+              has(out, "a002 does not carry its '**Follows:**' line")
+              and has(out, heads["a101"]), str(out.get("problems")))
+
+        section_file(rd, "moved", "What moved", stories,
+                     {**pointers, "a002": "What the morning led on"})
+        out, _ = run("write-stitch", "--run", rd, expect=1)
+        check("and so is one that reworded the heading instead of copying it",
+              has(out, "a002 does not carry") and not has(out, "a001 does not carry"),
+              str(out.get("problems")))
+
+        section_file(rd, "moved", "What moved", stories, pointers)
+        out, _ = run("write-stitch", "--run", rd, expect=0)
+        brief = (rd / "brief.md").read_text()
+        check("a section that copied both headings is joined into the brief",
+              out["ok"] is True, str(out.get("problems")))
+        check("and the pointer sits in it under the heading it belongs to",
+              f"### Confirmation - Something was confirmed.\n"
+              f"**Follows:** {heads['a101']}\n" in brief,
+              brief[brief.find("## What moved"):][:200])
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -2908,6 +3012,7 @@ def main():
         test_counterpoint_fill(rd)
         test_write_sections(rd)
         test_write_afternoon()
+        test_write_afternoon_follows()
         test_write_evening()
         test_write_stitch_morning_still_dies()
         test_audit_afternoon()

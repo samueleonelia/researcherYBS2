@@ -212,7 +212,7 @@ step_project() {
 step_tests() {
   root="$1"
   say ""
-  say "TESTS (4 failures are known and expected)"
+  say "TESTS (3 failures are known and expected)"
   have python3 || { say "  skipped: python3 is missing"; return 1; }
   total=0
   for t in test-bookkeeping-v4 test-prompts-v4 test-shows-v4; do
@@ -223,10 +223,10 @@ step_tests() {
     if [ "$n" -eq 0 ]; then say "  ok       $t"; else say "  $n failed $t"; fi
   done
   say ""
-  if [ "$total" -eq 4 ]; then
-    say "  $total failures, exactly the 4 known ones. Nothing new is broken."
+  if [ "$total" -eq 3 ]; then
+    say "  $total failures, exactly the 3 known ones. Nothing new is broken."
   else
-    say "  $total failures, expected 4. Tell Samuele before running a brief."
+    say "  $total failures, expected 3. Tell Samuele before running a brief."
   fi
 }
 

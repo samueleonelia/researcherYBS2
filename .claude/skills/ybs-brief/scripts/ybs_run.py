@@ -1035,17 +1035,70 @@ def base_rank(run_dir: Path, run: dict) -> dict:
             for it in items for a in (it.get("articles") or [])}
 
 
-def base_line(run: dict, aid: str) -> list:
+# A story of a written brief opens with one of these: `###` for a story of a
+# top-level section, `####` for one under a secondary topic. Both are headings a
+# reader scans for, so the pointer takes whichever the story really carries.
+BRIEF_STORY_HEADING = re.compile(r"^#{3,4} ")
+
+# A link as a written brief carries it, in a source line's `](url)` or on its
+# own. The closing bracket of the link is not part of it.
+BRIEF_URL = re.compile(r"https?://[^\s)>\]]+")
+
+
+def base_pointers(run_dir: Path, run: dict) -> dict:
+    """The heading the brief being updated ran for the story each pick follows.
+
+    An update that only paraphrases what the morning said sends him looking for
+    a story he cannot find. The heading is the one text he can scan that brief
+    for, so it is what the writer is given and what the stitch checks, and it
+    comes out of the written brief rather than out of a note: the note carries
+    the article's own headline, which that brief never printed.
+
+    A story of that brief is where its URL is, the same way this run's stories
+    are found in a section, so every URL under a heading of `brief.md` names
+    that heading for the article it belongs to; a cluster's several URLs all
+    name the one heading their story ran under, which is right. A pick whose
+    heading cannot be found this way is simply absent here, and the pointer
+    falls back to the note's headline rather than being invented.
+    """
+    base_dir = base_run_dir(run)
+    brief = base_dir / "brief.md"
+    text = brief.read_text(encoding="utf-8") if brief.exists() else ""
+    of_url = {r["url"]: r["id"] for r in
+              ((load_json(base_dir / "articles.json") or {}).get("articles") or [])
+              if r.get("url")}
+    heads, current = {}, ""
+    for line in text.splitlines():
+        if BRIEF_STORY_HEADING.match(line):
+            current = line.lstrip("#").strip()
+            continue
+        for url in BRIEF_URL.findall(line):
+            if current and url in of_url:
+                heads.setdefault(of_url[url], current)
+    items = (load_json(run_dir / "items" / "plan.json") or {}).get("items") or []
+    out = {}
+    for it in items:
+        m = BASE_ID.match(it.get("follows") or "")
+        head = heads.get(m.group(1)) if m else None
+        if head:
+            out.update({a: head for a in (it.get("articles") or [])})
+    return out
+
+
+def base_line(run: dict, aid: str, heading: str) -> list:
     """The line the brief being updated ran for one of its own stories.
 
-    Three fields and no more: what it said happened, and what was new in it
-    then. That is the thing the update's writer measures the afternoon note
-    against, and everything else in the base note would only invite a retelling.
+    Three fields and no more: the heading that brief gave the story, what it
+    said happened, and what was new in it then. The heading is the pointer the
+    update prints under its own heading, and where `base_pointers` could not
+    find one the article's headline stands in, so a brief nobody can read costs
+    a pointer and never a run. Everything else in the base note would only
+    invite a retelling.
     """
     base_dir = base_run_dir(run)
     note = base_dir / "notes" / f"{aid}.md"
     text = note.read_text(encoding="utf-8") if note.exists() else ""
-    head = re.sub(r"\s+", " ", note_field(text, "HEADLINE")).strip()
+    head = heading or re.sub(r"\s+", " ", note_field(text, "HEADLINE")).strip()
     out = [f"THE MORNING HAD: {head or '-'}"]
     for field in ("WHAT HAPPENED", "WHAT'S NEW"):
         out.append(f"{field}: {note_field(text, field) or '-'}")
@@ -1071,6 +1124,7 @@ def picks_block(run_dir: Path, run: dict, tag: str = None) -> str:
     if moved:
         rank = base_rank(run_dir, run)
         picks = sorted(picks, key=lambda p: rank.get(p["id"], len(rank)))
+        heads = base_pointers(run_dir, run)      # once: the base brief is one file
     out = []
     for p in picks:
         note = run_dir / "notes" / f"{p['id']}.md"
@@ -1095,7 +1149,7 @@ def picks_block(run_dir: Path, run: dict, tag: str = None) -> str:
             follows = item_of.get(p["id"], {}).get("follows") or ""
             m = BASE_ID.match(follows) if follows else None
             if m:
-                out += base_line(run, m.group(1))
+                out += base_line(run, m.group(1), heads.get(p["id"], ""))
             out.append("THE AFTERNOON'S NOTE:")
         out.append(note.read_text(encoding="utf-8").strip())
         out.append("")
@@ -1240,10 +1294,13 @@ WRITER_COUNT = {1: "One writer is", 2: "Two writers are", 3: "Three writers are"
 MOVED_JOB = [
     "- These stories reach you in the order the brief being updated ran them.",
     "  Keep that order: it is the order he read them in this morning.",
-    "- Each one arrives twice. `THE MORNING HAD:` is the line that brief carried,",
-    "  and under it is the afternoon's own note.",
+    "- Each one arrives twice. `THE MORNING HAD:` is the heading that brief gave",
+    "  the story, and under it is the afternoon's own note.",
     "- The heading opens with the pick's kind, capitalised, then ` - `, then the",
     "  headline sentence.",
+    "- Straight under your heading goes `**Follows:** ` and then the text you were",
+    "  given as `THE MORNING HAD:`, character for character. Do not reword it, do",
+    "  not shorten it, do not drop the number it opens with.",
     "- Write the story in this order: what changed since the morning, in one",
     "  sentence; what that does to the story he already has; what is still not",
     "  established.",
@@ -3244,6 +3301,44 @@ def story_order(text: str, arts: dict, ordered: list) -> list:
     return [aid for _, aid in at]
 
 
+# How a story of the update's second section names the story it develops. The
+# shape is the template's; this is the one copy code matches against.
+FOLLOWS = "**Follows:**"
+
+
+def follows_problems(text: str, name: str, section: str, ordered: list,
+                     arts: dict, heads: dict) -> list:
+    """Every story of a section that does not name the story it carries forward.
+
+    A story is where its URL is, as it is for the order, so a story runs from
+    the end of the one before it to its own URL, and the pointer under its
+    heading falls inside it. The comparison ignores how the line was wrapped
+    and nothing else: the point of the pointer is that it is the base brief's
+    heading word for word, so a story that says it another way is as lost as
+    one that says nothing. A pick whose heading code itself could not find is
+    not asked for one.
+    """
+    at = sorted((text.find((arts.get(aid) or {}).get("url") or ""), aid)
+                for aid in ordered)
+    out, start = [], 0
+    for pos, aid in at:
+        if pos < 0:
+            continue                  # its missing URL is already a problem
+        block, start = text[start:pos], pos
+        want = heads.get(aid)
+        if not want:
+            continue
+        def flat(s):
+            return re.sub(r"\s+", " ", s).strip()
+        got = [flat(l.split(FOLLOWS, 1)[1]) for l in block.splitlines()
+               if l.strip().startswith(FOLLOWS)]
+        if got == [flat(want)]:
+            continue
+        out.append(f"{section}: {aid} does not carry its '{FOLLOWS}' line in "
+                   f"{name}; the brief being updated ran it as: {want}")
+    return out
+
+
 def cmd_write_stitch(args):
     """Join the section files into brief.md, in the template's order.
 
@@ -3307,9 +3402,13 @@ def cmd_write_stitch(args):
                 problems.append(f"{section}: {p['id']} is picked for it but its "
                                 f"URL is not in {f.name}: {url}")
         if run.get("slot") == "afternoon" and section == "moved":
-            # Two things the update's second section alone must get right: every
-            # story says how it moved, and they run in the order he read them in.
+            # Three things the update's second section alone must get right:
+            # every story says how it moved, each names the morning story it
+            # develops, and they run in the order he read them in.
             problems += heading_problems(text, f.name, section, KIND_HEADING, KINDS)
+            problems += follows_problems(text, f.name, section,
+                                         [p["id"] for p in tagged], arts,
+                                         base_pointers(run_dir, run))
             rank = base_rank(run_dir, run)
             wrong = story_order(text, arts, [
                 p["id"] for p in

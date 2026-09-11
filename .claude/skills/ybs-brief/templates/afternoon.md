@@ -18,6 +18,7 @@ not restated here: `morning.md` says it, and this file points at it.
 ## What moved
 
 ### <Kind> - <Headline sentence.>
+**Follows:** <the morning brief's heading for this story, verbatim>
 
 <what changed since the morning · what that does to the morning's story · what is still not established>
 
@@ -35,6 +36,11 @@ not restated here: `morning.md` says it, and this file points at it.
   **in the order the morning brief ran them**, which code fixes before the
   writer sees them; the heading's first word is the pick's kind (Development,
   Confirmation, Reversal, Correction), then ` - `, then the headline sentence.
+- Under What moved, the line directly beneath a heading is `**Follows:**` and
+  then the morning brief's own heading for the story being carried forward,
+  copied letter for letter. It is what he scans that brief for, so a heading put
+  another way is no pointer at all, and `write-stitch` refuses one. A story under
+  New since the morning follows nothing and carries no such line.
 - Together the two sections hold at most `{{settings.update_picks_max}}`
   stories. A story's heading, body and sources take the three-part form
   `morning.md` gives, and nothing here repeats it.

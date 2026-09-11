@@ -1,15 +1,34 @@
 {
   "shows": [
     {
+      "id": "beJeQamHXHg",
+      "title": "Iran; Canada; Netanyahu; UK vs Israel; Mertz vs AfD; DSA; AI; Tucker; Achievement | Yaron Brook Show",
+      "url": "https://www.youtube.com/watch?v=beJeQamHXHg",
+      "date": "2026-09-10",
+      "file": "transcripts/beJeQamHXHg.md",
+      "words": 14631,
+      "excluded": false,
+      "digest": "digests/beJeQamHXHg.md"
+    },
+    {
+      "id": "9JTdXX9LAyo",
+      "title": "Netanyahu & 10/7; Houtis; Trade War; AI; Parenthood; PISA; Achievements | Yaron Brook Show",
+      "url": "https://www.youtube.com/watch?v=9JTdXX9LAyo",
+      "date": "2026-09-09",
+      "file": "transcripts/9JTdXX9LAyo.md",
+      "words": 12633,
+      "excluded": false,
+      "digest": "digests/9JTdXX9LAyo.md"
+    },
+    {
       "id": "WRyx6p9ttZE",
       "title": "Labor Day; Afd; 9/11; Civilian Casualties; Gas Prices; VW; Iran; Achievements | Yaron Brook Show",
       "url": "https://www.youtube.com/watch?v=WRyx6p9ttZE",
       "date": "2026-09-07",
-      "file": "",
-      "words": 0,
+      "file": "transcripts/WRyx6p9ttZE.md",
+      "words": 14366,
       "excluded": false,
-      "digest": "",
-      "no_transcript": "2026-09-07"
+      "digest": "digests/WRyx6p9ttZE.md"
     },
     {
       "id": "HgG_a5U8Efk",
@@ -292,6 +311,186 @@
       "digest": ""
     },
     {
+      "id": "lgOwohqyPYQ",
+      "title": "ChineseAI; NATO; Ukraine; Iran; Freedom Fuel; Woke Act; Skilled Jobs; Achievement | Yaron Brook Show",
+      "url": "https://www.youtube.com/watch?v=lgOwohqyPYQ",
+      "date": "2026-07-09",
+      "file": "transcripts/lgOwohqyPYQ.md",
+      "words": 14737,
+      "excluded": false,
+      "digest": ""
+    },
+    {
+      "id": "o-9VSBMr3p4",
+      "title": "OpenAI; Deficit; Yen; Oil; Iran; Muslim Brotherhood; Cuba; Le Pen; Achievement | Yaron Brook Show",
+      "url": "https://www.youtube.com/watch?v=o-9VSBMr3p4",
+      "date": "2026-07-08",
+      "file": "transcripts/o-9VSBMr3p4.md",
+      "words": 18002,
+      "excluded": false,
+      "digest": ""
+    },
+    {
+      "id": "LleEn2jILBo",
+      "title": "NATO-Ukraine, Turkey; Weapons; FIFA; Losers; Gov Equity; Immigration; Achievement | Yaron Brook Show",
+      "url": "https://www.youtube.com/watch?v=LleEn2jILBo",
+      "date": "2026-07-07",
+      "file": "transcripts/LleEn2jILBo.md",
+      "words": 15865,
+      "excluded": false,
+      "digest": ""
+    },
+    {
+      "id": "Vakv4lZ54Uc",
+      "title": "4th of July -- What's to Celebrate? | Yaron Brook Show",
+      "url": "https://www.youtube.com/watch?v=Vakv4lZ54Uc",
+      "date": "2026-07-05",
+      "file": "transcripts/Vakv4lZ54Uc.md",
+      "words": 12264,
+      "excluded": false,
+      "digest": ""
+    },
+    {
+      "id": "AqIL97S50eA",
+      "title": "DSA; Trump's Corruption; SCOTUS; Venezuela; Iran; Germany; CA Crime; Achievement | Yaron Brook Show",
+      "url": "https://www.youtube.com/watch?v=AqIL97S50eA",
+      "date": "2026-07-04",
+      "file": "transcripts/AqIL97S50eA.md",
+      "words": 17842,
+      "excluded": false,
+      "digest": ""
+    },
+    {
+      "id": "Ow5evTvbHyM",
+      "title": "Live from Israel | Yaron Brook Show",
+      "url": "https://www.youtube.com/watch?v=Ow5evTvbHyM",
+      "date": "2026-06-26",
+      "file": "transcripts/Ow5evTvbHyM.md",
+      "words": 14510,
+      "excluded": false,
+      "digest": ""
+    },
+    {
+      "id": "Zfd5zvhYJvw",
+      "title": "Capitalism, Productiveness and Artificial Intelligence | Yaron Brook Show",
+      "url": "https://www.youtube.com/watch?v=Zfd5zvhYJvw",
+      "date": "2026-06-21",
+      "file": "transcripts/Zfd5zvhYJvw.md",
+      "words": 12989,
+      "excluded": false,
+      "digest": ""
+    },
+    {
+      "id": "y-199mLywqg",
+      "title": "Lebanon & Iran Talks; Anthropic/AI; Meloni; Reflecting Pool; Cuba; Achievement | Yaron Brook Show",
+      "url": "https://www.youtube.com/watch?v=y-199mLywqg",
+      "date": "2026-06-20",
+      "file": "transcripts/y-199mLywqg.md",
+      "words": 12860,
+      "excluded": false,
+      "digest": ""
+    },
+    {
+      "id": "knuMfaO1oTQ",
+      "title": "What Now With Iran?; Vance; Moscow; USMCA; Reading; Obama Library; Achievement | Yaron Brook Show",
+      "url": "https://www.youtube.com/watch?v=knuMfaO1oTQ",
+      "date": "2026-06-19",
+      "file": "transcripts/knuMfaO1oTQ.md",
+      "words": 14243,
+      "excluded": false,
+      "digest": ""
+    },
+    {
+      "id": "Ew2ljnlJXxo",
+      "title": "Trump on Iran Deal; Hormuz: UFC Plot; Fed; DNI; Huawei; China; Achievement | Yaron Brook Show",
+      "url": "https://www.youtube.com/watch?v=Ew2ljnlJXxo",
+      "date": "2026-06-17",
+      "file": "transcripts/Ew2ljnlJXxo.md",
+      "words": 16727,
+      "excluded": false,
+      "digest": ""
+    },
+    {
+      "id": "5mv_XBSI2WY",
+      "title": "MOU; SpaceX; CIA; Piker on Musk; Liberty Justice Center; Achievement | Yaron Brook Show",
+      "url": "https://www.youtube.com/watch?v=5mv_XBSI2WY",
+      "date": "2026-06-17",
+      "file": "transcripts/5mv_XBSI2WY.md",
+      "words": 12521,
+      "excluded": false,
+      "digest": ""
+    },
+    {
+      "id": "Ke5Uqxe5sJI",
+      "title": "Total Surrender; G7; Anthropic; Swiss Vote; Peru; Candace/Russia; Achievement | Yaron Brook Show",
+      "url": "https://www.youtube.com/watch?v=Ke5Uqxe5sJI",
+      "date": "2026-06-15",
+      "file": "transcripts/Ke5Uqxe5sJI.md",
+      "words": 17699,
+      "excluded": false,
+      "digest": ""
+    },
+    {
+      "id": "Jk9UbixOFJw",
+      "title": "From Wokeism to Destructivism | Yaron Brook Show",
+      "url": "https://www.youtube.com/watch?v=Jk9UbixOFJw",
+      "date": "2026-06-14",
+      "file": "transcripts/Jk9UbixOFJw.md",
+      "words": 15477,
+      "excluded": false,
+      "digest": ""
+    },
+    {
+      "id": "tpq4VtLdwtw",
+      "title": "First Trillionaire; Deal?; SS Bankrupt?; University Ranking; Crumble; Achievement | Yaron Brook Show",
+      "url": "https://www.youtube.com/watch?v=tpq4VtLdwtw",
+      "date": "2026-06-13",
+      "file": "transcripts/tpq4VtLdwtw.md",
+      "words": 14775,
+      "excluded": false,
+      "digest": ""
+    },
+    {
+      "id": "caVYhvrnsEs",
+      "title": "TACO; Rare Earth; Golden Age; FISA; DEGrowth; Milei; Achievement | Yaron Brook Show",
+      "url": "https://www.youtube.com/watch?v=caVYhvrnsEs",
+      "date": "2026-06-12",
+      "file": "transcripts/caVYhvrnsEs.md",
+      "words": 13819,
+      "excluded": false,
+      "digest": ""
+    },
+    {
+      "id": "nrmBXHQ5cSY",
+      "title": "Iran Update; Inflation; India; China; SpaceX IPO; Fable; Achievements | Yaron Brook Show",
+      "url": "https://www.youtube.com/watch?v=nrmBXHQ5cSY",
+      "date": "2026-06-11",
+      "file": "transcripts/nrmBXHQ5cSY.md",
+      "words": 12310,
+      "excluded": false,
+      "digest": ""
+    },
+    {
+      "id": "yjtNH2lCU7A",
+      "title": "Iran; USS Liberty; Nowak Reexamined; AI Populism; Unskilled; G. Wood; Achievement | Yaron Brook Show",
+      "url": "https://www.youtube.com/watch?v=yjtNH2lCU7A",
+      "date": "2026-06-10",
+      "file": "transcripts/yjtNH2lCU7A.md",
+      "words": 16294,
+      "excluded": false,
+      "digest": ""
+    },
+    {
+      "id": "eed4W668dMA",
+      "title": "Israel/Iran/Lebanon/Trump; Russia; Interview; H1B; N. Korea; Achievements | Yaron Brook Show",
+      "url": "https://www.youtube.com/watch?v=eed4W668dMA",
+      "date": "2026-06-09",
+      "file": "transcripts/eed4W668dMA.md",
+      "words": 15477,
+      "excluded": false,
+      "digest": ""
+    },
+    {
       "id": "yj_TGxhvL4g",
       "title": "Mao's China | Yaron & Nikos Dialogues",
       "url": "https://www.youtube.com/watch?v=yj_TGxhvL4g",
@@ -325,6 +524,26 @@
       "id": "XkWHWROlbxo",
       "title": "Ronald Reagan -- GOAT or Overhyped? | Yaron & Nikos Dialogues",
       "url": "https://www.youtube.com/watch?v=XkWHWROlbxo",
+      "date": "",
+      "file": "",
+      "words": 0,
+      "excluded": true,
+      "digest": ""
+    },
+    {
+      "id": "TgT960KLNg8",
+      "title": "In the mind of Curtis Yarvin | Yaron & Nikos Dialogues",
+      "url": "https://www.youtube.com/watch?v=TgT960KLNg8",
+      "date": "",
+      "file": "",
+      "words": 0,
+      "excluded": true,
+      "digest": ""
+    },
+    {
+      "id": "RIbjRxhZIKs",
+      "title": "Unholy Alliance -- The Left & Islamism | Yaron & Nikos Dialogues",
+      "url": "https://www.youtube.com/watch?v=RIbjRxhZIKs",
       "date": "",
       "file": "",
       "words": 0,

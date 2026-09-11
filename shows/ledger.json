@@ -2,129 +2,129 @@
   "themes": {
     "trump administration": {
       "name": "The Trump administration",
-      "angle": "judged on results and on economic literacy, not on which team it plays for",
+      "angle": "judged on results, not on sides: economically illiterate, cronyist, and worst of all on foreign policy",
       "misses": 0,
-      "last_seen": "2026-09-07"
+      "last_seen": "2026-09-11"
     },
     "immigration": {
       "name": "Immigration, especially skilled immigration",
       "angle": "immigrants found the companies; the fixed-number-of-jobs premise is false",
-      "misses": 0,
+      "misses": 1,
       "last_seen": "2026-09-07"
     },
     "free speech": {
       "name": "Free speech, cancellation and the sanction of evil",
       "angle": "cancel for real reasons, never for trivial ones, and never lend a bad actor your platform",
-      "misses": 0,
+      "misses": 1,
       "last_seen": "2026-09-07"
     },
     "capitalism versus the mixed economy": {
       "name": "Capitalism versus the mixed economy",
-      "angle": "we have never had capitalism, so the problems people blame on markets are the government's",
-      "misses": 1,
-      "last_seen": "2026-09-05"
+      "angle": "we have never had capitalism, so every problem blamed on markets traces to a specific government policy",
+      "misses": 0,
+      "last_seen": "2026-09-11"
     },
     "israel antisemitism and the double standard": {
-      "name": "Israel, antisemitism and the double standard",
-      "angle": "criticism of Israel is measured against how Russia and Iran are treated for the same acts",
-      "misses": 1,
-      "last_seen": "2026-09-05"
+      "name": "Israel, its wars, and the double standard",
+      "angle": "self-defense with the moral blame on the aggressor, while Israel alone is asked to risk its own soldiers",
+      "misses": 0,
+      "last_seen": "2026-09-11"
     },
     "individual and parental responsibility versus corporate liability": {
       "name": "Personal responsibility versus corporate liability",
       "angle": "parents, not platforms; no liability without force or fraud",
-      "misses": 0,
+      "misses": 1,
       "last_seen": "2026-09-07"
-    },
-    "ideas drive history": {
-      "name": "Ideas drive history",
-      "angle": "Marx is the unacknowledged foundation of almost all talk about capitalism, and bad philosophy travels from journals to podcasts to policy.",
-      "misses": 2,
-      "last_seen": "2026-08-30"
     },
     "technology and human achievement": {
-      "name": "Technology and human achievement",
-      "angle": "presumptively good, celebrated in a standing segment, and opposition to it is fear that has not been earned",
+      "name": "Human achievement and technology",
+      "angle": "closes almost every show with progress stories, because awe at material progress is the antidote to doom",
       "misses": 0,
-      "last_seen": "2026-09-07"
-    },
-    "spending entitlements and the fiscal arithmetic": {
-      "name": "Spending, entitlements and the fiscal arithmetic",
-      "angle": "the deficit is a spending problem, taxes cannot close it, and the gerontocracy transfers wealth from the young because old people vote.",
-      "misses": 2,
-      "last_seen": "2026-08-30"
+      "last_seen": "2026-09-11"
     },
     "free trade": {
-      "name": "Free trade",
-      "angle": "a tariff is a tax paid at home, and unilateral free trade benefits whoever adopts it no matter what the other side does.",
-      "misses": 2,
-      "last_seen": "2026-08-30"
-    },
-    "nobody is defending capitalism": {
-      "name": "Nobody is defending capitalism",
-      "angle": "the DSA left and the Vance/Tucker right are both statist, so the moral case for markets goes unmade on every platform that matters.",
-      "misses": 2,
-      "last_seen": "2026-08-30"
-    },
-    "art culture and objectivism": {
-      "name": "Art, culture and Objectivism",
-      "angle": "he judges a work by whether reason and human agency drive it, and notes how completely Rand is left out of serious treatments of capitalism.",
-      "misses": 2,
-      "last_seen": "2026-08-30"
+      "name": "Free trade and tariffs",
+      "angle": "trade is voluntary and both sides gain; unilateral free trade pays off no matter what the other side does",
+      "misses": 0,
+      "last_seen": "2026-09-11"
     },
     "government intervention as cronyism and central planning": {
       "name": "Government intervention as cronyism and central planning",
       "angle": "tariffs, subsidies, equity stakes and liability threats serve pressure groups, never a principle",
-      "misses": 1,
+      "misses": 2,
       "last_seen": "2026-09-05"
     },
     "tribalism and indifference to truth on left and right": {
       "name": "Tribalism and indifference to truth on left and right",
       "angle": "woke never went away, it changed target, and the same anti-truth epistemology now runs the right",
-      "misses": 1,
+      "misses": 2,
       "last_seen": "2026-09-05"
     },
     "altruism versus rational self interest": {
       "name": "Altruism versus rational self-interest",
       "angle": "the moral premise a culture accepts is what finally explains its foreign policy and its politics",
-      "misses": 1,
+      "misses": 2,
       "last_seen": "2026-09-05"
     },
     "islamic totalitarianism and the refusal to name the enemy": {
       "name": "Islamic totalitarianism and the refusal to name the enemy",
       "angle": "twenty-five years of not naming it is why 1979, 9/11, Gaza and the current war are one story",
-      "misses": 1,
+      "misses": 2,
       "last_seen": "2026-09-05"
     },
     "capitalism as the undefended ideal": {
       "name": "Capitalism as the undefended ideal",
       "angle": "we have never had it, only a mixed economy drifting toward statism, and nobody is making the moral case",
-      "misses": 0,
+      "misses": 1,
       "last_seen": "2026-09-07"
     },
     "government intervention in the economy": {
       "name": "Government intervention in the economy",
       "angle": "separation of state and economics; tariffs, subsidies, price-setting and equity stakes are all central planning",
-      "misses": 0,
+      "misses": 1,
       "last_seen": "2026-09-07"
     },
     "israel gaza and islamic totalitarianism": {
       "name": "Israel, Gaza and Islamic totalitarianism",
       "angle": "name the ideology, hold Israel to the same standard as everyone else, and stop the double standard",
-      "misses": 0,
+      "misses": 1,
       "last_seen": "2026-09-07"
     },
     "altruism as the corrosive moral premise": {
       "name": "Altruism as the corrosive moral premise",
       "angle": "it is what keeps a country from asserting its own self-interest, in foreign policy and in economics alike",
-      "misses": 0,
+      "misses": 1,
       "last_seen": "2026-09-07"
     },
     "entitlements and the transfer from young to old": {
       "name": "Entitlements and the transfer from young to old",
       "angle": "the deficit is a spending problem; taxing the rich cannot touch the arithmetic",
-      "misses": 0,
+      "misses": 1,
       "last_seen": "2026-09-07"
+    },
+    "altruism as the hidden driver of politics": {
+      "name": "Altruism as the hidden driver of politics",
+      "angle": "self-sacrifice is what makes nations unwilling to defend themselves and governments willing to spend on anything",
+      "misses": 0,
+      "last_seen": "2026-09-11"
+    },
+    "islamic totalitarianism the west will not name": {
+      "name": "Islamic totalitarianism the West will not name",
+      "angle": "the unbroken line from 1979 to 9/11 to October 7 to today's Iran war, evaded for 25 years",
+      "misses": 0,
+      "last_seen": "2026-09-11"
+    },
+    "tribal anti truth thinking on left and right": {
+      "name": "Tribal, anti-truth thinking on left and right",
+      "angle": "woke never died, it changed target; the same contempt for facts now runs through both camps",
+      "misses": 0,
+      "last_seen": "2026-09-11"
+    },
+    "government monopolies and what they produce": {
+      "name": "Government monopolies and what they produce",
+      "angle": "schools, mail, water, central banks: the same failure everywhere, and privatization is the answer",
+      "misses": 0,
+      "last_seen": "2026-09-11"
     }
   }
 }

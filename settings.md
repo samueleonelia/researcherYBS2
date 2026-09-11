@@ -170,5 +170,5 @@ step is the one that grows with the archive.
 | Step | Model | Effort | Agents per run |
 |---|---|---|---|
 | list | haiku | low | 1 |
-| digest | sonnet | medium | one per show among the newest `shows_for_profile` that has no digest yet |
+| digest | opus | medium | one per show among the newest `shows_for_profile` that has no digest yet |
 | profile | opus | high | 1 |

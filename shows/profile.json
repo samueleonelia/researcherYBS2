@@ -2,217 +2,211 @@
   "storylines": [
     {
       "rank": 1,
-      "name": "The Iran war: Hormuz half-open, sanctions as bluster, no exit strategy",
+      "name": "The Iran war: Hormuz, oil above $100, and no US exit strategy",
       "shows": 11,
-      "note": "winnable if fought seriously, but Trump has no plan and sanctions alone will never break the regime"
+      "note": "winnable if fought seriously, but Trump hits tankers instead of missile launchers and has no idea what victory would look like"
     },
     {
       "rank": 2,
-      "name": "$40 trillion debt and the long end of the bond market",
-      "shows": 8,
-      "note": "rising 10- and 30-year yields are the market pricing default risk, and only spending cuts fix it"
+      "name": "Trump's tariff war on Canada, now an outright import ban",
+      "shows": 7,
+      "note": "a tax on Americans dressed as toughness; Canada should have gone to zero tariffs instead of retaliating"
     },
     {
       "rank": 3,
-      "name": "Trump's tariff war on Canada and China",
-      "shows": 7,
-      "note": "a tax Americans pay, failing on every stated goal, and Canada should just go to zero unilaterally"
+      "name": "$40 trillion debt, rising long yields, and the entitlement squeeze",
+      "shows": 6,
+      "note": "bond vigilantes are pricing default risk; only spending cuts fix it and nobody will cut"
     },
     {
       "rank": 4,
-      "name": "The 'Answering Capitalism's Critics' series (Benn Jordan, Cordelli, Hasan Piker)",
-      "shows": 3,
-      "note": "viral critics never define capitalism and always leave the entrepreneur out of the story"
+      "name": "AI data centers as the thing both parties now attack",
+      "shows": 6,
+      "note": "governors and AGs compete to restrict them while AI leaders feed the fear by begging to be regulated"
     },
     {
       "rank": 5,
-      "name": "Military decline under Hegseth: munitions shortfalls, Navy catapults, killed drone units",
-      "shows": 6,
-      "note": "unqualified appointees are reverting the military to 'basics' while ignoring the drone and AI lessons of Ukraine"
+      "name": "Russia pounding Ukraine while its air defense runs out",
+      "shows": 5,
+      "note": "Patriots are gone, Trump calls Russia an ally, and nobody condemns strikes they would condemn Israel for"
     },
     {
       "rank": 6,
-      "name": "Russia pounding Ukraine while Ukraine runs out of air defense",
-      "shows": 6,
-      "note": "let Ukraine build its own Patriots instead of protecting Raytheon and Lockheed from competition"
+      "name": "Hegseth's Pentagon and the self-inflicted decline of US forces",
+      "shows": 3,
+      "note": "steam catapults, a disbanded drone battalion, a carrier pulled from the Pacific: unqualified appointees ignoring Ukraine's lessons"
     },
     {
       "rank": 7,
-      "name": "AI data centers as the thing both parties now run against",
-      "shows": 5,
-      "note": "the least wanted building in America, and the AI companies themselves fed the fear instead of making the case"
+      "name": "Answering Capitalism's Critics, the new weekly rebuttal series",
+      "shows": 3,
+      "note": "viral non-political critics reach millions unchallenged, so he takes them line by line"
     },
     {
       "rank": 8,
-      "name": "Trump courting dictators and treating allies as adversaries",
-      "shows": 5,
-      "note": "he says he underestimated how bad this would be; foreign policy is now the administration's worst area"
+      "name": "DSA and the openly socialist left winning primaries",
+      "shows": 3,
+      "note": "more honest than mainstream Democrats about abolishing capitalism, and closer to East Germany than to Scandinavia"
     },
     {
       "rank": 9,
-      "name": "DSA candidates winning Democratic primaries; Mamdani's New York",
-      "shows": 5,
-      "note": "more honest than mainstream Democrats about abolishing capitalism, and closer to East Germany than Scandinavia"
-    },
-    {
-      "rank": 10,
-      "name": "Antisemitism and tribalism on the right: Tucker, Fuentes, campus and primary incidents",
-      "shows": 4,
-      "note": "the mirror image of left identity politics he predicted in 2015, and engaging with it is itself a sanction"
-    },
-    {
-      "rank": 11,
-      "name": "Government equity stakes in private companies",
-      "shows": 3,
-      "note": "cronyism with no congressional vote, and a tool the next administration will happily use for ESG"
+      "name": "Netanyahu, the pre-October 7 warnings, and the coming Israeli election",
+      "shows": 2,
+      "note": "not a conspiracy, arrogance: he ignored warnings, owns the failure after 15 years, and must lose"
     }
   ],
   "themes": [
     {
       "rank": 1,
-      "name": "Capitalism as the undefended ideal",
-      "angle": "we have never had it, only a mixed economy drifting toward statism, and nobody is making the moral case"
+      "name": "Capitalism versus the mixed economy",
+      "angle": "we have never had capitalism, so every problem blamed on markets traces to a specific government policy"
     },
     {
       "rank": 2,
       "name": "The Trump administration",
-      "angle": "judged on results and on economic literacy, not on which team it plays for"
+      "angle": "judged on results, not on sides: economically illiterate, cronyist, and worst of all on foreign policy"
     },
     {
       "rank": 3,
-      "name": "Government intervention in the economy",
-      "angle": "separation of state and economics; tariffs, subsidies, price-setting and equity stakes are all central planning"
+      "name": "Human achievement and technology",
+      "angle": "closes almost every show with progress stories, because awe at material progress is the antidote to doom"
     },
     {
       "rank": 4,
-      "name": "Technology and human achievement",
-      "angle": "presumptively good, celebrated in a standing segment, and opposition to it is fear that has not been earned"
+      "name": "Israel, its wars, and the double standard",
+      "angle": "self-defense with the moral blame on the aggressor, while Israel alone is asked to risk its own soldiers"
     },
     {
       "rank": 5,
-      "name": "Israel, Gaza and Islamic totalitarianism",
-      "angle": "name the ideology, hold Israel to the same standard as everyone else, and stop the double standard"
+      "name": "Altruism as the hidden driver of politics",
+      "angle": "self-sacrifice is what makes nations unwilling to defend themselves and governments willing to spend on anything"
     },
     {
       "rank": 6,
-      "name": "Altruism as the corrosive moral premise",
-      "angle": "it is what keeps a country from asserting its own self-interest, in foreign policy and in economics alike"
+      "name": "Islamic totalitarianism the West will not name",
+      "angle": "the unbroken line from 1979 to 9/11 to October 7 to today's Iran war, evaded for 25 years"
     },
     {
       "rank": 7,
-      "name": "Entitlements and the transfer from young to old",
-      "angle": "the deficit is a spending problem; taxing the rich cannot touch the arithmetic"
+      "name": "Free trade and tariffs",
+      "angle": "trade is voluntary and both sides gain; unilateral free trade pays off no matter what the other side does"
     },
     {
       "rank": 8,
-      "name": "Personal responsibility versus corporate liability",
-      "angle": "parents, not platforms; no liability without force or fraud"
+      "name": "Tribal, anti-truth thinking on left and right",
+      "angle": "woke never died, it changed target; the same contempt for facts now runs through both camps"
     },
     {
       "rank": 9,
-      "name": "Immigration, especially skilled immigration",
-      "angle": "immigrants found the companies; the fixed-number-of-jobs premise is false"
+      "name": "Government monopolies and what they produce",
+      "angle": "schools, mail, water, central banks: the same failure everywhere, and privatization is the answer"
     },
     {
-      "rank": 10,
-      "name": "Free speech, cancellation and the sanction of evil",
-      "angle": "cancel for real reasons, never for trivial ones, and never lend a bad actor your platform"
+      "name": "Altruism as the corrosive moral premise",
+      "angle": "it is what keeps a country from asserting its own self-interest, in foreign policy and in economics alike",
+      "fading": true,
+      "missed_runs": 1,
+      "rank": 10
     },
     {
-      "name": "Altruism versus rational self-interest",
-      "angle": "the moral premise a culture accepts is what finally explains its foreign policy and its politics",
+      "name": "Capitalism as the undefended ideal",
+      "angle": "we have never had it, only a mixed economy drifting toward statism, and nobody is making the moral case",
       "fading": true,
       "missed_runs": 1,
       "rank": 11
     },
     {
-      "name": "Capitalism versus the mixed economy",
-      "angle": "we have never had capitalism, so the problems people blame on markets are the government's",
+      "name": "Entitlements and the transfer from young to old",
+      "angle": "the deficit is a spending problem; taxing the rich cannot touch the arithmetic",
       "fading": true,
       "missed_runs": 1,
       "rank": 12
     },
     {
-      "name": "Government intervention as cronyism and central planning",
-      "angle": "tariffs, subsidies, equity stakes and liability threats serve pressure groups, never a principle",
+      "name": "Free speech, cancellation and the sanction of evil",
+      "angle": "cancel for real reasons, never for trivial ones, and never lend a bad actor your platform",
       "fading": true,
       "missed_runs": 1,
       "rank": 13
     },
     {
-      "name": "Islamic totalitarianism and the refusal to name the enemy",
-      "angle": "twenty-five years of not naming it is why 1979, 9/11, Gaza and the current war are one story",
+      "name": "Government intervention in the economy",
+      "angle": "separation of state and economics; tariffs, subsidies, price-setting and equity stakes are all central planning",
       "fading": true,
       "missed_runs": 1,
       "rank": 14
     },
     {
-      "name": "Israel, antisemitism and the double standard",
-      "angle": "criticism of Israel is measured against how Russia and Iran are treated for the same acts",
+      "name": "Immigration, especially skilled immigration",
+      "angle": "immigrants found the companies; the fixed-number-of-jobs premise is false",
       "fading": true,
       "missed_runs": 1,
       "rank": 15
     },
     {
-      "name": "Tribalism and indifference to truth on left and right",
-      "angle": "woke never went away, it changed target, and the same anti-truth epistemology now runs the right",
+      "name": "Israel, Gaza and Islamic totalitarianism",
+      "angle": "name the ideology, hold Israel to the same standard as everyone else, and stop the double standard",
       "fading": true,
       "missed_runs": 1,
       "rank": 16
     },
     {
-      "name": "Art, culture and Objectivism",
-      "angle": "he judges a work by whether reason and human agency drive it, and notes how completely Rand is left out of serious treatments of capitalism.",
+      "name": "Personal responsibility versus corporate liability",
+      "angle": "parents, not platforms; no liability without force or fraud",
       "fading": true,
-      "missed_runs": 2,
+      "missed_runs": 1,
       "rank": 17
     },
     {
-      "name": "Free trade",
-      "angle": "a tariff is a tax paid at home, and unilateral free trade benefits whoever adopts it no matter what the other side does.",
+      "name": "Altruism versus rational self-interest",
+      "angle": "the moral premise a culture accepts is what finally explains its foreign policy and its politics",
       "fading": true,
       "missed_runs": 2,
       "rank": 18
     },
     {
-      "name": "Ideas drive history",
-      "angle": "Marx is the unacknowledged foundation of almost all talk about capitalism, and bad philosophy travels from journals to podcasts to policy.",
+      "name": "Government intervention as cronyism and central planning",
+      "angle": "tariffs, subsidies, equity stakes and liability threats serve pressure groups, never a principle",
       "fading": true,
       "missed_runs": 2,
       "rank": 19
     },
     {
-      "name": "Nobody is defending capitalism",
-      "angle": "the DSA left and the Vance/Tucker right are both statist, so the moral case for markets goes unmade on every platform that matters.",
+      "name": "Islamic totalitarianism and the refusal to name the enemy",
+      "angle": "twenty-five years of not naming it is why 1979, 9/11, Gaza and the current war are one story",
       "fading": true,
       "missed_runs": 2,
       "rank": 20
     },
     {
-      "name": "Spending, entitlements and the fiscal arithmetic",
-      "angle": "the deficit is a spending problem, taxes cannot close it, and the gerontocracy transfers wealth from the young because old people vote.",
+      "name": "Tribalism and indifference to truth on left and right",
+      "angle": "woke never went away, it changed target, and the same anti-truth epistemology now runs the right",
       "fading": true,
       "missed_runs": 2,
       "rank": 21
     }
   ],
   "moves": {
-    "main": "take the problem people blame on capitalism and trace it to the specific government policy that caused it",
+    "main": "what people call a failure of capitalism is always a specific government policy, so name the policy",
     "secondary": [
       "economic power is a trade you can walk away from; political power is the gun",
-      "go look at what happened every time it was tried: the USSR, Mao, Venezuela",
-      "ask who bears the risk and who pays the wages before any profit exists",
-      "make the critic define his terms before arguing about them",
-      "any account of the economy that leaves out the entrepreneur is broken",
-      "hold the policy against its own stated goal and watch it contradict itself",
-      "count the unseen cost, not just the visible gain",
-      "apply the standard evenly to left and right, to Israel and to Russia",
-      "let prices carry the information; central planning has no feedback"
+      "go look at what happened every time it was tried: USSR, Mao, Venezuela",
+      "the aggressor owns every civilian death, and proportionality is an immoral standard",
+      "tit-for-tat never ends a war; defeat the enemy or stop pretending to fight",
+      "a tariff is a tax on your own people, and a trade deficit is not a loss",
+      "every critique of capitalism leaves out the entrepreneur, the one who bears the risk",
+      "it is incompetence and self-deception, not conspiracy",
+      "run the arithmetic first: show the numbers cannot work before arguing the morality",
+      "separation of state and economics, the same way we separated church and state",
+      "hold the right to exactly the standard you hold the left"
     ]
   },
-  "built_utc": "2026-09-07T20:49:57Z",
-  "built_local_date": "2026-09-07",
+  "built_utc": "2026-09-11T08:16:59Z",
+  "built_local_date": "2026-09-11",
   "shows": [
+    "beJeQamHXHg",
+    "9JTdXX9LAyo",
+    "WRyx6p9ttZE",
     "HgG_a5U8Efk",
     "6wl6hRa5nt0",
     "e3TlpsJo4K4",
@@ -224,14 +218,11 @@
     "66x869m8D6g",
     "_8rd9pSE4r0",
     "s8WTEaxNoGk",
-    "oj4Aj7jEJJA",
-    "9JkNes9Te6M",
-    "fVGsHVEbtSM",
-    "A4FIB98E2dU"
+    "oj4Aj7jEJJA"
   ],
   "range": {
-    "first": "2026-08-11",
-    "last": "2026-09-06",
+    "first": "2026-08-15",
+    "last": "2026-09-10",
     "undated": 0
   }
 }

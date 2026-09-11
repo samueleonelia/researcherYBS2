@@ -2,7 +2,7 @@
 """x_checks.py - the mechanical, JSON-only finish-line checks for one run.
 
 A run of the X pipeline passes when, in its fresh run folder
-`x-lists/runs/<date>-<time>/`, ten things are true. Seven of them can be
+`briefs/x/<date>-<time>/`, ten things are true. Seven of them can be
 decided from the files alone, and this module holds one function per each:
 checks 1, 2, 3, 4, 5, 8 and the mechanical slice of 10. Each function's own
 docstring states its check in full, so nothing here points elsewhere for the
@@ -29,8 +29,7 @@ a browser, calls an agent, or reads a tweet for meaning -- these are the
 checks a verifier or a test can run from the files alone. Nothing in a run
 calls this module: it is run by `x-lists/tests/` and by verifier agents.
 
-The window rule follows the orchestrator's ruling in
-`plans/interfaces.md` ("The window boundary" section, 2026-09-06):
+The window rule, as settled on 2026-09-06:
 
     Walk the timeline in order. The boundary is the position of the FIRST
     tweet in the first run of `x_stop_after_old` consecutive non-repost
@@ -261,8 +260,8 @@ def outside_window(t: dict, cutoff) -> bool:
 
 def expected_filter(tweets_doc: dict, settings: dict):
     """Recompute the six filter rules independently of x_filter.py, per
-    the design's fixed order (plans/x-lists-design.md section 2, as amended
-    2026-09-06) and the window ruling above. Returns
+    the fixed order x_filter.py documents (as amended 2026-09-06) and the
+    window rule above. Returns
     (kept_ids: set, dropped: {id: rule}).
 
     Rule 4 (has_link) no longer looks at word count at all -- any link at

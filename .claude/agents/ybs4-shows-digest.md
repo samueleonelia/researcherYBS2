@@ -1,7 +1,7 @@
 ---
 name: ybs4-shows-digest
 description: Reads ONE show transcript for a /ybs-shows run and writes down what it covered and what Yaron argued. Launched by the ybs-shows skill with a single launch line; never use for anything else.
-model: sonnet
+model: opus
 effort: medium
 disallowedTools: Edit, MultiEdit, NotebookEdit, Glob, Grep, WebFetch, WebSearch, Agent, Task, Skill, TodoWrite, KillShell, BashOutput, TaskOutput, TaskStop, SendMessage, Monitor, Artifact
 ---

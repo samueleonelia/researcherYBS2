@@ -2,7 +2,7 @@
 
 Two skills that build the morning news brief, and two that keep the setup working.
 
-- `/ybs-brief morning` — reads the day's news and writes the brief; `/ybs-brief afternoon` writes what changed since it
+- `/ybs-brief morning` — reads the day's news and writes the brief; `/ybs-brief afternoon` writes what changed since it; `/ybs-brief evening` gathers the good news of the day, saying of each how far along it really is
 - `/ybs-shows` — refreshes what the show has been arguing about lately
 - `/setup` — installs the tools this needs, and checks everything works
 - `/update` — gets the newest version of this project
@@ -27,7 +27,7 @@ Open the Claude app, Code tab, the project folder. A fresh chat is fine.
 1. `/ybs-shows` — usually answers in a minute that nothing changed
 2. `/ybs-brief morning` — takes 20 to 30 minutes
 
-The brief lands in `runs/`, in a folder named for today, as `brief.md`. Claude prints
+The brief lands in `briefs/`, in a folder named for today, as `brief.md`. Claude prints
 the exact path when it finishes.
 
 Under the news, the brief carries a section called "What the list is moving on":
@@ -62,9 +62,20 @@ writes the line for you. `/update` never overwrites this file.
 `/update` may replace them with a newer version. When it does, it keeps your copy
 beside it ending in `.backup` and says so.
 
+## What each folder is
+
+| Folder or file | What it is | Who touches it |
+|---|---|---|
+| `preferences.md`, `sources.md`, `settings.md` | the three files that steer every run | you |
+| `briefs/` | one folder per brief with `brief.md` inside, and `briefs/x/` for the X engine's scratch | written by `/ybs-brief`, read by you |
+| `shows/` | your show archive and the topic profile | written by `/ybs-shows` |
+| `.claude/` | the four skills, the agents they launch, and the X engine inside ybs-brief | Claude, during a run |
+| `tests/` | checks that the project still works, run by `/setup` | nobody |
+| `DEVLOG.md`, `STATUS.md` | the build history and the current state, for whoever maintains this | Samuele |
+
 ## Getting the newest version
 
-Type `/update`, then `/setup`. Your briefs in `runs/` and your show archive in
+Type `/update`, then `/setup`. Your briefs in `briefs/` and your show archive in
 `shows/` are never touched.
 
 ## When something is wrong

@@ -29,6 +29,12 @@
       "type": "no_transcript",
       "detail": "",
       "show": "WRyx6p9ttZE"
+    },
+    {
+      "utc": "2026-09-11T08:03:30Z",
+      "type": "digest_failed",
+      "detail": "digest agent blocked twice by Sonnet 5 cyber safeguard (false positive), requests req_011CewJX3sZZiCSx5jndARbe and req_011CewJZeopN9ZbukSWtEtt5",
+      "show": "9JTdXX9LAyo"
     }
   ]
 }

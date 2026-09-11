@@ -1,7 +1,7 @@
 ---
 name: ybs-brief
-description: Produce a show-ready morning news brief for Yaron Brook from the sources in sources.md. Screens every source's front page in the ego browser with his logged-in sessions, groups the day's stories so one event is read once, reads each chosen article the way a person would, checks every figure against the page it came from, cuts the result to the picks the settings allow and writes the brief. Use when asked to run the morning brief, or when the user types /ybs-brief. Runs the X-list pipeline in x-lists/ at the same time and puts its section under the article brief. Does NOT send email, does NOT read show transcripts, and never schedules itself. `afternoon` writes what changed since that day's morning brief: new stories first, then the morning's stories that moved.
-argument-hint: "morning | afternoon"
+description: Produce a show-ready morning news brief for Yaron Brook from the sources in sources.md. Screens every source's front page in the ego browser with his logged-in sessions, groups the day's stories so one event is read once, reads each chosen article the way a person would, checks every figure against the page it came from, cuts the result to the picks the settings allow and writes the brief. Use when asked to run the morning brief, or when the user types /ybs-brief. Runs its own X-list engine at the same time and puts its section under the article brief. Does NOT send email, does NOT read show transcripts, and never schedules itself. `afternoon` writes what changed since that day's morning brief: new stories first, then the morning's stories that moved. `evening` writes the day's human achievements from the articles the two earlier runs kept, each labelled for how far it has got.
+argument-hint: "morning | afternoon | evening"
 ---
 
 # /ybs-brief — build one brief
@@ -20,6 +20,7 @@ home; never copy it into a prompt or a reply.
 | every number | the project root's `settings.md`, printed by `ybs_run.py settings` |
 | what the show covers | `prompts/_beats.md` |
 | the sections code keeps without an agent | `prompts/_sections.md` |
+| the five kinds of achievement | `prompts/_achievements.md` |
 | how a story is read | `prompts/_lens.md` |
 | the shape of the brief | `templates/<slot>.md`, and nothing else |
 | how the brief's sentences are written | `prompts/write.md`, and nothing else |
@@ -30,7 +31,7 @@ home; never copy it into a prompt or a reply.
 | file names, launch lines, sentinels | `ybs_run.py schema` |
 | the rules of this pipeline | the hard rules at the end of this file |
 | model and effort per agent | `settings.md`, the `## Models` table |
-| the X list: its steps and where each rule lives | `x-lists/x_run.py`, whose header lists them |
+| the X list: its steps and where each rule lives | `.claude/skills/ybs-brief/x-lists/x_run.py`, whose header lists them |
 
 The eight agent files in `.claude/agents/ybs4-*.md` are **generated** from the
 templates in `agents/` and the `## Models` table in `settings.md`. Edit either
@@ -112,7 +113,7 @@ If `ego-browser` is missing, stop: nothing here works without it.
 python3 .claude/skills/ybs-brief/scripts/ybs_run.py start --slot <slot>
 ```
 
-The slot is the word the user typed, `morning` or `afternoon`.
+The slot is the word the user typed, `morning`, `afternoon` or `evening`.
 
 It prints `run_dir`, the window, the sources and the profile's date. Every later
 command takes `--run <run_dir>`. The window is local midnight to now.
@@ -120,6 +121,9 @@ command takes `--run <run_dir>`. The window is local midnight to now.
 For `afternoon` it also names the morning run it updates, under `base`. It
 refuses when today has no completed morning run: then stop and say so, because
 an update with nothing to update is not a brief.
+
+For `evening` it names the morning run and, when there is one, the afternoon run
+it pools from; it refuses when today has no completed morning run.
 
 If it says there is no topic profile, stop and tell the user to run `/ybs-shows`.
 
@@ -133,6 +137,9 @@ brief goes on without that section. Either way X is not touched again until
 step 6.
 
 ## Step 2 — screen every source
+
+**For `evening` there is no screen.** Run `pool-sync --run <run_dir>` and go to
+step 3; launch no screener.
 
 **All sources in one message**, one `ybs4-screener` each.
 
@@ -195,6 +202,9 @@ spent on it: the sections are listed in `prompts/_sections.md`. A match admits;
 **nothing is ever dropped by section.** Everything else — every generic
 `article` and `opinion`, every off-beat and unrecognised section — goes to an
 agent. `admitted_by_category` in the output is how many were settled this way.
+
+On an evening run nothing is admitted by section: every article goes to an
+agent, and the launch block's first line says `| evening`.
 
 What is left is cut into batches of `triage_batch_size`, and each `todo` entry
 is one batch: an `ids` list and a `launch` block holding the run directory and
@@ -339,7 +349,8 @@ is still the best account of that story; the brief just loses one number.
 
 **LEAD stories only.** A counterpoint hangs under a lead, so `fill counterpoint`
 refuses any other tag: `a051 is tagged BODY; counterpoints run for LEAD stories
-only`. That is the rule, not an error to work around.
+only`. That is the rule, not an error to work around. Neither the afternoon nor the
+evening has a lead, so on those slots this step launches nothing.
 
 Each agent looks in one place: the other articles of its lead's own news item.
 The question is whether those reports carry a positive element bearing on the

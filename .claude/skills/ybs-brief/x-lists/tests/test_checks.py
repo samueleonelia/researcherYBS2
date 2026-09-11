@@ -103,7 +103,7 @@ import x_checks  # noqa: E402
 from x_settings import load_settings  # noqa: E402
 
 FIXTURE = ROOT / "tests" / "fixtures" / "tweets.json"
-SETTINGS_PATH = ROOT.parent / "settings.md"   # one settings.md, at the project root
+SETTINGS_PATH = ROOT.parents[3] / "settings.md"   # one settings.md, at the project root
 
 
 def load_fixture():

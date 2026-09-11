@@ -15,7 +15,7 @@ Each job reads its own headings and ignores the others', which is why two of
 them may name a step `cluster`, or a number `retries_max`, without clashing.
 A `#` heading below is a divider for you, not for them. Print what a script
 actually sees with `python3 .claude/skills/ybs-brief/scripts/ybs_run.py
-settings`, `python3 x-lists/x_settings.py`, or `python3
+settings`, `python3 .claude/skills/ybs-brief/x-lists/x_settings.py`, or `python3
 .claude/skills/ybs-shows/scripts/ybs_shows.py settings`.
 
 # The article brief
@@ -38,6 +38,7 @@ settings`, `python3 x-lists/x_settings.py`, or `python3
 | worth_max | 5 | stories that may be tagged WORTH |
 | update_picks_max | 20 | stories that may reach the afternoon update, new and moved together |
 | new_item_articles_min | 10 | articles an afternoon item that follows no morning story must hold before it is read; the one floor in this table, and the note under it says so |
+| achievements_max | 5 | human-achievement stories that may reach the evening report; zero is a valid result |
 | words_per_sentence_max | 30 | words in one sentence of the brief |
 | x_wait_minutes_max | 30 | safety timeout only: minutes step 10 waits for the X run before the brief goes out without it. Not a speed target — raise it if the X lists take longer |
 
@@ -67,7 +68,7 @@ populations are where model choice decides the run's bill.
 | pick | opus | medium | 1 |
 | check | haiku | low | one per picked note |
 | counterpoint | opus | high | one per lead |
-| write | opus | high | one per section of the brief (leads, body, worth attention), or of the update, all at once |
+| write | opus | high | one per section of the brief (leads, body, worth attention), or of the update, or the one section of the evening report, all at once |
 
 `pick`, `write` and `cluster` carry judgment that is expensive to get wrong: they
 decide what the brief says. `check` and `screen` are narrow mechanical work.
@@ -81,7 +82,7 @@ not asked for). Put them back to `high` if a replay shows either, and say so in
 
 The X half runs beside the article half and writes the section under Worth
 Yaron's attention. Its steps, and the home of each rule it obeys, are listed in the header of
-`x-lists/x_run.py`.
+`.claude/skills/ybs-brief/x-lists/x_run.py`.
 
 ## X numbers
 
@@ -169,5 +170,5 @@ step is the one that grows with the archive.
 | Step | Model | Effort | Agents per run |
 |---|---|---|---|
 | list | haiku | low | 1 |
-| digest | sonnet | medium | one per show among the newest `shows_for_profile` that has no digest yet |
+| digest | opus | medium | one per show among the newest `shows_for_profile` that has no digest yet |
 | profile | opus | high | 1 |

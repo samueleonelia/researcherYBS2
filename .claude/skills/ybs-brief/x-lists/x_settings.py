@@ -38,9 +38,14 @@ def die(msg: str, code: int = 2):
     sys.exit(code)
 
 
+def project_root() -> Path:
+    """<root>/.claude/skills/ybs-brief/x-lists/x_settings.py -> <root>"""
+    return Path(__file__).resolve().parents[4]
+
+
 def default_settings_path() -> Path:
-    """<root>/settings.md, one folder up from x-lists/."""
-    return Path(__file__).resolve().parents[1] / "settings.md"
+    """<root>/settings.md, four folders up from x-lists/."""
+    return project_root() / "settings.md"
 
 
 def _parse_value(raw: str):
@@ -121,7 +126,7 @@ def load_settings(path: Path = None) -> dict:
 
 def default_sources_path() -> Path:
     """<root>/sources.md, where the X lists are listed."""
-    return Path(__file__).resolve().parents[1] / "sources.md"
+    return project_root() / "sources.md"
 
 
 def read_x_lists(path: Path = None) -> list:

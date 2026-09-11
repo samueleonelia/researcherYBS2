@@ -11,7 +11,7 @@ ZIP="https://github.com/samueleonelia/researcherYBS2/archive/refs/heads/main.zip
 # The user's own work. Never replaced, never read, never deleted.
 # preferences.md is his standing instructions to the brief: it ships once, empty,
 # and after that it is his. A push must never overwrite what he taught it.
-KEEP_DIRS="runs shows"
+KEEP_DIRS="briefs shows"
 KEEP_FILES="preferences.md"
 
 # The files the user is allowed to edit. The new version wins, but their copy
@@ -23,8 +23,7 @@ sources.md"
 # them, so they are named here: one line per retirement.
 # RETIRED_BACKUP is the same thing for a file the user was allowed to edit: it
 # is renamed beside where it was, so an edit is never thrown away in silence.
-RETIRED="x-lists/GOAL.md
-x-lists/RUNLOG.md"
+RETIRED=""
 RETIRED_BACKUP=".claude/skills/ybs-shows/settings.md"
 
 say() { printf '%s\n' "$1"; }
@@ -69,6 +68,15 @@ main() {
 
   # Copy everything except the user's own folders. -R over the top: files that
   # only exist here (their notes, an old plan) are left alone.
+  # The briefs folder was called runs/ until 2026-09-10. Rename his, once,
+  # so nothing he made is left behind and nothing is copied over it.
+  if [ -d "$root/runs" ] && [ ! -d "$root/briefs" ]; then
+    mv "$root/runs" "$root/briefs"
+    say "Renamed your runs folder to briefs: same briefs, clearer name."
+  elif [ -d "$root/runs" ] && [ -d "$root/briefs" ]; then
+    say "You have both a runs and a briefs folder. New briefs go to briefs/; runs/ is old and safe to delete."
+  fi
+
   say "Replacing the project files."
   for item in "$new"/* "$new"/.[!.]*; do
     [ -e "$item" ] || continue
@@ -97,6 +105,13 @@ main() {
       rm -f "$root/$f"
     fi
   done
+
+  # The X engine moved inside the ybs-brief skill on 2026-09-10. The old
+  # folder at the root is code only; its run scratch is regenerated.
+  if [ -d "$root/x-lists" ] && [ -d "$root/.claude/skills/ybs-brief/x-lists" ]; then
+    rm -rf "$root/x-lists"
+    say "Removed the old x-lists folder: the X engine now lives inside the ybs-brief skill."
+  fi
 
   # shows/ is kept whole, but a new version may ship new digests, and those are
   # part of the code, not of his archive. Only files he does not have are added.

@@ -755,3 +755,19 @@ headline out of the morning note, which the morning brief never printed.
   which is why both of the last two runs carry `x: failed`.
 - The pointer has never been through a real writer. The next live afternoon is
   the test of whether it copies the heading or tidies it.
+
+## 2026-09-11 — /setup names the known failures instead of counting them
+
+Yaron ran `/setup` on his Mac after the update and it stopped him: 3 failures,
+expected 4. The 4 dated from Sep 5; the marker removal on Sep 9 fixed one
+test and nobody touched the number. Worse, the count was never the same on
+every Mac: `test-prompts-v4` hard-coded a profile name, so it passed on his
+archive and crashed on mine once `/ybs-shows` rotated the profile.
+
+- `test-prompts-v4` now swaps the example's profile names for names in the
+  live `shows/profile.json`, the way it already swaps article ids. It runs to
+  the end on any Mac: 1 known failure (SKILL.md's own number).
+- `setup.sh` holds `KNOWN_FAILURES` by name. Output is "only known", "NEW"
+  (named, tell Samuele) or "known ones that now pass" (tell Samuele, no wait).
+  Tested under Apple's bash 3.2 with a removed and an invented known name.
+- Known now: 3 in bookkeeping, 1 in prompts. Yaron has to `/update` once more.

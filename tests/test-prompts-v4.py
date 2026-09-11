@@ -431,6 +431,21 @@ def in_window():
     return (datetime.now(timezone.utc) - timedelta(minutes=30)).isoformat().replace("+00:00", "Z")
 
 
+def live_profile_names():
+    """The storyline and theme names in this Mac's shows/profile.json."""
+    try:
+        prof = json.loads((ROOT / "shows" / "profile.json").read_text())
+    except (OSError, ValueError):
+        return []
+    names = []
+    for key in ("storylines", "themes"):
+        for entry in prof.get(key) or []:
+            n = str(entry.get("name", "")).strip()
+            if n and n not in names:
+                names.append(n)
+    return names
+
+
 def plan_example_through_items_sync(prompt, run_dir):
     """Run a prompt's worked-example plan through items-sync on a fresh run."""
     ex = json_examples(PROMPTS / prompt)
@@ -438,6 +453,18 @@ def plan_example_through_items_sync(prompt, run_dir):
         check(f"{prompt} has a worked example", False)
         return None, 1
     plan = json.loads(ex[0])
+    # The example names profile entries as they stood when it was written. The
+    # live profile rotates with every /ybs-shows, so the names are swapped for
+    # ones this Mac's profile holds, the way the article ids are swapped below.
+    # Which entry does not matter to the validator, only that it exists.
+    live = live_profile_names()
+    wanted = []
+    for it in plan["items"]:
+        if it.get("profile") and it["profile"] not in wanted:
+            wanted.append(it["profile"])
+    for it in plan["items"]:
+        if it.get("profile") and live:
+            it["profile"] = live[wanted.index(it["profile"]) % len(live)]
     ids = sorted({a for it in plan["items"] for a in it["articles"]})
 
     (run_dir / "screen" / "guardian.json").write_text(json.dumps({

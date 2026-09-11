@@ -1,6 +1,6 @@
 # STATUS: researcherYBS2
 
-_Updated: 2026-09-11 · the afternoon names what it follows_
+_Updated: 2026-09-11 · setup names the known failures_
 
 <!-- Rewrite this file in place. Never append. History belongs in DEVLOG.md. Keep under 60 lines. -->
 
@@ -25,7 +25,7 @@ _Updated: 2026-09-11 · the afternoon names what it follows_
 | Evening report | ✅ working | ran live 09-10, X merged |
 | Show profile (`/ybs-shows`) | ✅ working | archive and profile refreshed 09-11 |
 | Settings | ✅ working | one root `settings.md` |
-| Test suite | ⚠️ partial | 5 old failures, see bugs; `run-all.sh` stops at the first failing file |
+| Test suite | ⚠️ partial | 4 old failures, see bugs; `/setup` names them instead of counting; `run-all.sh` stops at the first failing file |
 | Git remote | ✅ working | github.com/samueleonelia/researcherYBS2 (private) |
 | Install (`/setup`) and update (`/update`) | ✅ working | `/update` keeps briefs/, shows/, preferences.md |
 
@@ -38,7 +38,6 @@ _Updated: 2026-09-11 · the afternoon names what it follows_
 ## Known bugs
 - The X engine cannot run: `claude -p` exits 1 on an expired login, so every run since 09-10 carries `x: failed`
 - `picks-sync` does not refuse more than 15 picks (2 tests fail)
-- `tests/test-prompts-v4.py` hard-codes a profile name that `/ybs-shows` has since rotated, so the cluster-example test crashes and the last two tests never run
 - `SKILL.md` states one number of its own instead of a `{{settings.*}}` placeholder (1 test fails)
 - A beat story picked over a passed-over topic story is not caught (1 test fails)
 - Guardian session in ego-browser is not logged in: sign-in wall on paid reads, undated links

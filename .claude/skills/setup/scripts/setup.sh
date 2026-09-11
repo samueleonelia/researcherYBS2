@@ -209,24 +209,70 @@ step_project() {
 # Each file on its own: the runner stops at the first failure, so running it
 # would hide the other two files entirely.
 
+# The failures Samuele knows about, one per line, as the test prints them.
+# A test file prints "  - <name> <detail>" for each failure; a line is known if
+# it starts with one of these names. Names, not a count: a count goes stale
+# the moment one is fixed, and cannot tell a fixed one from a new one.
+KNOWN_FAILURES="refuses more than 15 picks
+picks-sync --run: exit 0, expected 1
+a beat story picked over a passed-over topic story is caught
+SKILL.md states no setting of its own"
+
 step_tests() {
   root="$1"
   say ""
-  say "TESTS (3 failures are known and expected)"
+  say "TESTS"
   have python3 || { say "  skipped: python3 is missing"; return 1; }
-  total=0
+  all=""
   for t in test-bookkeeping-v4 test-prompts-v4 test-shows-v4; do
     out=$(cd "$root" && python3 "tests/$t.py" 2>&1)
     n=$(printf '%s' "$out" | sed -n 's/^\([0-9][0-9]*\) FAILED.*/\1/p' | head -1)
     [ -z "$n" ] && n=0
-    total=$((total + n))
+    if ! printf '%s' "$out" | grep -q "FAILED"; then
+      # No summary line at all: the file crashed before it could count.
+      if printf '%s' "$out" | grep -q "Traceback"; then
+        say "  crashed  $t"
+        all="$all
+CRASH $t"
+        continue
+      fi
+    fi
     if [ "$n" -eq 0 ]; then say "  ok       $t"; else say "  $n failed $t"; fi
+    lines=$(printf '%s\n' "$out" | sed -n 's/^  - //p')
+    [ -n "$lines" ] && all="$all
+$lines"
   done
   say ""
-  if [ "$total" -eq 3 ]; then
-    say "  $total failures, exactly the 3 known ones. Nothing new is broken."
+  new=""
+  seen=""
+  # Sort each failure line into known or new.
+  old_ifs="$IFS"; IFS='
+'
+  for line in $all; do
+    [ -z "$line" ] && continue
+    hit=""
+    for k in $KNOWN_FAILURES; do
+      case "$line" in "$k"*) hit="$k";; esac
+    done
+    if [ -n "$hit" ]; then seen="$seen
+$hit"; else new="$new
+$line"; fi
+  done
+  fixed=""
+  for k in $KNOWN_FAILURES; do
+    case "$seen" in *"$k"*) ;; *) fixed="$fixed
+$k";; esac
+  done
+  IFS="$old_ifs"
+  if [ -z "$new" ]; then
+    say "  Only known failures. Nothing new is broken."
   else
-    say "  $total failures, expected 3. Tell Samuele before running a brief."
+    say "  NEW failures, not on Samuele's list. Tell him before running a brief:"
+    printf '%s\n' "$new" | sed '/^$/d; s/^/    /' | cut -c1-120
+  fi
+  if [ -n "$fixed" ]; then
+    say "  Known failures that now pass (tell Samuele, no need to wait):"
+    printf '%s\n' "$fixed" | sed '/^$/d; s/^/    /'
   fi
 }
 

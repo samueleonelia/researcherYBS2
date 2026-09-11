@@ -90,4 +90,4 @@ Type `/update`, then `/setup`. Your briefs in `briefs/` and your show archive in
 - **A run stops saying the usage limit is reached** — that is the Claude plan, not this
   project. Upgrade, then run it again from the start.
 
-`/setup` reports 3 failing tests. That is expected and known.
+`/setup` lists the test failures Samuele already knows about by name. Only a failure it calls NEW needs reporting.

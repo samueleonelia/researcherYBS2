@@ -180,7 +180,8 @@ step_project() {
   fi
   bad=0
   if python3 "$root/.claude/skills/ybs-brief/scripts/ybs_run.py" build --check >/dev/null 2>&1; then
-    say "  ok       the 11 agent files match their templates"
+    n_agents=$(ls "$root/.claude/agents"/ybs4-*.md 2>/dev/null | wc -l | tr -d ' ')
+    say "  ok       the $n_agents agent files match their templates"
   else
     say "  PROBLEM  the agent files are stale; ask Claude to run build"
     bad=$((bad + 1))

@@ -771,3 +771,58 @@ archive and crashed on mine once `/ybs-shows` rotated the profile.
   (named, tell Samuele) or "known ones that now pass" (tell Samuele, no wait).
   Tested under Apple's bash 3.2 with a removed and an invented known name.
 - Known now: 3 in bookkeeping, 1 in prompts. Yaron has to `/update` once more.
+
+## 2026-09-12 — The X lane: X agents launched by the orchestrator
+
+**Status:** branch `x-lane`, off `main`. Commits `2cf6222` (the lane),
+`281b6a2` (its tests), plus this one.
+
+**Why**
+- Since 09-10 every run carried `x: failed`, blamed on an expired `claude -p`
+  login. The login was fine. The X chain spawned a second Claude Code per
+  agent step, and a `claude -p` launched from inside the desktop app inherits
+  `CLAUDE_CODE_ENTRYPOINT=claude-desktop` and
+  `CLAUDE_CODE_SDK_HAS_OAUTH_REFRESH=1`, which make it ask the host to renew an
+  expired token instead of renewing it itself. In the background there is no
+  host to ask, so it printed "please log in" and exited 1. The token lives
+  about an hour, a brief takes 35 to 42 minutes: any X step that started after
+  the hour mark died, and 09-11's two runs happened to finish before it.
+
+**What changed**
+- No `claude -p` anywhere. The X agents are subagents of the orchestrator,
+  from four generated agent files (`ybs4-x-reader`, `ybs4-x-cluster`,
+  `ybs4-x-judge`, `ybs4-x-write`) rendered by `build` from the `## X models`
+  table, like the article agents. Same login, same permission mode, same pool.
+- `x_run.py` keeps the scripts (`scrape` = steps 1 and 2, detached by
+  `x-start`; the score inside the lane) and gains `next`: it reads the run
+  folder and prints what the orchestrator launches now. The prompt files it
+  writes are the record of attempts (`read-p<pass>-b<k>`, `cluster-a<n>`,
+  `judge-<i>-a<n>`, ...), so a call never launches a file twice and every
+  phase gets exactly one retry. An invalid subjects.json is set aside and the
+  retry prompt quotes the problem; a subject with no verdict after two
+  attempts is left out and named.
+- `ybs_run.py x-next` drives it and records phase changes as `x_phase`
+  events; `x-wait` is gone, its wait and the `x_wait_minutes_max` clock live
+  in `x-next --closing` (step 10). `x-start --retry` is for a dead scrape
+  only. New status `lane` between `running` and `completed`.
+- SKILL.md: "The X lane" section, checkpoints at step 6 and the start of
+  every later step; hard rule 13 names both doors.
+- `x_agents_active_max` retired: the lane shares `agents_active_max`.
+
+**Verified**
+- `test_chain.py` rewritten to drive `next_lane` on seeded folders: 44 checks,
+  no agent, no browser. Bookkeeping X block rewritten for `x-next`. Suites:
+  the same 3 known failures in bookkeeping and 1 in prompts, x-lists green,
+  `build --check` clean.
+- Live `/ybs-brief morning`, headless (Sonnet/high, the three inherited
+  variables removed from the runner's own environment), stopped by hand at X
+  read pass 2 after 16 minutes: scrape 35 links, `x-next` launched 12 read
+  batches, then 9 for the 23 notes pass 1 left, all as orchestrator agents,
+  no login prompt anywhere. Pass 1's yield was uneven (3 batches complete, 6
+  wrote nothing): that is the reader agents, not the lane, and it is the one
+  thing to watch on the next full run. A second run, from Samuele's own
+  session, was at triage when this shipped.
+- Yaron's own diagnosis of the old chain, the same day: `claude -p` was
+  spawned with the x-lists folder as its working directory, so it never saw
+  the root permission list and could not run ego-browser at all. A second
+  cause with the same root, and gone with it.

@@ -820,8 +820,19 @@ archive and crashed on mine once `/ybs-shows` rotated the profile.
   batches, then 9 for the 23 notes pass 1 left, all as orchestrator agents,
   no login prompt anywhere. Pass 1's yield was uneven (3 batches complete, 6
   wrote nothing): that is the reader agents, not the lane, and it is the one
-  thing to watch on the next full run. A second run, from Samuele's own
-  session, was at triage when this shipped.
+  thing to watch on the next full run.
+- The second run, from Samuele's own desktop session (Sonnet, xhigh),
+  `briefs/2026-09-12_morning_143105`: started 12:31 UTC, completed 13:17,
+  46.6 minutes. The lane end to end, one attempt per phase: read pass 1
+  wrote all 68 notes (23 batches), cluster in 2 parts and a merge, 55 judge
+  agents, the merge, the writer. Audit line: `X: 5 picks from 55 subjects,
+  68 tweets read · 0 retries · 0 failures`. The first X section in a brief
+  since 09-09.
+- The GitHub zip `/update` downloads was fetched fresh and checked: no
+  `claude -p` anywhere, 15 agent files, `build --check` clean, every command
+  SKILL.md names exists, all suites give the same 4 known failures. `update.sh`
+  then `setup.sh` rehearsed on a copy of Yaron's current version: clean,
+  one `settings.md.backup` notice.
 - Yaron's own diagnosis of the old chain, the same day: `claude -p` was
   spawned with the x-lists folder as its working directory, so it never saw
   the root permission list and could not run ego-browser at all. A second

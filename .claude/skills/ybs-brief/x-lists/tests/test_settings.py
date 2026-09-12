@@ -23,7 +23,7 @@ class TestLoadRealSettings(unittest.TestCase):
             "x_window_hours", "x_stop_after_old", "x_min_own_words",
             "x_convergence_authors", "x_endorsement_min", "x_velocity_percentile",
             "x_curious_percentile", "x_picks_max", "x_tweets_min",
-            "x_cluster_chunk", "x_agents_active_max",
+            "x_cluster_chunk",
         ]
         for key in numbers:
             self.assertIn(key, self.settings, f"missing {key}")
@@ -31,6 +31,11 @@ class TestLoadRealSettings(unittest.TestCase):
 
     def test_fixed_values_present(self):
         self.assertEqual(self.settings["x_account"], "@EgoismoEfficace")
+
+    def test_agents_active_max_is_retired(self):
+        """The X agents go through the orchestrator's one pool since
+        2026-09-12; a leftover x_agents_active_max would be read by nothing."""
+        self.assertNotIn("x_agents_active_max", self.settings)
 
     def test_which_lists_to_read_is_not_in_settings(self):
         """The lists live in sources.md now, so Yaron adds one the same way he
@@ -44,10 +49,9 @@ class TestLoadRealSettings(unittest.TestCase):
         self.assertIn("judge_effort", self.settings)
 
     def test_every_agent_step_has_a_model_and_an_effort(self):
-        """The four agent steps x_run.py launches. Both halves of each row
-        must load: since the effort is now passed to `claude -p` as
-        `--effort`, a row with no effort key stops the run instead of
-        quietly running the step at some default."""
+        """The four agent steps of the X lane. Both halves of each row must
+        load: `ybs_run.py build` puts them into the ybs4-x-* agent files, and
+        a row with no effort would leave an agent file with no effort."""
         for step in ("read", "cluster", "judge", "write"):
             for suffix in ("_model", "_effort"):
                 key = step + suffix

@@ -125,8 +125,8 @@ an attempt, and a second launch of one steals a retry.
 
 `phase: scraping` with an empty list means the scrape is still running: carry
 on with the article step and ask again at the next checkpoint. The checkpoints
-are the start of step 6, after `read-list`, and the start of steps 7, 8, 9 and
-10, plus every moment in between when the lane goes idle.
+are the start of step 6, after `read-list`, the start of steps 7, 8 and 9, the
+closing step, and every moment in between when the lane goes idle.
 
 A lane that fails before there is a `links.md` is a scrape that died, and it
 gets one relaunch: `x-start --run <run_dir> --retry`. A failure inside the lane

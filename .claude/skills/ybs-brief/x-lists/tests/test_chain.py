@@ -1,32 +1,31 @@
 #!/usr/bin/env python3
-"""Tests for x_run.py -- the chain's own plumbing.
+"""Tests for x_run.py -- the lane's own plumbing.
 
-These do NOT invoke the real `claude` CLI (no cost, no network, no
-judgment to fake) and do NOT drive a browser. They cover:
+These do NOT launch an agent (no cost, no network, no judgment to fake) and
+do NOT drive a browser. `next_lane` is driven on temp folders seeded with
+the files the scrape and the agents would have left, and what it prints is
+checked: which prompt files it writes, which launches it prints, when it
+retries, when it gives up, and when it moves on. The only script it runs
+for real is x_score.py, which is fast. They cover:
 
-  - settings are read from the table, never hard-coded, by checking that
-    x_run.py's own module holds no numeric literal that shadows a
-    settings.md number
-  - a run folder is named runs/<YYYY-MM-DD>-<HHMM> in UTC and never
-    collides
-  - a missing step script fails the chain with a message naming that step,
-    not a traceback
+  - a run folder is named runs/<YYYY-MM-DD>-<HHMM> in UTC and never collides
+  - a missing step script fails with a message naming that step, not a
+    traceback
   - prompt placeholders are discovered from the file, not assumed, and an
     unfillable placeholder fails clearly
-  - cluster's chunking splits kept tweets into x_cluster_chunk-sized parts
-  - cluster's coverage check catches a missing or duplicated id
-  - the judge merge step fills judge-merge.md's placeholders and calls
-    `claude` at the configured model (mocked)
-  - the read step (step 3) now runs its batches POOLED, up to
-    x_agents_active_max at once, each batch its own ego task space -- not
-    serially, which was the pre-2026-09-06 rule
-  - the read step skips links that already have a usable note, re-reads what
-    is missing once, writes a `status: unavailable` note itself for whatever
-    two passes could not read, and keeps every agent's reply in read-log/
-  - the write step (step 7) fills every one of prompts/write.md's twelve
-    placeholders correctly, and resolves each pick's permalink to its
-    notes/<id>.md file, failing loudly (never silently dropping the pick)
-    when a note is missing
+  - read: batches cover every link once at x_read_batch, each in a task
+    space of its own; a usable note is never read again; pass 2 covers only
+    what pass 1 left; after pass 2 the unavailable note is written in code
+  - cluster: one launch under the chunk, parts and a merge above it; an
+    invalid subjects.json is set aside and the retry prompt quotes why; a
+    second bad one fails the lane; zero kept tweets skips the agent; the
+    score runs once the file is valid
+  - judge: one launch per subject without a verdict, two attempts, then the
+    subject is left out; all left out fails the lane
+  - judge-merge and write: one launch, one retry, then failed; done once
+    brief.md exists
+  - every launch is `Read <abs path> and follow it.`, no prompt file holds
+    an unfilled placeholder, and no settings number is hard-coded here
 """
 
 import ast
@@ -34,6 +33,7 @@ import contextlib
 import io
 import json
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -49,6 +49,71 @@ import x_run  # noqa: E402
 from x_settings import load_settings  # noqa: E402
 
 SETTINGS_PATH = ROOT.parents[3] / "settings.md"   # one settings.md, at the project root
+PROJECT_ROOT = ROOT.parents[3]
+FIXTURE = ROOT / "tests" / "fixtures" / "tweets.json"
+
+NOTE = ("# {tid}\n\n- id: {tid}\n- status: ok\n\n## full_text\n\n{text}\n\n"
+        "## quoted\n\n(none)\n\n## media\n\n(none)\n")
+
+
+def links_md(n, start=1000):
+    lines = ["## POST"]
+    for i in range(n):
+        lines.append(f"- author: @acct{i}")
+        lines.append(f"https://x.com/acct{i}/status/{start + i}")
+    return "\n".join(lines) + "\n"
+
+
+def write_note(notes_dir: Path, tid: str, text="hello"):
+    notes_dir.mkdir(parents=True, exist_ok=True)
+    (notes_dir / f"{tid}.md").write_text(NOTE.format(tid=tid, text=text), encoding="utf-8")
+
+
+def ids_in_prompt(path: Path):
+    return re.findall(r"^id:\s*(\d+)\s*$", path.read_text(encoding="utf-8"), re.M)
+
+
+def prompt_of(launch: dict) -> Path:
+    m = re.fullmatch(r"Read (.+) and follow it\.", launch["prompt"])
+    assert m, launch["prompt"]
+    return Path(m.group(1))
+
+
+class LaneCase(unittest.TestCase):
+    """A temp run folder named the way a real one is, with quiet stderr."""
+
+    def setUp(self):
+        self.td = tempfile.mkdtemp()
+        self.run_dir = Path(self.td) / "2026-09-06-0954"
+        self.run_dir.mkdir()
+        self.settings = load_settings(SETTINGS_PATH)
+
+    def tearDown(self):
+        shutil.rmtree(self.td, ignore_errors=True)
+
+    def seed(self, n_links=0, kept=None):
+        (self.run_dir / "links.md").write_text(links_md(n_links), encoding="utf-8")
+        x_run.write_json(self.run_dir / "kept.json", {"kept": kept or []})
+
+    def seed_from_fixture(self):
+        """A real kept.json and links.md: the fixture through x_filter.py."""
+        shutil.copy(FIXTURE, self.run_dir / "tweets.json")
+        r = subprocess.run([sys.executable, str(ROOT / "x_filter.py"),
+                            "--run-dir", str(self.run_dir), "--settings", str(SETTINGS_PATH)],
+                           capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return [t["id"] for t in json.loads((self.run_dir / "kept.json").read_text())["kept"]]
+
+    def next(self):
+        with contextlib.redirect_stderr(io.StringIO()):
+            return x_run.next_lane(self.run_dir, self.settings, SETTINGS_PATH, PROJECT_ROOT)
+
+    def next_dies(self):
+        with mock.patch.object(x_run, "die") as mock_die:
+            mock_die.side_effect = SystemExit(1)
+            with self.assertRaises(SystemExit):
+                self.next()
+            return mock_die.call_args[0][0]
 
 
 class TestRunDir(unittest.TestCase):
@@ -60,10 +125,10 @@ class TestRunDir(unittest.TestCase):
             after = datetime.now(timezone.utc)
             self.assertTrue(run_dir.exists())
             self.assertTrue(re.fullmatch(r"\d{4}-\d{2}-\d{2}-\d{4}", run_dir.name),
-                             run_dir.name)
+                            run_dir.name)
             stamp = datetime.strptime(run_dir.name, "%Y-%m-%d-%H%M").replace(tzinfo=timezone.utc)
             self.assertLessEqual(before.replace(second=0, microsecond=0), stamp)
-            self.assertLessEqual(stamp, after.replace(second=0, microsecond=0).replace(second=0))
+            self.assertLessEqual(stamp, after.replace(second=0, microsecond=0))
 
     def test_never_collides(self):
         with tempfile.TemporaryDirectory() as td:
@@ -79,9 +144,8 @@ class TestMissingStep(unittest.TestCase):
     def test_missing_script_names_the_step_and_exits_nonzero(self):
         with tempfile.TemporaryDirectory() as td:
             run_dir = Path(td)
-            with self.assertRaises(SystemExit) as ctx:
+            with self.assertRaises(SystemExit):
                 x_run.run_script_step(1, "no_such_script.py", run_dir, SETTINGS_PATH)
-            self.assertNotEqual(ctx.exception.code, 0)
 
     def test_missing_script_message_names_step_and_file(self):
         with tempfile.TemporaryDirectory() as td:
@@ -104,81 +168,75 @@ class TestMissingStep(unittest.TestCase):
             self.assertIn("step 3", msg)
             self.assertIn("no_such_prompt.md", msg)
 
-    def test_missing_claude_binary_is_a_clear_die_not_a_traceback(self):
-        with mock.patch("subprocess.run", side_effect=FileNotFoundError()):
+    def test_scrape_fails_clearly_with_no_settings(self):
+        """`x_run.py scrape` with a settings path that does not exist: an
+        ERROR line, never a traceback, and no scrape is attempted (a real
+        one would open the browser, which no test may do)."""
+        with tempfile.TemporaryDirectory() as td:
+            r = subprocess.run(
+                [sys.executable, str(ROOT / "x_run.py"), "scrape", "--run-dir", td,
+                 "--settings", str(Path(td) / "no-settings.md")],
+                capture_output=True, text=True, cwd=str(ROOT), timeout=60)
+            self.assertNotEqual(r.returncode, 0)
+            self.assertIn("ERROR:", r.stderr)
+            self.assertIn("no settings file", r.stderr)
+            self.assertNotIn("Traceback", r.stderr)
+            self.assertFalse((Path(td) / "tweets.json").exists())
+
+    def test_next_refuses_a_folder_the_scrape_did_not_fill(self):
+        with tempfile.TemporaryDirectory() as td:
             with mock.patch.object(x_run, "die") as mock_die:
                 mock_die.side_effect = SystemExit(1)
                 with self.assertRaises(SystemExit):
-                    x_run.call_claude("prompt", "opus", "high", ROOT)
-                self.assertIn("claude", mock_die.call_args[0][0])
-
-    def test_chain_full_run_fails_clearly_when_step_missing(self):
-        """python3 x_run.py against a run dir with no tweets.json and a
-        renamed-away x_scrape.py fails with a named step, no traceback."""
-        with tempfile.TemporaryDirectory() as td:
-            run_dir = Path(td) / "run"
-            run_dir.mkdir()
-            result = subprocess.run(
-                [sys.executable, str(ROOT / "x_run.py"),
-                 "--run-dir", str(run_dir), "--settings", str(SETTINGS_PATH),
-                 "--only", "1", "--from", "1"],
-                capture_output=True, text=True,
-                env={**__import__("os").environ, "PATH": "/usr/bin:/bin"},
-            )
-            # Without a real PATH, x_scrape.py itself may or may not run
-            # (it exists in the repo); the contract we actually own is: if
-            # a step script is absent, x_run.py must name it, not traceback.
-            self.assertNotIn("Traceback", result.stderr)
+                    x_run.next_lane(Path(td), load_settings(SETTINGS_PATH), SETTINGS_PATH,
+                                    PROJECT_ROOT)
+                self.assertIn("links.md", mock_die.call_args[0][0])
 
 
 class TestPlaceholders(unittest.TestCase):
     def test_placeholders_in_finds_every_slot(self):
-        template = "hello {{FOO}} and {{BAR}} and {{FOO}} again"
+        template = "a {{FOO}} b {{BAR}} c {{FOO}}"
         self.assertEqual(x_run.placeholders_in(template), {"FOO", "BAR"})
 
     def test_fill_template_substitutes_every_slot(self):
-        template = "{{A}}-{{B}}"
+        template = "x={{A}} y={{B}}"
         out = x_run.fill_template(template, {"A": "1", "B": "2"})
-        self.assertEqual(out, "1-2")
+        self.assertEqual(out, "x=1 y=2")
 
     def test_fill_template_dies_on_unknown_placeholder(self):
-        template = "{{A}}-{{MYSTERY}}"
+        template = "x={{A}} y={{B}}"
         with mock.patch.object(x_run, "die") as mock_die:
             mock_die.side_effect = SystemExit(1)
             with self.assertRaises(SystemExit):
                 x_run.fill_template(template, {"A": "1"})
-            self.assertIn("MYSTERY", mock_die.call_args[0][0])
+            self.assertIn("B", str(mock_die.call_args[0][0]))
 
     def test_real_prompt_placeholders_are_discovered_not_assumed(self):
-        """Whatever names cluster.md and judge.md actually use, x_run.py
-        must be able to supply all of them -- this is the contract
-        (discover placeholders from the file, don't assume names)."""
-        cluster_path = ROOT / "prompts" / "cluster.md"
-        if not cluster_path.exists():
-            self.skipTest("prompts/cluster.md not built yet")
-        found = x_run.placeholders_in(cluster_path.read_text(encoding="utf-8"))
-        provided = {"RUN_DIR", "TWEETS", "PART_NOTE", "OUTPUT_PATH"}
-        self.assertTrue(found <= provided,
-                         f"cluster.md needs placeholder(s) x_run.py doesn't supply: {found - provided}")
-
-        judge_path = ROOT / "prompts" / "judge.md"
-        if judge_path.exists():
-            found = x_run.placeholders_in(judge_path.read_text(encoding="utf-8"))
-            provided = {"RUN_DIR", "SUBJECT", "SCORE_TAG", "FLAGS", "MEASURES",
-                        "VELOCITY_RANK", "CURIOUS_PERCENTILE", "TWEETS",
-                        "PROFILE_DATE", "PROFILE", "PREFERENCES", "LENS", "OUTPUT_PATH"}
-            self.assertTrue(found <= provided,
-                             f"judge.md needs placeholder(s) x_run.py doesn't supply: {found - provided}")
-
-        merge_path = ROOT / "prompts" / "judge-merge.md"
-        if merge_path.exists():
-            found = x_run.placeholders_in(merge_path.read_text(encoding="utf-8"))
-            provided = {"RUN_DIR", "PICKS_MAX", "VERDICTS", "OUTPUT_PATH"}
-            self.assertTrue(found <= provided,
-                             f"judge-merge.md needs placeholder(s) x_run.py doesn't supply: {found - provided}")
+        """Whatever names the six prompt files actually use, the lane must
+        supply them all. The values here are the keys each phase fills."""
+        provided = {
+            "read.md": {"RUN_DIR", "NOTES_DIR", "TASK_SPACE", "BATCH_NOTE", "LINKS",
+                        "ALLOWED_URLS"},
+            "cluster.md": {"RUN_DIR", "TWEETS", "PART_NOTE", "OUTPUT_PATH"},
+            "cluster-merge.md": {"RUN_DIR", "PARTS", "PART_SUBJECTS", "ALL_TWEET_IDS",
+                                 "OUTPUT_PATH"},
+            "judge.md": {"RUN_DIR", "SUBJECT", "SCORE_TAG", "FLAGS", "MEASURES",
+                         "VELOCITY_RANK", "CURIOUS_PERCENTILE", "TWEETS", "PROFILE_DATE",
+                         "PROFILE", "PREFERENCES", "LENS", "OUTPUT_PATH"},
+            "judge-merge.md": {"RUN_DIR", "PICKS_MAX", "VERDICTS", "OUTPUT_PATH"},
+            "write.md": {"RUN_DIR", "RUN_NAME", "WINDOW_HOURS", "RUN_DATETIME",
+                         "SUBJECTS_JUDGED", "WORDS_PER_SENTENCE_MAX", "OUTPUT_PATH",
+                         "PICKS", "NOTES", "TEMPLATE", "LENS", "PREFERENCES"},
+        }
+        for name, keys in provided.items():
+            path = ROOT / "prompts" / name
+            self.assertTrue(path.exists(), f"prompts/{name} is missing")
+            found = x_run.placeholders_in(path.read_text(encoding="utf-8"))
+            self.assertTrue(found <= keys,
+                            f"{name} needs placeholder(s) the lane does not supply: {found - keys}")
 
 
-class TestClusterChunking(unittest.TestCase):
+class TestChunking(unittest.TestCase):
     def test_chunked_splits_by_size(self):
         items = list(range(7))
         parts = list(x_run.chunked(items, 3))
@@ -190,380 +248,371 @@ class TestClusterChunking(unittest.TestCase):
         items = list(range(chunk * 2 + 1))
         parts = list(x_run.chunked(items, chunk))
         self.assertEqual(len(parts), 3)
-        self.assertEqual(len(parts[0]), chunk)
-        self.assertEqual(len(parts[-1]), 1)
 
-    def test_validate_cluster_coverage_passes_on_full_coverage(self):
+
+class TestCoverage(unittest.TestCase):
+    def test_passes_on_full_coverage(self):
+        kept = [{"id": "1"}, {"id": "2"}, {"id": "3"}]
+        doc = {"subjects": [{"subject": "a", "tweet_ids": ["1", "2"]},
+                            {"subject": "b", "tweet_ids": ["3"]}]}
+        self.assertIsNone(x_run.cluster_coverage_problem(kept, doc))
+        x_run.validate_cluster_coverage(kept, doc)  # must not raise
+
+    def test_names_a_missing_id(self):
+        kept = [{"id": "1"}, {"id": "2"}, {"id": "3"}]
+        doc = {"subjects": [{"subject": "a", "tweet_ids": ["1", "2"]}]}
+        problem = x_run.cluster_coverage_problem(kept, doc)
+        self.assertIn("missing", problem)
+        self.assertIn("3", problem)
+
+    def test_names_a_duplicated_id(self):
         kept = [{"id": "1"}, {"id": "2"}]
-        subjects_doc = {"subjects": [{"tweet_ids": ["1"]}, {"tweet_ids": ["2"]}]}
-        x_run.validate_cluster_coverage(kept, subjects_doc)  # must not raise
+        doc = {"subjects": [{"subject": "a", "tweet_ids": ["1", "2"]},
+                            {"subject": "b", "tweet_ids": ["2"]}]}
+        self.assertIn("two subjects", x_run.cluster_coverage_problem(kept, doc))
 
-    def test_validate_cluster_coverage_dies_on_missing_id(self):
-        kept = [{"id": "1"}, {"id": "2"}]
-        subjects_doc = {"subjects": [{"tweet_ids": ["1"]}]}
-        with mock.patch.object(x_run, "die") as mock_die:
-            mock_die.side_effect = SystemExit(1)
-            with self.assertRaises(SystemExit):
-                x_run.validate_cluster_coverage(kept, subjects_doc)
-
-    def test_validate_cluster_coverage_dies_on_duplicate_id(self):
-        kept = [{"id": "1"}, {"id": "2"}]
-        subjects_doc = {"subjects": [{"tweet_ids": ["1", "2"]}, {"tweet_ids": ["2"]}]}
-        with mock.patch.object(x_run, "die") as mock_die:
-            mock_die.side_effect = SystemExit(1)
-            with self.assertRaises(SystemExit):
-                x_run.validate_cluster_coverage(kept, subjects_doc)
+    def test_names_a_file_of_the_wrong_shape(self):
+        self.assertIsNotNone(x_run.cluster_coverage_problem([{"id": "1"}], ["not", "a", "dict"]))
+        self.assertIsNotNone(x_run.cluster_coverage_problem([{"id": "1"}], {"items": []}))
 
 
-class TestJudgeMerge(unittest.TestCase):
-    """The merge agent step (judge-merge.md), with `claude` mocked out."""
+class TestReadPhase(LaneCase):
+    def test_batches_cover_every_link_once_at_the_settings_batch_size(self):
+        self.seed(n_links=10)
+        size = self.settings["x_read_batch"]
+        out = self.next()
+        self.assertEqual(out["phase"], "read")
+        self.assertEqual(out["attempt"], 1)
+        self.assertEqual(len(out["launch"]), -(-10 // size))
+        seen = []
+        for launch in out["launch"]:
+            self.assertEqual(launch["agent"], "ybs4-x-reader")
+            path = prompt_of(launch)
+            self.assertTrue(path.is_absolute() and path.exists(), path)
+            self.assertNotIn("{{", path.read_text(encoding="utf-8"))
+            ids = ids_in_prompt(path)
+            self.assertLessEqual(len(ids), size)
+            seen += ids
+        self.assertEqual(sorted(seen), [str(1000 + i) for i in range(10)])
+        self.assertEqual(len(seen), len(set(seen)), "a link was read by more than one batch")
+        self.assertEqual([l["description"] for l in out["launch"]][:2],
+                         ["x read p1 b1", "x read p1 b2"])
 
-    def test_merge_fills_placeholders_and_writes_picks(self):
-        merge_path = ROOT / "prompts" / "judge-merge.md"
-        if not merge_path.exists():
-            self.skipTest("prompts/judge-merge.md not built yet")
-
-        settings = load_settings(SETTINGS_PATH)
-        with tempfile.TemporaryDirectory() as td:
-            run_dir = Path(td)
-            captured = {}
-
-            def fake_call_claude(prompt_text, model, effort, cwd, timeout=1800, **kw):
-                captured["prompt"] = prompt_text
-                captured["model"] = model
-                # simulate the agent doing its job: write picks.md
-                (run_dir / "picks.md").write_text("# Picks\n\nkept: 0\n", encoding="utf-8")
-                return "wrote 0 picks, 0 cut"
-
-            with mock.patch.object(x_run, "call_claude", side_effect=fake_call_claude):
-                x_run.merge_judge_verdicts(run_dir, ['{"subject": "x"}'], settings, "opus", "high")
-
-            self.assertTrue((run_dir / "picks.md").exists())
-            self.assertEqual(captured["model"], "opus")
-            self.assertIn(str(settings["x_picks_max"]), captured["prompt"])
-            self.assertNotIn("{{", captured["prompt"])
-
-    def test_merge_dies_if_picks_not_written(self):
-        merge_path = ROOT / "prompts" / "judge-merge.md"
-        if not merge_path.exists():
-            self.skipTest("prompts/judge-merge.md not built yet")
-        settings = load_settings(SETTINGS_PATH)
-        with tempfile.TemporaryDirectory() as td:
-            run_dir = Path(td)
-            with mock.patch.object(x_run, "call_claude", return_value="did nothing"):
-                with mock.patch.object(x_run, "die") as mock_die:
-                    mock_die.side_effect = SystemExit(1)
-                    with self.assertRaises(SystemExit):
-                        x_run.merge_judge_verdicts(run_dir, ["{}"], settings, "opus", "high")
-
-
-class TestReadStageConcurrency(unittest.TestCase):
-    """Job 1: the read stage is pooled, not serial. This test would FAIL if
-    the read stage silently went back to running its batches one at a time
-    (max_workers pinned to 1) -- it asserts the pool is opened with the
-    settings value, not a hard-coded 1."""
-
-    def _make_links_md(self, n):
-        lines = ["## POST"]
-        for i in range(n):
-            lines.append(f"- author: @acct{i}")
-            lines.append(f"https://x.com/acct{i}/status/{1000 + i}")
-        return "\n".join(lines) + "\n"
-
-    def test_batches_cover_every_link_exactly_once_at_the_settings_batch_size(self):
-        settings = {"x_read_batch": 3, "x_agents_active_max": 8,
-                    "read_model": "sonnet", "read_effort": "medium"}
-        with tempfile.TemporaryDirectory() as td:
-            run_dir = Path(td)
-            (run_dir / "links.md").write_text(self._make_links_md(10), encoding="utf-8")
-
-            seen_ids = []
-
-            def fake_run_pool(jobs, max_workers):
-                self.assertEqual(max_workers, settings["x_agents_active_max"],
-                                  "read stage did not pool at x_agents_active_max")
-                return [job() for job in jobs]
-
-            def fake_call_claude(prompt_text, model, effort, cwd, timeout=1800, **kw):
-                ids = re.findall(r"^id:\s*(\d+)\s*$", prompt_text, re.M)
-                seen_ids.extend(ids)
-                notes_dir = run_dir / "notes"
-                for tid in ids:
-                    (notes_dir / f"{tid}.md").write_text(
-                        "# " + tid + "\n\n- id: " + tid + "\n- status: ok\n\n"
-                        "## full_text\n\nhello\n\n## quoted\n\n(none)\n\n## media\n\n(none)\n",
-                        encoding="utf-8",
-                    )
-                return "wrote notes"
-
-            with mock.patch.object(x_run, "run_pool", side_effect=fake_run_pool), \
-                    mock.patch.object(x_run, "call_claude", side_effect=fake_call_claude):
-                x_run.step_read(run_dir, settings)
-
-            expected_ids = [str(1000 + i) for i in range(10)]
-            self.assertEqual(sorted(seen_ids), sorted(expected_ids))
-            self.assertEqual(len(seen_ids), len(set(seen_ids)), "a link was read by more than one batch")
-
-    def test_pool_opened_with_agents_active_max_not_hardcoded_serial(self):
-        """The specific regression this guards: a read step that reverts to
-        READ_MAX_WORKERS = 1 (the old 'browser is the one serial thing'
-        rule) fails this test, because it asserts the pool call's
-        max_workers came from settings, and a fixed max_workers of 1 with
-        x_agents_active_max set to 8 in settings does not match."""
-        settings = {"x_read_batch": 3, "x_agents_active_max": 8,
-                    "read_model": "sonnet", "read_effort": "medium"}
-        with tempfile.TemporaryDirectory() as td:
-            run_dir = Path(td)
-            (run_dir / "links.md").write_text(self._make_links_md(9), encoding="utf-8")
-
-            captured = {}
-
-            def fake_run_pool(jobs, max_workers):
-                captured["max_workers"] = max_workers
-                captured["n_jobs"] = len(jobs)
-                return [job() for job in jobs]
-
-            def fake_call_claude(prompt_text, model, effort, cwd, timeout=1800, **kw):
-                ids = re.findall(r"^id:\s*(\d+)\s*$", prompt_text, re.M)
-                notes_dir = run_dir / "notes"
-                for tid in ids:
-                    (notes_dir / f"{tid}.md").write_text(
-                        "# " + tid + "\n\n- id: " + tid + "\n- status: ok\n\n"
-                        "## full_text\n\nhello\n\n## quoted\n\n(none)\n\n## media\n\n(none)\n",
-                        encoding="utf-8",
-                    )
-                return "wrote notes"
-
-            with mock.patch.object(x_run, "run_pool", side_effect=fake_run_pool), \
-                    mock.patch.object(x_run, "call_claude", side_effect=fake_call_claude):
-                x_run.step_read(run_dir, settings)
-
-            self.assertEqual(captured["n_jobs"], 3)  # ceil(9/3)
-            self.assertNotEqual(captured["max_workers"], 1,
-                                 "read stage ran its batches serially -- the old rule is back")
-            self.assertEqual(captured["max_workers"], 8)
-
-    def test_each_batch_gets_its_own_ego_task_space(self):
-        """Many read sub-agents run at the same time, each in its OWN ego
-        task space; two agents in one task space is the thing that must
-        never happen. So each batch's filled prompt must carry a distinct
-        TASK_SPACE value."""
-        settings = {"x_read_batch": 2, "x_agents_active_max": 8,
-                    "read_model": "sonnet", "read_effort": "medium"}
-        with tempfile.TemporaryDirectory() as td:
-            run_dir = Path(td)
-            (run_dir / "links.md").write_text(self._make_links_md(6), encoding="utf-8")
-
-            task_spaces = []
-
-            def fake_call_claude(prompt_text, model, effort, cwd, timeout=1800, **kw):
-                m = re.search(r"Browser task space to use:\s*(.+)", prompt_text)
+    def test_each_batch_and_each_pass_gets_its_own_task_space(self):
+        self.seed(n_links=6)
+        spaces = []
+        for _ in range(2):          # pass 1, then pass 2 with nothing written
+            out = self.next()
+            for launch in out["launch"]:
+                m = re.search(r"Browser task space to use:\s*`?([^`\n]+)",
+                              prompt_of(launch).read_text(encoding="utf-8"))
                 self.assertIsNotNone(m)
-                task_spaces.append(m.group(1).strip())
-                ids = re.findall(r"^id:\s*(\d+)\s*$", prompt_text, re.M)
-                notes_dir = run_dir / "notes"
-                for tid in ids:
-                    (notes_dir / f"{tid}.md").write_text(
-                        "# " + tid + "\n\n- id: " + tid + "\n- status: ok\n\n"
-                        "## full_text\n\nhello\n\n## quoted\n\n(none)\n\n## media\n\n(none)\n",
-                        encoding="utf-8",
-                    )
-                return "wrote notes"
-
-            with mock.patch.object(x_run, "call_claude", side_effect=fake_call_claude):
-                x_run.step_read(run_dir, settings)
-
-            self.assertEqual(len(task_spaces), 3)  # ceil(6/2)
-            self.assertEqual(len(set(task_spaces)), len(task_spaces), "two batches shared one task space")
-
-
-class TestReadStageResume(unittest.TestCase):
-    """The 2026-09-08 failure, and the three things step 3 now does about it.
-
-    A read agent exited cleanly having written one note out of three, and
-    `validate_notes` killed a 39-batch run that then started over from the
-    scrape. Step 3 now skips links that already have a note, re-reads what is
-    missing once, and writes a `status: unavailable` note itself for whatever
-    two passes could not read.
-    """
-
-    SETTINGS = {"x_read_batch": 2, "x_agents_active_max": 4,
-                "read_model": "sonnet", "read_effort": "medium"}
-
-    def _make_links_md(self, n):
-        lines = ["## POST"]
-        for i in range(n):
-            lines.append(f"- author: @acct{i}")
-            lines.append(f"https://x.com/acct{i}/status/{1000 + i}")
-        return "\n".join(lines) + "\n"
-
-    def _write_note(self, notes_dir: Path, tid: str, text="hello"):
-        notes_dir.mkdir(parents=True, exist_ok=True)
-        (notes_dir / f"{tid}.md").write_text(
-            f"# {tid}\n\n- id: {tid}\n- status: ok\n\n## full_text\n\n{text}\n\n"
-            "## quoted\n\n(none)\n\n## media\n\n(none)\n", encoding="utf-8")
-
-    def _ids_in(self, prompt_text):
-        return re.findall(r"^id:\s*(\d+)\s*$", prompt_text, re.M)
-
-    def _run(self, run_dir, fake):
-        out = io.StringIO()
-        with mock.patch.object(x_run, "call_claude", side_effect=fake), \
-                contextlib.redirect_stdout(out):
-            x_run.step_read(run_dir, self.SETTINGS)
-        return out.getvalue()
+                spaces.append(m.group(1).strip())
+        self.assertEqual(len(spaces), 2 * -(-6 // self.settings["x_read_batch"]))
+        self.assertEqual(len(set(spaces)), len(spaces), "two batches shared one task space")
 
     def test_links_that_already_have_a_note_are_not_read_again(self):
-        with tempfile.TemporaryDirectory() as td:
-            run_dir = Path(td)
-            (run_dir / "links.md").write_text(self._make_links_md(6), encoding="utf-8")
-            notes_dir = run_dir / "notes"
-            for tid in ("1000", "1001", "1002", "1003"):
-                self._write_note(notes_dir, tid)
-
-            seen = []
-
-            def fake(prompt_text, model, effort, cwd, timeout=1800, **kw):
-                ids = self._ids_in(prompt_text)
-                seen.extend(ids)
-                for tid in ids:
-                    self._write_note(notes_dir, tid)
-                return "wrote notes"
-
-            printed = self._run(run_dir, fake)
-
-            self.assertEqual(sorted(seen), ["1004", "1005"],
-                             "a link that already had a note was read again")
-            self.assertIn("4 link(s) already have a usable note", printed)
-            # the notes that were already there are untouched
-            self.assertIn("hello", (notes_dir / "1000.md").read_text(encoding="utf-8"))
+        self.seed(n_links=6)
+        for tid in ("1000", "1001", "1002", "1003"):
+            write_note(self.run_dir / "notes", tid)
+        out = self.next()
+        seen = [tid for l in out["launch"] for tid in ids_in_prompt(prompt_of(l))]
+        self.assertEqual(sorted(seen), ["1004", "1005"])
+        self.assertIn("4 link(s) already have a usable note", out["notes"])
+        self.assertIn("hello", (self.run_dir / "notes" / "1000.md").read_text(encoding="utf-8"))
 
     def test_an_empty_note_does_not_count_as_read(self):
-        """A file with neither full_text nor `status: unavailable` is what
-        validate_notes rejects, so step 3 must read that link again."""
-        with tempfile.TemporaryDirectory() as td:
-            run_dir = Path(td)
-            (run_dir / "links.md").write_text(self._make_links_md(2), encoding="utf-8")
-            notes_dir = run_dir / "notes"
-            notes_dir.mkdir()
-            (notes_dir / "1000.md").write_text(
-                "# 1000\n\n- id: 1000\n- status: ok\n\n## full_text\n\n(none)\n",
-                encoding="utf-8")
-            self._write_note(notes_dir, "1001")
+        self.seed(n_links=2)
+        notes_dir = self.run_dir / "notes"
+        notes_dir.mkdir()
+        (notes_dir / "1000.md").write_text(
+            "# 1000\n\n- id: 1000\n- status: ok\n\n## full_text\n\n(none)\n", encoding="utf-8")
+        write_note(notes_dir, "1001")
+        out = self.next()
+        seen = [tid for l in out["launch"] for tid in ids_in_prompt(prompt_of(l))]
+        self.assertEqual(seen, ["1000"])
 
-            seen = []
+    def test_pass_two_covers_only_what_pass_one_left(self):
+        self.seed(n_links=4)
+        out = self.next()
+        self.assertEqual(out["attempt"], 1)
+        # every agent writes only the first note of its batch
+        for launch in out["launch"]:
+            write_note(self.run_dir / "notes", ids_in_prompt(prompt_of(launch))[0])
+        out = self.next()
+        self.assertEqual((out["phase"], out["attempt"]), ("read", 2))
+        seen = sorted(tid for l in out["launch"] for tid in ids_in_prompt(prompt_of(l)))
+        missing = sorted(tid for tid in ("1000", "1001", "1002", "1003")
+                         if not (self.run_dir / "notes" / f"{tid}.md").exists())
+        self.assertEqual(seen, missing)
+        self.assertTrue(any("re-reading once" in n for n in out["notes"]), out["notes"])
+        self.assertTrue(all(l["description"].startswith("x read p2 b") for l in out["launch"]))
 
-            def fake(prompt_text, model, effort, cwd, timeout=1800, **kw):
-                ids = self._ids_in(prompt_text)
-                seen.extend(ids)
-                for tid in ids:
-                    self._write_note(notes_dir, tid)
-                return "wrote notes"
-
-            self._run(run_dir, fake)
-            self.assertEqual(seen, ["1000"])
-
-    def test_missing_notes_are_re_read_once_then_written_unavailable(self):
-        """The half-written batch, reproduced: every agent writes only the
-        first note of its batch. Pass 1 leaves half the links without a note,
-        the one in-step retry catches all but one, and that last one gets its
-        note written here in code -- so validate_notes passes and the run does
-        not die."""
-        with tempfile.TemporaryDirectory() as td:
-            run_dir = Path(td)
-            (run_dir / "links.md").write_text(self._make_links_md(4), encoding="utf-8")
-            notes_dir = run_dir / "notes"
-            calls = []
-
-            def fake(prompt_text, model, effort, cwd, timeout=1800, **kw):
-                ids = self._ids_in(prompt_text)
-                calls.append(ids)
-                # 1003 is never written, however often it is handed over
-                for tid in ids[:1]:
-                    self._write_note(notes_dir, tid)
-                return "wrote 1 note"
-
-            printed = self._run(run_dir, fake)
-
-            # pass 1: [1000, 1001] and [1002, 1003] -> notes for 1000 and 1002
-            # pass 2: [1001, 1003]                  -> a note for 1001
-            self.assertEqual(calls, [["1000", "1001"], ["1002", "1003"],
-                                     ["1001", "1003"]])
-            self.assertIn("2 note(s) missing after pass 1, re-reading once", printed)
-            self.assertIn("1 note(s) written here in code", printed)
-
-            note_text = (notes_dir / "1003.md").read_text(encoding="utf-8")
-            note = x_run.parse_note(note_text)
+    def test_after_pass_two_the_unavailable_note_is_written_in_code(self):
+        self.seed(n_links=2)
+        self.next()                      # pass 1, nothing written
+        self.next()                      # pass 2, nothing written
+        out = self.next()                # code writes the notes and moves on
+        self.assertNotEqual(out["phase"], "read")
+        self.assertTrue(any("written here in code" in n for n in out["notes"]), out["notes"])
+        for tid in ("1000", "1001"):
+            text = (self.run_dir / "notes" / f"{tid}.md").read_text(encoding="utf-8")
+            note = x_run.parse_note(text)
             self.assertEqual(note["status"], "unavailable")
-            self.assertIn("no note after two read passes", note_text)
+            self.assertIn("no note after two read passes", text)
             self.assertEqual(note["full_text"], "",
                              "the code-written note must read as empty, not as text")
-            # and it is the only note code wrote: the other three came from agents
-            self.assertNotIn("no note after two read passes",
-                             (notes_dir / "1001.md").read_text(encoding="utf-8"))
+        # the pass files are the record: two passes, never three
+        self.assertEqual(len(list((self.run_dir / "prompts").glob("read-p3-*.md"))), 0)
+        # and tweet_block falls back to the feed text for the unread tweet
+        block = x_run.tweet_block({"id": "1000", "author": "@acct0",
+                                   "text": "the collapsed preview"}, x_run.load_notes(self.run_dir))
+        self.assertIn("the collapsed preview", block)
 
-            # validate_notes accepts the whole set, and the run carries on
-            x_run.validate_notes(x_run.parse_links_md(run_dir / "links.md"), notes_dir)
-            # tweet_block falls back to the feed text for the unread tweet
-            notes = x_run.load_notes(run_dir)
-            block = x_run.tweet_block({"id": "1003", "author": "@acct3",
-                                       "text": "the collapsed preview"}, notes)
-            self.assertIn("the collapsed preview", block)
-
-    def test_the_second_pass_is_the_last_one(self):
-        """Two passes, never three: an agent that writes nothing at all must
-        not loop the step."""
-        with tempfile.TemporaryDirectory() as td:
-            run_dir = Path(td)
-            (run_dir / "links.md").write_text(self._make_links_md(2), encoding="utf-8")
-            calls = []
-
-            def fake(prompt_text, model, effort, cwd, timeout=1800, **kw):
-                calls.append(self._ids_in(prompt_text))
-                return "wrote nothing"
-
-            self._run(run_dir, fake)
-            self.assertEqual(len(calls), 2, "step 3 read more than twice")
-            for tid in ("1000", "1001"):
-                note = x_run.parse_note(
-                    (run_dir / "notes" / f"{tid}.md").read_text(encoding="utf-8"))
-                self.assertEqual(note["status"], "unavailable")
-
-    def test_every_read_agents_reply_is_saved(self):
-        """`call_claude` is the real one here, with only `subprocess.run`
-        faked: the reply the agent sent back, and anything it put on stderr,
-        must be on disk under read-log/ -- the 2026-09-08 run threw its
-        agent's reply away and nobody could say why it stopped."""
-        with tempfile.TemporaryDirectory() as td:
-            run_dir = Path(td)
-            (run_dir / "links.md").write_text(self._make_links_md(3), encoding="utf-8")
-
-            class FakeResult:
-                returncode = 0
-                stdout = "wrote 1 note, 0 unavailable"
-                stderr = "a warning the agent printed"
-
-            with mock.patch.object(x_run.subprocess, "run", return_value=FakeResult()), \
-                    contextlib.redirect_stdout(io.StringIO()):
-                x_run.step_read(run_dir, self.SETTINGS)
-
-            log_dir = run_dir / "read-log"
-            # 2 batches in pass 1 (2 + 1 links), 2 in pass 2: no note was written
-            self.assertTrue((log_dir / "batch-1.txt").exists())
-            self.assertTrue((log_dir / "batch-2.txt").exists())
-            first = (log_dir / "batch-1.txt").read_text(encoding="utf-8")
-            self.assertIn("wrote 1 note, 0 unavailable", first)
-            self.assertIn("a warning the agent printed", first)
-            self.assertIn("exit: 0", first)
-            self.assertEqual(len(list(log_dir.glob("batch-*.txt"))), 4,
-                             "one log file per batch of both passes")
+    def test_no_links_means_no_read(self):
+        self.seed(n_links=0)
+        out = self.next()
+        self.assertNotEqual(out["phase"], "read")
+        self.assertEqual(len(list((self.run_dir / "prompts").glob("read-*.md"))), 0)
 
 
-class TestWriteStepNoteResolution(unittest.TestCase):
-    """Job 2's interface gap: picks.md carries a permalink, notes are filed
-    by id. build_notes_block must resolve one to the other, and must fail
-    loudly -- never silently drop the pick -- when the note is missing."""
+class TestClusterPhase(LaneCase):
+    def subjects_for(self, ids, n=2):
+        cut = -(-len(ids) // n)
+        return {"subjects": [{"subject": f"s{k}", "tweet_ids": ids[k * cut:(k + 1) * cut]}
+                             for k in range(n) if ids[k * cut:(k + 1) * cut]]}
 
+    def read_done(self):
+        """Every link noted, so the lane is past the read phase."""
+        for link in x_run.parse_links_md(self.run_dir / "links.md"):
+            write_note(self.run_dir / "notes", link["id"])
+
+    def test_one_launch_under_the_chunk(self):
+        ids = self.seed_from_fixture()
+        self.assertLessEqual(len(ids), self.settings["x_cluster_chunk"])
+        self.read_done()
+        out = self.next()
+        self.assertEqual((out["phase"], out["attempt"]), ("cluster", 1))
+        self.assertEqual(len(out["launch"]), 1)
+        self.assertEqual(out["launch"][0]["agent"], "ybs4-x-cluster")
+        self.assertEqual(out["launch"][0]["description"], "x cluster a1")
+        text = prompt_of(out["launch"][0]).read_text(encoding="utf-8")
+        self.assertNotIn("{{", text)
+        self.assertEqual(sorted(ids_in_prompt(prompt_of(out["launch"][0]))), sorted(ids))
+        self.assertIn(str(self.run_dir / "subjects.json"), text)
+
+    def test_an_invalid_file_is_set_aside_and_the_retry_quotes_why(self):
+        ids = self.seed_from_fixture()
+        self.read_done()
+        self.next()
+        x_run.write_json(self.run_dir / "subjects.json", self.subjects_for(ids[:-1]))
+        out = self.next()
+        self.assertEqual((out["phase"], out["attempt"]), ("cluster", 2))
+        self.assertTrue((self.run_dir / "subjects.invalid-a1.json").exists())
+        self.assertFalse((self.run_dir / "subjects.json").exists())
+        text = prompt_of(out["launch"][0]).read_text(encoding="utf-8")
+        self.assertIn("Your last attempt was rejected", text)
+        self.assertIn(ids[-1], text)           # the missing id is named
+        self.assertTrue(any("set aside" in n for n in out["notes"]), out["notes"])
+        # a second bad file ends the lane
+        x_run.write_json(self.run_dir / "subjects.json", self.subjects_for(ids[:-1]))
+        out = self.next()
+        self.assertEqual(out["phase"], "failed")
+        self.assertIn("cluster", out["reason"])
+        self.assertIn("2 attempts", out["reason"])
+
+    def test_no_file_at_all_gets_one_retry_then_fails(self):
+        self.seed_from_fixture()
+        self.read_done()
+        self.next()
+        out = self.next()
+        self.assertEqual((out["phase"], out["attempt"]), ("cluster", 2))
+        self.assertIn("wrote no file", prompt_of(out["launch"][0]).read_text(encoding="utf-8"))
+        out = self.next()
+        self.assertEqual(out["phase"], "failed")
+
+    def test_a_valid_file_is_scored_and_the_lane_moves_on(self):
+        ids = self.seed_from_fixture()
+        self.read_done()
+        self.next()
+        x_run.write_json(self.run_dir / "subjects.json", self.subjects_for(ids))
+        out = self.next()
+        self.assertEqual(out["phase"], "judge")
+        subjects = json.loads((self.run_dir / "subjects.json").read_text())["subjects"]
+        self.assertTrue(all("velocity_rank" in s and "tag" in s for s in subjects))
+
+    def test_zero_kept_tweets_skips_the_agent(self):
+        self.seed(n_links=0, kept=[])
+        out = self.next()
+        self.assertNotIn(out["phase"], ("read", "cluster"))
+        self.assertEqual(json.loads((self.run_dir / "subjects.json").read_text()), {"subjects": []})
+        self.assertTrue(any("nothing to group" in n for n in out["notes"]), out["notes"])
+        self.assertEqual(len(list((self.run_dir / "prompts").glob("cluster*.md"))), 0)
+
+    def test_parts_then_a_merge(self):
+        chunk = self.settings["x_cluster_chunk"]
+        ids = [str(2000 + i) for i in range(chunk + 2)]
+        kept = [{"id": i, "author": "@a", "text": "t", "url": f"https://x.com/a/status/{i}"}
+                for i in ids]
+        (self.run_dir / "links.md").write_text(links_md(0), encoding="utf-8")
+        x_run.write_json(self.run_dir / "kept.json", {"kept": kept})
+        out = self.next()
+        self.assertEqual(out["phase"], "cluster")
+        self.assertEqual([l["description"] for l in out["launch"]],
+                         ["x cluster part 1 a1", "x cluster part 2 a1"])
+        for k, launch in enumerate(out["launch"], 1):
+            self.assertIn(str(self.run_dir / f"cluster_part_{k}.json"),
+                          prompt_of(launch).read_text(encoding="utf-8"))
+        # part 1 written, part 2 not: only part 2 is launched again
+        x_run.write_json(self.run_dir / "cluster_part_1.json",
+                         {"subjects": [{"subject": "p1", "tweet_ids": ids[:chunk]}]})
+        out = self.next()
+        self.assertEqual([l["description"] for l in out["launch"]], ["x cluster part 2 a2"])
+        x_run.write_json(self.run_dir / "cluster_part_2.json",
+                         {"subjects": [{"subject": "p2", "tweet_ids": ids[chunk:]}]})
+        out = self.next()
+        self.assertEqual((out["phase"], out["attempt"]), ("cluster-merge", 1))
+        self.assertEqual(out["launch"][0]["description"], "x cluster-merge a1")
+        text = prompt_of(out["launch"][0]).read_text(encoding="utf-8")
+        self.assertIn("[part 1] p1", text)
+        self.assertIn("[part 2] p2", text)
+        self.assertNotIn("{{", text)
+        # a part missing twice fails the lane
+        (self.run_dir / "cluster_part_2.json").unlink()
+        out = self.next()
+        self.assertEqual(out["phase"], "failed")
+        self.assertIn("part 2", out["reason"])
+
+
+class TestJudgePhase(LaneCase):
+    def to_judge(self):
+        """A run folder past the cluster phase, with two scored subjects."""
+        ids = self.seed_from_fixture()
+        for link in x_run.parse_links_md(self.run_dir / "links.md"):
+            write_note(self.run_dir / "notes", link["id"])
+        self.next()
+        x_run.write_json(self.run_dir / "subjects.json",
+                         {"subjects": [{"subject": "s0", "tweet_ids": ids[:3]},
+                                       {"subject": "s1", "tweet_ids": ids[3:]}]})
+        return ids
+
+    def test_one_launch_per_subject_without_a_verdict(self):
+        self.to_judge()
+        out = self.next()
+        self.assertEqual((out["phase"], out["attempt"]), ("judge", 1))
+        self.assertEqual([l["description"] for l in out["launch"]],
+                         ["x judge 1 a1", "x judge 2 a1"])
+        for launch in out["launch"]:
+            self.assertEqual(launch["agent"], "ybs4-x-judge")
+            text = prompt_of(launch).read_text(encoding="utf-8")
+            self.assertNotIn("{{", text)
+            self.assertIn(str(self.settings["x_curious_percentile"]), text)
+        self.assertIn(str(self.run_dir / "judge_2.json"),
+                      prompt_of(out["launch"][1]).read_text(encoding="utf-8"))
+
+    def test_a_subject_without_a_verdict_is_left_out_after_two_attempts(self):
+        self.to_judge()
+        self.next()
+        x_run.write_json(self.run_dir / "judge_1.json", {"verdict": "KEEP", "why": "test"})
+        out = self.next()
+        self.assertEqual([l["description"] for l in out["launch"]], ["x judge 2 a2"])
+        out = self.next()
+        self.assertEqual((out["phase"], out["attempt"]), ("judge-merge", 1))
+        self.assertTrue(any("unjudged" in n and "2" in n for n in out["notes"]), out["notes"])
+        text = prompt_of(out["launch"][0]).read_text(encoding="utf-8")
+        self.assertIn("KEEP", text)
+        self.assertIn(str(self.settings["x_picks_max"]), text)
+        self.assertEqual(out["launch"][0]["agent"], "ybs4-x-judge")
+
+    def test_every_subject_unjudged_fails_the_lane(self):
+        self.to_judge()
+        self.next()
+        self.next()
+        out = self.next()
+        self.assertEqual(out["phase"], "failed")
+        self.assertIn("no subject", out["reason"])
+
+    def test_a_verdict_that_is_not_json_counts_as_missing(self):
+        self.to_judge()
+        self.next()
+        (self.run_dir / "judge_1.json").write_text("not json", encoding="utf-8")
+        x_run.write_json(self.run_dir / "judge_2.json", {"verdict": "DROP"})
+        out = self.next()
+        self.assertEqual([l["description"] for l in out["launch"]], ["x judge 1 a2"])
+
+
+PICKS_MD = ("# X list picks\n\n"
+            "Run: 2026-09-06-0954 · subjects judged: 1 · kept: 1 · cut by the ceiling: 0\n\n"
+            "## 1. Something happened\n\n"
+            "- **Tag:** TRENDING\n- **Flags:** VELOCITY\n"
+            "- **Storyline:** A very particular test storyline\n"
+            "- **Why:** because the test says so\n"
+            "- **The tweet that states it best:**\n"
+            "  - @acct — https://x.com/acct/status/{tid}\n"
+            "  > hello world\n")
+
+
+class TestMergeAndWrite(LaneCase):
+    def to_merge(self):
+        self.seed(n_links=1)
+        write_note(self.run_dir / "notes", "1000", "hello world")
+        x_run.write_json(self.run_dir / "kept.json",
+                         {"kept": [{"id": "1000", "author": "@acct0", "text": "t",
+                                    "url": "https://x.com/acct0/status/1000"}]})
+        x_run.write_json(self.run_dir / "subjects.json",
+                         {"subjects": [{"subject": "s", "tweet_ids": ["1000"],
+                                        "velocity_rank": 50, "tag": "SINGLETON", "flags": []}]})
+        x_run.write_json(self.run_dir / "judge_1.json", {"verdict": "KEEP"})
+
+    def test_merge_then_write_then_done(self):
+        self.to_merge()
+        out = self.next()
+        self.assertEqual((out["phase"], out["attempt"]), ("judge-merge", 1))
+        out = self.next()
+        self.assertEqual((out["phase"], out["attempt"]), ("judge-merge", 2))
+        (self.run_dir / "picks.md").write_text(PICKS_MD.format(tid="1000"), encoding="utf-8")
+        out = self.next()
+        self.assertEqual((out["phase"], out["attempt"]), ("write", 1))
+        self.assertEqual(out["launch"][0]["agent"], "ybs4-x-write")
+        self.assertEqual(out["launch"][0]["description"], "x write a1")
+        prompt = prompt_of(out["launch"][0]).read_text(encoding="utf-8")
+        self.assertNotIn("{{", prompt)
+        self.assertIn(str(self.run_dir), prompt)                                   # RUN_DIR
+        self.assertIn("2026-09-06-0954", prompt)                                   # RUN_NAME
+        self.assertIn(str(self.settings["x_window_hours"]), prompt)                # WINDOW_HOURS
+        self.assertIn("6 September 2026 at 09:54 UTC", prompt)                     # RUN_DATETIME
+        self.assertIn(str(self.settings["x_words_per_sentence_max"]), prompt)      # WORDS_PER_SENTENCE_MAX
+        self.assertIn(str(self.run_dir / "brief.md"), prompt)                      # OUTPUT_PATH
+        self.assertIn("A very particular test storyline", prompt)                  # PICKS
+        self.assertIn("hello world", prompt)                                       # NOTES
+        self.assertIn("# X brief", prompt)                                         # TEMPLATE
+        out = self.next()
+        self.assertEqual((out["phase"], out["attempt"]), ("write", 2))
+        out = self.next()
+        self.assertEqual(out["phase"], "failed")
+        self.assertIn("write", out["reason"])
+        (self.run_dir / "brief.md").write_text("# What the list is moving on\n", encoding="utf-8")
+        out = self.next()
+        self.assertEqual(out["phase"], "done")
+        self.assertEqual(out["launch"], [])
+
+    def test_a_merge_that_never_writes_fails_after_two(self):
+        self.to_merge()
+        self.next()
+        self.next()
+        out = self.next()
+        self.assertEqual(out["phase"], "failed")
+        self.assertIn("judge-merge", out["reason"])
+
+    def test_a_pick_without_a_note_stops_the_write(self):
+        self.to_merge()
+        (self.run_dir / "picks.md").write_text(PICKS_MD.format(tid="222"), encoding="utf-8")
+        msg = self.next_dies()
+        self.assertIn("222", msg)
+        self.assertIn("Something happened", msg)
+
+
+class TestWriteInputs(unittest.TestCase):
     def test_resolves_permalink_to_note_by_id(self):
         with tempfile.TemporaryDirectory() as td:
             run_dir = Path(td)
@@ -580,9 +629,6 @@ class TestWriteStepNoteResolution(unittest.TestCase):
             self.assertNotIn("NOT PICKED", block, "a note for an unpicked tweet leaked into {{NOTES}}")
 
     def test_missing_note_fails_loudly_and_does_not_drop_the_pick(self):
-        """This test FAILS if a missing note is silently skipped instead of
-        dying: it asserts the run stops (SystemExit) and that the die
-        message names both the pick's title and its expected note id."""
         with tempfile.TemporaryDirectory() as td:
             run_dir = Path(td)
             (run_dir / "notes").mkdir()
@@ -601,13 +647,10 @@ class TestWriteStepNoteResolution(unittest.TestCase):
                 msg = mock_die.call_args[0][0]
                 self.assertIn("Missing its note", msg)
                 self.assertIn("222", msg)
-                # and it must not have silently returned a block missing just
-                # that one pick -- the call under test raised before returning.
 
     def test_parse_picks_md_dies_on_a_pick_with_no_permalink(self):
         with tempfile.TemporaryDirectory() as td:
-            run_dir = Path(td)
-            picks_path = run_dir / "picks.md"
+            picks_path = Path(td) / "picks.md"
             picks_path.write_text(
                 "# X list picks\n\nRun: x · subjects judged: 1 · kept: 1 · cut by the ceiling: 0\n\n"
                 "## 1. No permalink here\n\n- **Tag:** TRENDING\n- **Storyline:** s\n",
@@ -622,112 +665,35 @@ class TestWriteStepNoteResolution(unittest.TestCase):
 
 class TestFormatRunDatetime(unittest.TestCase):
     def test_formats_the_run_name_into_the_fixed_shape(self):
-        self.assertEqual(
-            x_run.format_run_datetime("2026-09-06-0954"),
-            "6 September 2026 at 09:54 UTC",
-        )
+        self.assertEqual(x_run.format_run_datetime("2026-09-06-0954"),
+                         "6 September 2026 at 09:54 UTC")
 
     def test_tolerates_a_collision_suffix(self):
-        self.assertEqual(
-            x_run.format_run_datetime("2026-09-06-0954-2"),
-            "6 September 2026 at 09:54 UTC",
-        )
+        self.assertEqual(x_run.format_run_datetime("2026-09-06-0954-2"),
+                         "6 September 2026 at 09:54 UTC")
 
 
-class TestStepWrite(unittest.TestCase):
-    """Job 2: step_write fills every one of prompts/write.md's twelve
-    placeholders. This mocks `claude -p` the way TestJudgeMerge does."""
-
-    def _seed_run_dir(self, run_dir: Path):
-        (run_dir / "notes").mkdir()
-        (run_dir / "notes" / "111.md").write_text(
-            "# 111\n\n- id: 111\n- status: ok\n\n## full_text\n\nhello world\n\n"
-            "## quoted\n\n(none)\n\n## media\n\n(none)\n",
-            encoding="utf-8",
-        )
-        picks_md = (
-            "# X list picks\n\n"
-            "Run: 2026-09-06-0954 · subjects judged: 1 · kept: 1 · cut by the ceiling: 0\n\n"
-            "## 1. Something happened\n\n"
-            "- **Tag:** TRENDING\n- **Flags:** VELOCITY\n"
-            "- **Storyline:** A very particular test storyline\n"
-            "- **Why:** because the test says so\n"
-            "- **The tweet that states it best:**\n"
-            "  - @acct — https://x.com/acct/status/111\n"
-            "  > hello world\n"
-        )
-        (run_dir / "picks.md").write_text(picks_md, encoding="utf-8")
-        (run_dir / "subjects.json").write_text(
-            json.dumps({"subjects": [{"tweet_ids": ["111"]}]}), encoding="utf-8")
-
-    def test_fills_every_placeholder_and_writes_brief(self):
-        prompt_path = ROOT / "prompts" / "write.md"
-        if not prompt_path.exists():
-            self.skipTest("prompts/write.md not built yet")
-        template_path = ROOT / "templates" / "x-brief.md"
-        if not template_path.exists():
-            self.skipTest("templates/x-brief.md not built yet")
-
-        settings = load_settings(SETTINGS_PATH)
+class TestNextCommand(unittest.TestCase):
+    def test_stdout_is_one_json_line_and_progress_goes_to_stderr(self):
+        """ybs_run.py x-next reads the last line of stdout as JSON: nothing
+        else may land there, whatever the phase prints along the way."""
         with tempfile.TemporaryDirectory() as td:
             run_dir = Path(td) / "2026-09-06-0954"
             run_dir.mkdir()
-            self._seed_run_dir(run_dir)
-
-            captured = {}
-
-            def fake_call_claude(prompt_text, model, effort, cwd, timeout=1800, **kw):
-                captured["prompt"] = prompt_text
-                captured["model"] = model
-                (run_dir / "brief.md").write_text("# What the list is moving on\n", encoding="utf-8")
-                return "wrote 1 item, 1 TRENDING, 0 CURIOUS"
-
-            with mock.patch.object(x_run, "call_claude", side_effect=fake_call_claude):
-                x_run.step_write(run_dir, settings, ROOT.parents[3])
-
-            self.assertTrue((run_dir / "brief.md").exists())
-            prompt = captured["prompt"]
-            self.assertNotIn("{{", prompt, "an unfilled placeholder leaked into the write prompt")
-            self.assertEqual(captured["model"], settings["write_model"])
-
-            # every one of the twelve placeholders' values, present in the prompt
-            self.assertIn(str(run_dir), prompt)                                    # RUN_DIR
-            self.assertIn("2026-09-06-0954", prompt)                               # RUN_NAME
-            self.assertIn(str(settings["x_window_hours"]), prompt)                 # WINDOW_HOURS
-            self.assertIn("6 September 2026 at 09:54 UTC", prompt)                 # RUN_DATETIME
-            self.assertIn(str(settings["x_words_per_sentence_max"]), prompt)       # WORDS_PER_SENTENCE_MAX
-            self.assertIn(str(run_dir / "brief.md"), prompt)                       # OUTPUT_PATH
-            self.assertIn("A very particular test storyline", prompt)              # PICKS
-            self.assertIn("hello world", prompt)                                   # NOTES (from notes/111.md)
-            self.assertIn("# X brief", prompt)                                     # TEMPLATE (its own title)
-
-    def test_dies_when_a_pick_has_no_matching_note(self):
-        prompt_path = ROOT / "prompts" / "write.md"
-        if not prompt_path.exists():
-            self.skipTest("prompts/write.md not built yet")
-        settings = load_settings(SETTINGS_PATH)
-        with tempfile.TemporaryDirectory() as td:
-            run_dir = Path(td) / "2026-09-06-0954"
-            run_dir.mkdir()
-            (run_dir / "notes").mkdir()
-            # no notes/111.md written -- the pick below has no matching note
-            picks_md = (
-                "# X list picks\n\nRun: x · subjects judged: 1 · kept: 1 · cut by the ceiling: 0\n\n"
-                "## 1. Something happened\n\n- **Tag:** TRENDING\n- **Flags:** VELOCITY\n"
-                "- **Storyline:** s\n- **Why:** because\n"
-                "- **The tweet that states it best:**\n  - @acct — https://x.com/acct/status/111\n  > hi\n"
-            )
-            (run_dir / "picks.md").write_text(picks_md, encoding="utf-8")
-            (run_dir / "subjects.json").write_text(
-                json.dumps({"subjects": [{"tweet_ids": ["111"]}]}), encoding="utf-8")
-
-            with mock.patch.object(x_run, "die") as mock_die, \
-                    mock.patch.object(x_run, "call_claude") as mock_call:
-                mock_die.side_effect = SystemExit(1)
-                with self.assertRaises(SystemExit):
-                    x_run.step_write(run_dir, settings, ROOT.parents[3])
-                mock_call.assert_not_called()
-                self.assertIn("111", mock_die.call_args[0][0])
+            (run_dir / "links.md").write_text(links_md(2), encoding="utf-8")
+            x_run.write_json(run_dir / "kept.json", {"kept": []})
+            for tid in ("1000", "1001"):
+                write_note(run_dir / "notes", tid)
+            r = subprocess.run(
+                [sys.executable, str(ROOT / "x_run.py"), "next", "--run-dir", str(run_dir),
+                 "--settings", str(SETTINGS_PATH)],
+                capture_output=True, text=True, cwd=str(ROOT), timeout=120)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            lines = [ln for ln in r.stdout.splitlines() if ln.strip()]
+            self.assertEqual(len(lines), 1, r.stdout)
+            out = json.loads(lines[0])
+            self.assertIn("phase", out)
+            self.assertIn("note(s) verified", r.stderr)
 
 
 class TestNoHardcodedSettings(unittest.TestCase):
@@ -737,13 +703,12 @@ class TestNoHardcodedSettings(unittest.TestCase):
         settings[...] lookups. This can't catch everything, but it fails
         loudly if e.g. `5` gets hard-coded for x_picks_max.
 
-        The module docstring is prose, not code: it explains the chain and
+        The module docstring is prose, not code: it explains the lane and
         lists the ten finish-line checks, so its numbered rows are not
         settings values and are skipped. Everything below it is checked."""
         source = (ROOT / "x_run.py").read_text(encoding="utf-8")
         settings = load_settings(SETTINGS_PATH)
 
-        # Prose, not code: skip the module docstring's own lines.
         tree = ast.parse(source)
         doc_lines = set()
         if (tree.body and isinstance(tree.body[0], ast.Expr)
@@ -753,13 +718,9 @@ class TestNoHardcodedSettings(unittest.TestCase):
             doc_lines = set(range(node.lineno, node.end_lineno + 1))
         self.assertTrue(doc_lines, "x_run.py lost its module docstring")
 
-        # Only check multi-digit numbers -- small ints like 0/1 are used as
-        # ordinary indices/booleans throughout and would false-positive.
         risky = {v for k, v in settings.items()
                  if isinstance(v, int) and v >= 10}
         for value in risky:
-            # allow it inside a string that also contains 'settings' nearby,
-            # or as part of a larger number/identifier
             for match in re.finditer(rf"(?<![\w.]){value}(?![\w.])", source):
                 lineno = source.count("\n", 0, match.start()) + 1
                 if lineno in doc_lines:

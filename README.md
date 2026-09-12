@@ -69,7 +69,7 @@ beside it ending in `.backup` and says so.
 | `preferences.md`, `sources.md`, `settings.md` | the three files that steer every run | you |
 | `briefs/` | one folder per brief with `brief.md` inside, and `briefs/x/` for the X engine's scratch | written by `/ybs-brief`, read by you |
 | `shows/` | your show archive and the topic profile | written by `/ybs-shows` |
-| `.claude/` | the four skills, the agents they launch, and the X engine inside ybs-brief | Claude, during a run |
+| `.claude/` | the four skills, the agents they launch, and the X lane's scripts and prompts inside ybs-brief | Claude, during a run |
 | `tests/` | checks that the project still works, run by `/setup` | nobody |
 | `DEVLOG.md`, `STATUS.md` | the build history and the current state, for whoever maintains this | Samuele |
 

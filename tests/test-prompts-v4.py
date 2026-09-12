@@ -355,7 +355,10 @@ def test_agents_match_skill():
     want = {"ybs4-screener": ("haiku", "low"), "ybs4-triage": ("sonnet", "low"),
             "ybs4-cluster": ("opus", "medium"), "ybs4-reader": ("sonnet", "medium"),
             "ybs4-checker": ("haiku", "low"), "ybs4-pick": ("opus", "medium"),
-            "ybs4-counterpoint": ("opus", "high"), "ybs4-write": ("opus", "high")}
+            "ybs4-counterpoint": ("opus", "high"), "ybs4-write": ("opus", "high"),
+            # the X lane's four, from the `## X models` table
+            "ybs4-x-reader": ("sonnet", "medium"), "ybs4-x-cluster": ("opus", "high"),
+            "ybs4-x-judge": ("opus", "high"), "ybs4-x-write": ("opus", "high")}
     for name, (model, effort) in sorted(want.items()):
         body = agents.get(name, "")
         got = (re.search(r"^model:\s*(\S+)", body, re.M),
@@ -373,6 +376,15 @@ def test_agents_match_skill():
               "Write" not in deny, ", ".join(sorted(deny))[:80])
         check(f"{name} takes a one-line launch, not a filled prompt",
               "{{" not in body)
+    for name in ("ybs4-x-reader", "ybs4-x-cluster", "ybs4-x-judge", "ybs4-x-write"):
+        body = agents.get(name, "")
+        deny = re.search(r"^disallowedTools:(.*)$", body, re.M)
+        deny = {t.strip() for t in (deny.group(1) if deny else "").split(",")}
+        check(f"{name} may Read its prompt file and Write its result",
+              "Read" not in deny and "Write" not in deny, ", ".join(sorted(deny))[:80])
+        check(f"{name} takes a one-line launch, not a filled prompt", "{{" not in body)
+        check(f"{name} {'may' if name == 'ybs4-x-reader' else 'cannot'} run Bash",
+              ("Bash" in deny) == (name != "ybs4-x-reader"))
     check("triage and checker still cannot run Bash",
           all("Bash" in re.search(r"^disallowedTools:(.*)$", agents[n], re.M).group(1)
               for n in ("ybs4-triage", "ybs4-checker")))

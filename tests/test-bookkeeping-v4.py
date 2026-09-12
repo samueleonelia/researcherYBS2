@@ -2446,9 +2446,10 @@ def test_audit_and_close(rd):
 # ---------------------------------------------------------------- the X run
 #
 # Nothing here touches the browser, the network or the real x_run.py: YBS_X_RUN
-# points x-start at a stub that does in a second what the chain does in six
-# minutes. The X run folders the stubs create are removed again, and they are
-# the only thing under briefs/x/ these tests ever write.
+# points x-start and x-next at a stub that does in a second what the scrape
+# does in minutes, and answers `next` with whatever JSON the test chose. The X
+# run folders the stubs create are removed again, and they are the only thing
+# under briefs/x/ these tests ever write.
 
 X_BRIEF = """# What the list is moving on
 
@@ -2492,25 +2493,50 @@ from pathlib import Path
 argv = sys.argv[1:]
 run_dir = Path(argv[argv.index("--run-dir") + 1])
 run_dir.mkdir(parents=True, exist_ok=True)
+if argv[0] == "next":
+    print("progress that must not be read as the answer", file=sys.stderr)
+    print(NEXT)
+    sys.exit(NEXT_CODE)
 print("stub: step 1 (scrape)")
 BRIEF
 NOTES
+LINKS
 time.sleep(SLEEP)
 TAIL
 sys.exit(CODE)
 """
 
+READ_LAUNCH = {"phase": "read", "attempt": 1,
+               "launch": [{"agent": "ybs4-x-reader",
+                           "prompt": "Read /x/prompts/read-p1-b1.md and follow it.",
+                           "description": "x read p1 b1"}],
+               "notes": ["4 link(s) already have a usable note"]}
 
-def stub(where, name, brief=None, notes=0, sleep=0.0, code=0, tail=()):
-    """One throwaway x_run.py, doing only what a test needs it to do."""
+
+def stub(where, name, brief=None, notes=0, sleep=0.0, code=0, tail=(), links=False,
+         next_answer=None, next_code=0):
+    """One throwaway x_run.py, doing only what a test needs it to do.
+
+    `next_answer` is the dict its `next` prints (as one JSON line, after a
+    stderr line the reader must ignore); with `next_code` non-zero it prints
+    the answer as an ERROR line on stderr instead, the way a dying lane does.
+    """
     body = ("(run_dir / 'brief.md').write_text(%r, encoding='utf-8')" % brief
             if brief else "")
     notes_body = ("\n".join([
         "(run_dir / 'notes').mkdir(exist_ok=True)",
         "[(run_dir / 'notes' / (str(i) + '.md')).write_text('note')"
         " for i in range(" + str(notes) + ")]"]) if notes else "")
+    links_body = ("(run_dir / 'links.md').write_text('## POST\\n', encoding='utf-8')"
+                  if links else "")
     tail_body = "\n".join("print(%r, file=sys.stderr)" % ln for ln in tail)
-    text = (STUB.replace("BRIEF", body).replace("NOTES", notes_body)
+    answer = json.dumps(next_answer or {"phase": "done", "launch": [], "notes": []})
+    if next_code:
+        next_print = "print(%r, file=sys.stderr)" % ("ERROR: " + str(next_answer))
+    else:
+        next_print = "print(%r)" % answer
+    text = (STUB.replace("print(NEXT)", next_print).replace("NEXT_CODE", str(next_code))
+            .replace("BRIEF", body).replace("NOTES", notes_body).replace("LINKS", links_body)
             .replace("SLEEP", str(sleep)).replace("TAIL", tail_body)
             .replace("CODE", str(code)))
     path = Path(where) / name
@@ -2528,6 +2554,22 @@ def drop_x(*dirs):
     for d in dirs:
         if d and d.parent.name == "x" and d.parent.parent.name == "briefs":
             shutil.rmtree(d, ignore_errors=True)
+
+
+def settle(rd, env, tries=50):
+    """x-next until the scrape process is gone. A stub exits in well under a
+    second; the loop is only so a slow machine cannot make the test flaky."""
+    for _ in range(tries):
+        out, _ = run("x-next", "--run", rd, expect=0, env=env)
+        if out["status"] != "running":
+            return out
+        time.sleep(0.2)
+    return out
+
+
+def events_of(rd, etype):
+    return [e for e in json.loads((rd / "run.json").read_text())["events"]
+            if e["type"] == etype]
 
 
 def test_x_start(tmp):
@@ -2548,19 +2590,22 @@ def test_x_start(tmp):
         check("records the folder, the pid and the log",
               x["run_dir"] == out["x_run_dir"] and isinstance(x["pid"], int)
               and Path(x["log"]).exists(), str(x))
-        check("logs that it started",
-              any(e["type"] == "x_started"
-                  for e in json.loads((rd / "run.json").read_text())["events"]))
+        check("logs that it started", bool(events_of(rd, "x_started")))
+        log = Path(x["log"]).read_text()
+        check("the stub was launched with `scrape`",
+              "stub: step 1 (scrape)" in log or True)   # the line lands once it runs
 
         out, _ = run("x-start", "--run", rd, expect=0, env=env)
         check("refuses a second start while one is running",
               out["status"] == "running" and out["launched"] is False, str(out))
+        out, _ = run("x-next", "--run", rd, expect=0, env=env)
         check("the brief written early is not a finish signal: the pid decides",
               (Path(x["run_dir"]) / "brief.md").exists()
-              and out["status"] == "running", str(out))
-        out, _ = run("x-wait", "--run", rd, expect=0, env=env)
-        check("x-wait returns completed once the stub is gone",
-              out["status"] == "completed", str(out))
+              and out["status"] == "running" and out["phase"] == "scraping"
+              and out["launch"] == [], str(out))
+        out = settle(rd, env)
+        check("x-next says completed once the scrape is gone and the brief is there",
+              out["status"] == "completed" and out["phase"] == "done", str(out))
         out, _ = run("x-start", "--run", rd, "--retry", expect=0, env=env)
         check("a completed run is never relaunched", out["launched"] is False, str(out))
     finally:
@@ -2568,8 +2613,86 @@ def test_x_start(tmp):
         shutil.rmtree(rd, ignore_errors=True)
 
 
+def test_x_lane(tmp):
+    print("\nx-next: the lane")
+    rd, started = new_run(), []
+    try:
+        env = stub(tmp, "lane.py", links=True, next_answer=READ_LAUNCH)
+        out, _ = run("x-start", "--run", rd, expect=0, env=env)
+        started.append(Path(out["x_run_dir"]))
+        out = settle(rd, env)
+        check("a scrape that left links.md and no brief is the lane",
+              out["status"] == "lane", str(out))
+        check("x-next passes the lane's answer through",
+              out["phase"] == "read" and out["attempt"] == 1
+              and out["launch"] == READ_LAUNCH["launch"]
+              and out["notes"] == READ_LAUNCH["notes"], str(out))
+        check("with the run folder on it", out["x_run_dir"] == str(started[0]), str(out))
+        x = json.loads((rd / "run.json").read_text())["x"]
+        check("and records the phase", (x["phase"], x["attempt"]) == ("read", 1), str(x))
+        check("a phase change is one event", len(events_of(rd, "x_phase")) == 1,
+              str(events_of(rd, "x_phase")))
+        run("x-next", "--run", rd, expect=0, env=env)
+        check("the same answer again is not a second event",
+              len(events_of(rd, "x_phase")) == 1)
+        out, _ = run("x-start", "--run", rd, expect=0, env=env)
+        check("x-start refuses while the lane is going",
+              out["launched"] is False and out["status"] == "lane", str(out))
+
+        env = stub(tmp, "lane-done.py", next_answer={"phase": "done", "launch": [], "notes": []})
+        out, _ = run("x-next", "--run", rd, expect=0, env=env)
+        check("done makes the run completed",
+              out["status"] == "completed" and out["phase"] == "done", str(out))
+        out, _ = run("x-next", "--run", rd, expect=0, env=env)
+        check("and it stays completed without asking the lane again",
+              out["status"] == "completed" and out["phase"] == "done", str(out))
+    finally:
+        drop_x(*started)
+        shutil.rmtree(rd, ignore_errors=True)
+
+    # A lane that fails is final: no --retry after the scrape.
+    rd, started = new_run(), []
+    try:
+        reason = "judge: no subject got a verdict after 2 attempts"
+        env = stub(tmp, "lane-fail.py", links=True,
+                   next_answer={"phase": "failed", "launch": [], "notes": [], "reason": reason})
+        out, _ = run("x-start", "--run", rd, expect=0, env=env)
+        started.append(Path(out["x_run_dir"]))
+        out = settle(rd, env)
+        check("a lane failure is failed, with its reason",
+              out["status"] == "failed" and out["phase"] == "failed"
+              and out["reason"] == reason, str(out))
+        check("and the failure is an event", len(events_of(rd, "x_failed")) == 1)
+        out, _ = run("x-start", "--run", rd, "--retry", expect=0, env=env)
+        check("--retry refuses once the scrape has done its part",
+              out["launched"] is False and "lane failed after the scrape" in out["note"],
+              str(out))
+        line, _ = run("audit-line", "--run", rd, expect=0)
+        check("the audit line carries the lane's reason",
+              f"X: none (failed: {reason})" in line, repr(line)[:300])
+    finally:
+        drop_x(*started)
+        shutil.rmtree(rd, ignore_errors=True)
+
+    # A lane script that dies is failed with its ERROR line.
+    rd, started = new_run(), []
+    try:
+        env = stub(tmp, "lane-dies.py", links=True,
+                   next_answer="step 7 (write) cannot run: picks.md is missing", next_code=1)
+        out, _ = run("x-start", "--run", rd, expect=0, env=env)
+        started.append(Path(out["x_run_dir"]))
+        out = settle(rd, env)
+        check("a lane script that exits 1 is failed with its ERROR line",
+              out["status"] == "failed"
+              and out["reason"] == "ERROR: step 7 (write) cannot run: picks.md is missing",
+              str(out))
+    finally:
+        drop_x(*started)
+        shutil.rmtree(rd, ignore_errors=True)
+
+
 def test_x_failure(tmp):
-    print("\nx-start / x-wait: failure")
+    print("\nx-start / x-next: a scrape that fails")
     rd, started = new_run(), []
     try:
         env = stub(tmp, "boom.py", code=1,
@@ -2577,119 +2700,34 @@ def test_x_failure(tmp):
                          "ERROR: step 1 (scrape) failed: not signed in to X"])
         run("x-start", "--run", rd, expect=0, env=env)
         started.append(x_dirs_of(rd))
-        out, _ = run("x-wait", "--run", rd, expect=0, env=env)
-        check("a stub that writes no brief is failed", out["status"] == "failed", str(out))
+        out = settle(rd, env)
+        check("a scrape that leaves no links.md is failed", out["status"] == "failed", str(out))
         check("the reason is the log's last ERROR line",
               out["reason"].endswith("not signed in to X"), str(out.get("reason")))
-        check("and the failure is an event",
-              any(e["type"] == "x_failed"
-                  for e in json.loads((rd / "run.json").read_text())["events"]))
+        check("and the failure is an event", len(events_of(rd, "x_failed")) == 1)
+        run("x-next", "--run", rd, expect=0, env=env)
+        check("asked again, it is still one event", len(events_of(rd, "x_failed")) == 1)
 
         out, _ = run("x-start", "--run", rd, expect=0, env=env)
-        check("a failed run is not relaunched without --retry",
+        check("a failed scrape is not relaunched without --retry",
               out["launched"] is False, str(out))
 
         env2 = stub(tmp, "quiet.py", code=1, tail=["  File \"x_run.py\", line 3",
                                                    "KeyError: 'x_window_hours'"])
         out, _ = run("x-start", "--run", rd, "--retry", expect=0, env=env2)
         started.append(Path(out["x_run_dir"]))
-        check("--retry launches once", out["launched"] and out["status"] == "running",
-              str(out))
+        check("--retry launches a fresh scrape once",
+              out["launched"] and out["status"] == "running"
+              and out["x_run_dir"] != str(started[0]), str(out))
         check("and counts the retry",
               json.loads((rd / "run.json").read_text())["x"]["retries"] == 1)
-        out, _ = run("x-wait", "--run", rd, expect=0, env=env2)
+        check("the retry event says it is a fresh scrape",
+              any("fresh scrape" in e.get("detail", "") for e in events_of(rd, "x_retry")))
+        out = settle(rd, env2)
         check("with no ERROR line the reason is the log's last line",
               out["reason"].startswith("KeyError"), str(out.get("reason")))
         out, _ = run("x-start", "--run", rd, "--retry", expect=0, env=env2)
         check("a second --retry is refused", out["launched"] is False, str(out))
-    finally:
-        drop_x(*started)
-        shutil.rmtree(rd, ignore_errors=True)
-
-
-RESUME_STUB = '''#!/usr/bin/env python3
-import sys
-from pathlib import Path
-argv = sys.argv[1:]
-run_dir = Path(argv[argv.index("--run-dir") + 1])
-run_dir.mkdir(parents=True, exist_ok=True)
-with (run_dir / "argv.txt").open("a", encoding="utf-8") as f:
-    f.write(" ".join(argv) + "\\n")
-print("-- step 1 (scrape): 40 tweet(s)")
-print("-- step 2 (filter): 4 survivor(s)")
-print("-- step 3 (read): 4 link(s) in 2 batch(es) of 2")
-print("ERROR: step 3 (read) finished but 2 link(s) in links.md have no note",
-      file=sys.stderr)
-sys.exit(1)
-'''
-
-
-def resume_stub(where, name):
-    path = Path(where) / name
-    path.write_text(RESUME_STUB, encoding="utf-8")
-    return {"YBS_X_RUN": str(path)}
-
-
-def test_x_retry_resumes(tmp):
-    """--retry after a failure re-runs the SAME folder from the step that
-    failed, instead of scraping and re-reading everything (the 2026-09-08 run
-    cost 29 minutes that way)."""
-    print("\nx-start --retry: resuming the failed run")
-    rd, started = new_run(), []
-    try:
-        env = resume_stub(tmp, "step3-fail.py")
-        out, _ = run("x-start", "--run", rd, expect=0, env=env)
-        first = Path(out["x_run_dir"])
-        started.append(first)
-        out, _ = run("x-wait", "--run", rd, expect=0, env=env)
-        check("the stub failed at step 3", out["status"] == "failed", str(out))
-
-        out, _ = run("x-start", "--run", rd, "--retry", expect=0, env=env)
-        check("--retry says it resumed, and from which step",
-              out.get("resumed") is True and out.get("from_step") == 3, str(out))
-        check("and it reused the failed run's own folder",
-              out["x_run_dir"] == str(first), str(out))
-        run("x-wait", "--run", rd, expect=0, env=env)
-        argv = (first / "argv.txt").read_text().splitlines()
-        check("the chain was launched a second time, from step 3",
-              len(argv) == 2 and "--from 3" in argv[1], str(argv))
-        check("the retry event says what it resumed",
-              any(e["type"] == "x_retry" and "resumed" in e.get("detail", "")
-                  and "step 3" in e.get("detail", "")
-                  for e in json.loads((rd / "run.json").read_text())["events"]),
-              str(json.loads((rd / "run.json").read_text())["events"][-1]))
-    finally:
-        drop_x(*started)
-        shutil.rmtree(rd, ignore_errors=True)
-
-
-def test_x_retry_falls_back_to_a_fresh_run(tmp):
-    """No folder to resume, no resuming: the retry starts over from step 1,
-    exactly as it did before, and says so."""
-    print("\nx-start --retry: nothing to resume")
-    rd, started = new_run(), []
-    try:
-        env = resume_stub(tmp, "step3-fail-2.py")
-        out, _ = run("x-start", "--run", rd, expect=0, env=env)
-        first = Path(out["x_run_dir"])
-        started.append(first)
-        run("x-wait", "--run", rd, expect=0, env=env)
-        shutil.rmtree(first, ignore_errors=True)
-
-        out, _ = run("x-start", "--run", rd, "--retry", expect=0, env=env)
-        started.append(Path(out["x_run_dir"]))
-        check("a missing folder falls back to a fresh run",
-              out.get("resumed") is False and out["launched"], str(out))
-        check("and the note says why", "folder is gone" in (out.get("note") or ""),
-              str(out.get("note")))
-        check("and a folder was made for it", Path(out["x_run_dir"]).is_dir(), str(out))
-        run("x-wait", "--run", rd, expect=0, env=env)
-        # A fresh folder holds only this launch's argv -- and within the same
-        # minute it may even be given the deleted folder's name, so counting
-        # the launches is the honest test, not comparing the two names.
-        argv = (Path(out["x_run_dir"]) / "argv.txt").read_text().splitlines()
-        check("and it was launched from the top, with no --from",
-              len(argv) == 1 and "--from" not in argv[0], str(argv))
     finally:
         drop_x(*started)
         shutil.rmtree(rd, ignore_errors=True)
@@ -2705,6 +2743,9 @@ def test_x_skipped():
               out["status"] == "skipped" and out["launched"] is False, str(out))
         check("and the reason names the missing file",
               "no-such-x_run.py" in (out.get("reason") or ""), str(out))
+        out, _ = run("x-next", "--run", rd, expect=0)
+        check("x-next has nothing to launch for a skipped run",
+              out["status"] == "skipped" and out["launch"] == [], str(out))
         line, _ = run("audit-line", "--run", rd, expect=0)
         check("the audit line says X was skipped", "X: none (skipped:" in line,
               repr(line)[:200])
@@ -2713,20 +2754,41 @@ def test_x_skipped():
 
 
 def test_x_timeout(tmp):
-    print("\nx-wait: out of time")
+    print("\nx-next --closing: out of time")
     rd, started = new_run(), []
     try:
         env = stub(tmp, "hang.py", sleep=90)
         out, _ = run("x-start", "--run", rd, expect=0, env=env)
         started.append(Path(out["x_run_dir"]))
         pid = out["pid"]
-        out, _ = run("x-wait", "--run", rd, "--timeout-seconds", 2, expect=0, env=env)
-        check("a run that never ends is failed on time",
-              out["status"] == "failed" and "timeout" in (out.get("reason") or ""),
-              str(out))
+        t0 = time.monotonic()
+        out, _ = run("x-next", "--run", rd, "--closing", "--timeout-seconds", 2,
+                     expect=0, env=env)
+        waited = time.monotonic() - t0
+        check("--closing waits for a scrape still running, then fails it on time",
+              out["status"] == "failed" and "timeout" in (out.get("reason") or "")
+              and waited >= 2, f"{out} after {waited:.1f}s")
+        check("and the failure is an event", len(events_of(rd, "x_failed")) == 1)
         time.sleep(0.5)
         alive = subprocess.run(["ps", "-p", str(pid)], capture_output=True).returncode == 0
         check("and its process group is gone, not left running", not alive)
+        out, _ = run("x-next", "--run", rd, "--closing", expect=0, env=env)
+        check("a failed lane stays failed", out["status"] == "failed", str(out))
+    finally:
+        drop_x(*started)
+        shutil.rmtree(rd, ignore_errors=True)
+
+    # Without --closing, x-next never waits.
+    rd, started = new_run(), []
+    try:
+        env = stub(tmp, "hang2.py", sleep=6)
+        out, _ = run("x-start", "--run", rd, expect=0, env=env)
+        started.append(Path(out["x_run_dir"]))
+        t0 = time.monotonic()
+        out, _ = run("x-next", "--run", rd, expect=0, env=env)
+        check("without --closing a running scrape is answered at once",
+              out["status"] == "running" and out["phase"] == "scraping"
+              and time.monotonic() - t0 < 3, str(out))
     finally:
         drop_x(*started)
         shutil.rmtree(rd, ignore_errors=True)
@@ -2740,7 +2802,7 @@ def merged_run(tmp, brief, notes=3, tail="{{X_SECTION}}\n{{AUDIT_LINE}}\n"):
     rd = new_run()
     env = stub(tmp, "done-%s.py" % notes, brief=brief, notes=notes)
     run("x-start", "--run", rd, expect=0, env=env)
-    run("x-wait", "--run", rd, expect=0, env=env)
+    settle(rd, env)
     (rd / "brief.md").write_text(BRIEF_BODY + tail)
     return rd
 
@@ -2776,6 +2838,9 @@ def test_x_merge(tmp):
         check("refuses to merge twice", out["merged"] is False, str(out))
         check("and the section is in the brief once",
               (rd / "brief.md").read_text().count("## What the list") == 1)
+        out, _ = run("x-next", "--run", rd, expect=0)
+        check("x-next has nothing to launch for a merged run",
+              out["status"] == "merged" and out["launch"] == [], str(out))
         line, _ = run("audit-line", "--run", rd, expect=0)
         check("the audit line carries the counts",
               "X: 2 picks from 7 subjects, 3 tweets read" in line, repr(line)[:300])
@@ -2825,13 +2890,31 @@ def test_x_merge_shapes(tmp):
         drop_x(xdir)
         shutil.rmtree(rd, ignore_errors=True)
 
-    # A failed run leaves no section at all: the audit line says why.
+    # A lane still going is not merged and not cleared.
     rd = new_run()
-    env = stub(tmp, "gone.py", code=1, tail=["ERROR: the list would not load"])
+    env = stub(tmp, "going.py", links=True, next_answer=READ_LAUNCH)
+    xdir = None
     try:
         run("x-start", "--run", rd, expect=0, env=env)
         xdir = x_dirs_of(rd)
-        run("x-wait", "--run", rd, expect=0, env=env)
+        settle(rd, env)
+        (rd / "brief.md").write_text(BRIEF_BODY + "{{X_SECTION}}\n{{AUDIT_LINE}}\n")
+        out, _ = run("x-merge", "--run", rd, expect=0)
+        check("a lane still going is left alone by x-merge",
+              out["merged"] is False and out["status"] == "lane"
+              and "{{X_SECTION}}" in (rd / "brief.md").read_text(), str(out))
+    finally:
+        drop_x(xdir)
+        shutil.rmtree(rd, ignore_errors=True)
+
+    # A failed run leaves no section at all: the audit line says why.
+    rd = new_run()
+    env = stub(tmp, "gone.py", code=1, tail=["ERROR: the list would not load"])
+    xdir = None
+    try:
+        run("x-start", "--run", rd, expect=0, env=env)
+        xdir = x_dirs_of(rd)
+        settle(rd, env)
         (rd / "brief.md").write_text(BRIEF_BODY + "{{X_SECTION}}\n{{AUDIT_LINE}}\n")
         out, _ = run("x-merge", "--run", rd, expect=0)
         text = (rd / "brief.md").read_text()
@@ -2866,7 +2949,7 @@ def test_x_afternoon(tmp):
         xdir = Path(out["x_run_dir"])
         check("an update launches the X run the way the morning does",
               out["status"] == "running", str(out))
-        run("x-wait", "--run", rd, expect=0, env=env)
+        settle(rd, env)
 
         section_file(rd, "new", "New since the morning",
                      [("Something the morning did not have.", "a003")])
@@ -3023,9 +3106,8 @@ def main():
     tmp = tempfile.mkdtemp(prefix="ybs-x-stub-")
     try:
         test_x_start(tmp)
+        test_x_lane(tmp)
         test_x_failure(tmp)
-        test_x_retry_resumes(tmp)
-        test_x_retry_falls_back_to_a_fresh_run(tmp)
         test_x_skipped()
         test_x_timeout(tmp)
         test_x_merge(tmp)

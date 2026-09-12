@@ -542,7 +542,7 @@ def preference_lines(text: str) -> list:
     instructions below it. Only what is below the first `---` counts. Inside
     that, a line starting with # and anything in an HTML comment are notes
     too. A file with no `---` is read whole. The same function, character for
-    character, lives in ybs_run.py; a test keeps the two identical.
+    character, lives in x-lists/x_run.py; a test keeps the two identical.
     """
     parts = re.split(r"^---\s*$", text, maxsplit=1, flags=re.M)
     text = parts[1] if len(parts) == 2 else parts[0]

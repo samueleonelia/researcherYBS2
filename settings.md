@@ -40,7 +40,7 @@ settings`, `python3 .claude/skills/ybs-brief/x-lists/x_settings.py`, or `python3
 | new_item_articles_min | 10 | articles an afternoon item that follows no morning story must hold before it is read; the one floor in this table, and the note under it says so |
 | achievements_max | 5 | human-achievement stories that may reach the evening report; zero is a valid result |
 | words_per_sentence_max | 30 | words in one sentence of the brief |
-| x_wait_minutes_max | 30 | safety timeout only: minutes step 10 waits for the X run before the brief goes out without it. Not a speed target — raise it if the X lists take longer |
+| x_wait_minutes_max | 30 | safety timeout only: minutes step 10 keeps driving the X lane before the brief goes out without it. Not a speed target — raise it if the X lists take longer |
 
 BODY has no setting: it is whatever is left of the picks after LEAD and WORTH.
 
@@ -80,9 +80,11 @@ not asked for). Put them back to `high` if a replay shows either, and say so in
 
 # The X list
 
-The X half runs beside the article half and writes the section under Worth
+The X half runs as a lane of the same run and writes the section under Worth
 Yaron's attention. Its steps, and the home of each rule it obeys, are listed in the header of
-`.claude/skills/ybs-brief/x-lists/x_run.py`.
+`.claude/skills/ybs-brief/x-lists/x_run.py`. Its agents are the orchestrator's,
+like the article half's, and their model and effort reach them the same way:
+through the agent files `build` renders from the `## X models` table.
 
 ## X numbers
 
@@ -103,13 +105,16 @@ Yaron's attention. Its steps, and the home of each rule it obeys, are listed in 
 | x_tweets_min | 20 | tweets a scrape must return for the run to count as a pass |
 | x_words_per_sentence_max | 30 | words in one sentence of the brief, same ceiling as the article brief |
 | x_cluster_chunk | 60 | kept tweets one cluster agent may take; a longer list is cut into parts and merged |
-| x_agents_active_max | 8 | agents working at the same time in a pooled step |
 
 ### Retired
 
 `x_min_reposts` and `x_min_likes` (an absolute floor) were replaced on
 2026-09-06 by the three `x_*_per_hour` rates. Code that still reads the old
 names is a bug, not a setting.
+
+`x_agents_active_max` was retired on 2026-09-12: the X agents are launched
+by the orchestrator and go through its one pool, whose ceiling is
+`agents_active_max` in `## Numbers` above.
 
 ## X fixed
 
@@ -136,9 +141,9 @@ run decide the cost.
 
 | Step | Model | Effort | Agents per run |
 |---|---|---|---|
-| cluster | opus | high | 1-2, one per chunk of `x_cluster_chunk` |
-| read | sonnet | medium | one per batch of `x_read_batch` links, up to `x_agents_active_max` at once, each in its own ego task space |
-| judge | opus | high | one per subject, up to `x_agents_active_max` at once |
+| cluster | opus | high | one per chunk of `x_cluster_chunk`, plus one merge when there are several |
+| read | sonnet | medium | one per batch of `x_read_batch` links, each in its own ego task space |
+| judge | opus | high | one per subject, plus one merge |
 | write | opus | high | 1; it writes what Yaron reads |
 
 # The shows

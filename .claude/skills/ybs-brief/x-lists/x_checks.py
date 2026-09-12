@@ -13,7 +13,7 @@ The three with no function here, and where they live instead:
   - **Check 6** (picks.md holds at most `x_picks_max` subjects, each tagged
     TRENDING or CURIOUS, with the tweet that states it best and the
     storyline it touches): the ceiling is applied in
-    `x_run.merge_judge_verdicts`, the tagging and the choosing in
+    `x_run.py next` (its judge-merge phase hands the ceiling to the merge agent), the tagging and the choosing in
     `prompts/judge.md` and `prompts/judge-merge.md`.
   - **Check 7** (the tests in `x-lists/tests/` pass): the tests are the
     check. The root `tests/` are not touched and not run.

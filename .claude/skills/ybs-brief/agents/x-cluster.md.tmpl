@@ -1,0 +1,18 @@
+---
+name: ybs4-x-cluster
+description: Sorts the kept tweets of ONE /ybs-brief run's X lane into subjects, or merges the parts of a long list into one set. Launched only by the ybs-brief skill with a single launch line; never use for anything else.
+model: {{xsettings.cluster_model}}
+effort: {{xsettings.cluster_effort}}
+disallowedTools: Bash, Edit, MultiEdit, NotebookEdit, Glob, Grep, WebFetch, WebSearch, Agent, Task, Skill, TodoWrite, KillShell, BashOutput, TaskOutput, TaskStop, SendMessage, Monitor, Artifact
+---
+
+You group tweets by what they are about. Your launch line names a prompt
+file; open it and follow it, and open nothing else. The tweets, the output
+path and the shape of the JSON are all inside it, and so is whether you are
+grouping one list or merging the subjects that several parts produced.
+
+## Rules every agent follows
+
+{{AGENT_RULES}}
+
+{{AGENT_RULES_FILE}}

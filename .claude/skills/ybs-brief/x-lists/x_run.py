@@ -1,53 +1,72 @@
 #!/usr/bin/env python3
-"""x_run.py - the one command that chains the X-list pipeline end to end.
+"""x_run.py - the X-list pipeline: two commands, seven steps.
 
-    python3 x_run.py
+    python3 x_run.py scrape [--run-dir DIR] [--settings PATH]
+    python3 x_run.py next   --run-dir DIR  [--settings PATH]
 
-creates a fresh run folder `briefs/x/<YYYY-MM-DD>-<HHMM>/` at the repo root (UTC) and
-drives, in order:
+`scrape` creates (or reuses) a run folder `briefs/x/<YYYY-MM-DD>-<HHMM>/` at
+the repo root (UTC) and runs the two scripts that need no agent. `next` is
+the lane: called by `ybs_run.py x-next`, it looks at the folder, does what
+code can do, and prints what the orchestrator must launch now. The seven
+steps, in order:
 
-    1. x_scrape.py         (script)  ->  tweets.json, page.txt
-    2. x_filter.py         (script)  ->  kept.json, links.md
-    3. read agent(s)       (claude -p, prompts/read.md, one per batch of
-                            x_read_batch links)  ->  notes/<id>.md
-    4. cluster agent(s)    (claude -p, prompts/cluster.md [+ cluster-merge.md])
-                                     ->  subjects.json
-    5. x_score.py          (script)  ->  subjects.json, enriched
-    6. judge agent(s)      (claude -p, prompts/judge.md, one per subject)
-                                     ->  picks.md
-    7. write agent         (claude -p, prompts/write.md + templates/x-brief.md)
-                                     ->  brief.md
+    1. x_scrape.py     (script, `scrape`)  ->  tweets.json, page.txt
+    2. x_filter.py     (script, `scrape`)  ->  kept.json, links.md
+    3. read            (agents, `next`)    ->  notes/<id>.md, one per tweet
+    4. cluster         (agents, `next`)    ->  subjects.json
+    5. x_score.py      (script, `next`)    ->  subjects.json, enriched
+    6. judge           (agents, `next`)    ->  judge_<i>.json, then picks.md
+    7. write           (agent,  `next`)    ->  brief.md
 
-Step 3 is new on 2026-09-06. The list feed only shows a collapsed preview of
-a tweet, so cluster and judge used to work from text cut off at ~280
-characters. The read step opens every surviving tweet on its own page and
-writes its full text to notes/, and steps 4 and 6 prefer that text. Step 3
-also runs one sub-agent per batch of `x_read_batch` links at a time (up to
-`x_agents_active_max` at once, each in its own ego task space) since
-2026-09-06 -- it used to run its batches serially on the old "the browser is
-the one serial thing" rule, which Samuele replaced.
+No agent is run by this script. Every agent step is a subagent of the
+orchestrator, launched from a generated agent file in `.claude/agents/`
+(`ybs4-x-reader`, `ybs4-x-cluster`, `ybs4-x-judge`, `ybs4-x-write`) whose
+model and effort come from settings.md's `## X models` table through
+`ybs_run.py build`. Before 2026-09-12 this script spawned a second Claude
+Code (`claude -p`) per agent step; launched from inside the desktop app that
+copy could not renew its own login, and the X half died whenever the login
+expired mid-run. Now the X agents run under the orchestrator's own session.
 
-Step 3 became resumable on 2026-09-09, after a read agent exited cleanly
-having written one note out of three and killed a 39-batch run. It now does
-three things it did not do before. It skips any link that already has a
-usable note, so re-running the step costs only what is left. It re-reads,
-once, whatever has no note after the first pass. Whatever still has no note
-after that second pass gets a note written here, in code, marked
-`status: unavailable` with the reason `no note after two read passes` -- the
-only note in the chain no agent wrote, and it says so, so the audit trail
-stays honest. And it keeps every read agent's reply in `read-log/`, so a run
-that stops this way can be explained afterwards instead of guessed at.
+How `next` works. The state of the lane is the files in the run folder:
+the prompt files it has written and the output files the agents have
+written. Each call re-derives the phase from them, in this order, and a
+phase with nothing left to do falls through to the next:
 
-Step 7 is also new on 2026-09-06: it takes picks.md and the picked tweets'
-notes and writes the finished, show-ready brief.md -- the last step before
-the checks in x_checks.py.
+    phase          prompt file written by `next`          agent writes
+    -------------  -------------------------------------  ------------------------
+    read           prompts/read-p<pass>-b<k>.md           notes/<id>.md
+    cluster        prompts/cluster-a<n>.md                subjects.json
+      (parts)      prompts/cluster-part<k>-a<n>.md        cluster_part_<k>.json
+    cluster-merge  prompts/cluster-merge-a<n>.md          subjects.json
+    judge          prompts/judge-<i>-a<n>.md              judge_<i>.json
+    judge-merge    prompts/judge-merge-a<n>.md            picks.md
+    write          prompts/write-a<n>.md                  brief.md
 
-Every number and every model this script obeys comes from settings.md at
-run time -- nothing here is hard-coded, and nothing here has a fallback: a
-missing or misspelled `## X models` row stops the run by name rather than
-quietly running the step at some other model. If a step's script does not
-exist yet, the chain stops with a clear message naming that step; it never
-lets the missing file surface as a traceback.
+`<pass>` and `<n>` are attempt numbers, 1 or 2: a phase whose output is
+still missing or invalid after two attempts fails the lane, and the reason
+says which. Every launch is one line, `Read <path> and follow it.`, and the
+orchestrator calls `next` again only once every launch it printed has
+returned, so a prompt file is never launched twice. The JSON `next` prints
+is the only thing on its stdout; progress and script output go to stderr:
+
+    {"phase": "read", "attempt": 1,
+     "launch": [{"agent": "ybs4-x-reader",
+                 "prompt": "Read <run>/prompts/read-p1-b1.md and follow it.",
+                 "description": "x read p1 b1"}],
+     "notes": ["4 link(s) already have a usable note"]}
+
+`phase` is `done` once brief.md exists and `failed` (with `reason`) when a
+phase ran out of attempts. The read phase re-reads once whatever pass 1
+left without a note, and after pass 2 writes a `status: unavailable` note
+itself for what is still missing -- the only note code writes, and it says
+so. The cluster phase sets an invalid subjects.json aside and quotes the
+problem in the retry prompt. A subject with no verdict after two attempts
+is left out of the merge and named in `notes`.
+
+Every number this script obeys comes from settings.md at run time --
+nothing here is hard-coded, and nothing here has a fallback. If a step's
+script does not exist, the lane stops with a clear message naming that
+step; it never lets the missing file surface as a traceback.
 
 The ten finish-line checks, and where each one lives:
 
@@ -57,10 +76,10 @@ The ten finish-line checks, and where each one lives:
      2.   | the scrape window rule                 | x_checks.check2_window
      3.   | kept.json = the six filter rules       | x_checks.check3_kept
      4.   | every kept id in exactly one subject   | x_checks.check4_subject_coverage
-          |                                        | + validate_cluster_coverage below
+          |                                        | + cluster_coverage_problem below
      5.   | every subject carries its score fields | x_checks.check5_subject_fields
-     6.   | picks.md within the x_picks_max        | merge_judge_verdicts below
-          | ceiling, each pick tagged              | (the ceiling) + prompts/judge.md
+     6.   | picks.md within the x_picks_max        | prompts/judge-merge.md, handed
+          | ceiling, each pick tagged              | the ceiling by `next`
      7.   | the tests pass                         | x-lists/tests/
      8.   | links.md = the survivors, POST/REPOST  | x_checks.check8_links
      9.   | every link has a note with FULL text   | validate_notes below
@@ -69,26 +88,14 @@ The ten finish-line checks, and where each one lives:
           | only what the notes say                | + prompts/write.md (reader half)
 
 `x_checks.py` is run by `x-lists/tests/` and by a verifier agent. A run
-never calls it: the chain enforces only the three checks written into it
-here (4, 6's ceiling and 9), so a bad agent output stops the run instead
-of drifting downstream.
-
-Flags beyond the bare `python3 x_run.py` contract exist only to make the
-chain testable and resumable -- they let the tests drive the chain's
-plumbing against the fixture without a browser or a real agent:
-
-    --run-dir DIR     use this folder instead of creating a fresh one
-                       (e.g. one seeded with the fixture as tweets.json)
-    --settings PATH   defaults to the root settings.md
-    --from STEP       start at this step (1-7), skipping earlier ones
-                       because their output is already in --run-dir
-    --only STEP       run just this one step
+never calls it: the lane enforces only the checks written into it here (4,
+6's ceiling and 9), so a bad agent output stops the lane instead of
+drifting downstream.
 
 Python 3, standard library only.
 """
 
 import argparse
-import concurrent.futures
 import json
 import re
 import subprocess
@@ -111,17 +118,19 @@ STEP_NAMES = {
     7: "write",
 }
 
-# The old rule here read "the browser is the one serial thing: never two
-# agents on it at once" and forced the read step to run its batches one
-# after another. Samuele replaced that rule on 2026-09-06: many read
-# sub-agents now run at the same time, each in its OWN ego task space,
-# working only in it. Two agents in one task space, or two agents doing the
-# same job, is the thing that must never happen. The constraint that
-# survives is *inside* one sub-agent -- it opens one link at a time,
-# finishes its note, then opens the next of its own batch. Never two tabs in
-# one task space. So the read step is now pooled exactly like cluster and
-# judge: up to `x_agents_active_max` batches in flight at once, read from
-# settings.md at run time, never hard-coded here.
+# Which generated agent file runs which lane phase. The names are the
+# `name:` of the templates in .claude/skills/ybs-brief/agents/x-*.md.tmpl.
+AGENT_OF = {
+    "read": "ybs4-x-reader",
+    "cluster": "ybs4-x-cluster",
+    "judge": "ybs4-x-judge",
+    "write": "ybs4-x-write",
+}
+
+# A read agent works in its own ego task space; two agents in one task space
+# is the thing that must never happen. The name carries the run, the pass and
+# the batch, so no two batches of any pass ever share one.
+TASK_SPACE = "x read {run} p{pass_no} b{k}"
 
 
 def die(msg: str, code: int = 1):
@@ -129,20 +138,9 @@ def die(msg: str, code: int = 1):
     sys.exit(code)
 
 
-def agent_settings(settings: dict, step: str):
-    """(model, effort) for one agent step, from settings.md's `## X models`.
-
-    No fallback on purpose: a row Yaron misspelled, or deleted, must stop
-    the run by name -- the same hard failure the two settings loaders give
-    for a missing number -- rather than silently running the step at some
-    model he never chose."""
-    missing = [k for k in (f"{step}_model", f"{step}_effort") if k not in settings]
-    if missing:
-        die(
-            f"settings.md's `## X models` table has no {' and no '.join(missing)}: "
-            f"the {step} step cannot run. Add or fix the `{step}` row."
-        )
-    return settings[f"{step}_model"], settings[f"{step}_effort"]
+def say(msg: str):
+    """Progress, on stderr: `next`'s stdout is its JSON and nothing else."""
+    print(msg, file=sys.stderr)
 
 
 def load_json(path: Path):
@@ -152,6 +150,16 @@ def load_json(path: Path):
         return json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as e:
         die(f"bad JSON in {path}: {e}")
+
+
+def load_json_or_none(path: Path):
+    """The file's JSON, or None when it is missing or not JSON at all."""
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
 
 
 def write_json(path: Path, obj):
@@ -178,11 +186,14 @@ def new_run_dir(runs_root: Path) -> Path:
 
 # ---------------------------------------------------------------- script steps
 
-def run_script_step(step_num: int, script_name: str, run_dir: Path, settings_path: Path):
+def run_script_step(step_num: int, script_name: str, run_dir: Path, settings_path: Path,
+                    quiet: bool = False):
     """Shell out to one of the script steps (x_scrape/x_filter/x_score).
 
     If the script is missing, fail with a message naming the step -- never
     let a missing file surface as a traceback further down the chain.
+    `quiet` is for `next`: the step's line and the script's own output go to
+    stderr, so stdout stays the one JSON object.
     """
     label = STEP_NAMES[step_num]
     script_path = HERE / script_name
@@ -196,13 +207,21 @@ def run_script_step(step_num: int, script_name: str, run_dir: Path, settings_pat
         "--run-dir", str(run_dir),
         "--settings", str(settings_path),
     ]
-    print(f"-- step {step_num} ({label}): {' '.join(cmd)}")
-    result = subprocess.run(cmd, cwd=str(HERE))
+    line = f"-- step {step_num} ({label}): {' '.join(cmd)}"
+    if quiet:
+        say(line)
+        result = subprocess.run(cmd, cwd=str(HERE), capture_output=True, text=True)
+        for stream in (result.stdout, result.stderr):
+            if stream and stream.strip():
+                say(stream.rstrip())
+    else:
+        print(line)
+        result = subprocess.run(cmd, cwd=str(HERE))
     if result.returncode != 0:
         die(f"step {step_num} ({label}) failed: {script_name} exited {result.returncode}")
 
 
-# ---------------------------------------------------------------- agent steps
+# ---------------------------------------------------------------- prompts
 
 PLACEHOLDER_RE = re.compile(r"\{\{([A-Z0-9_]+)\}\}")
 
@@ -237,60 +256,14 @@ def fill_template(template: str, values: dict) -> str:
     return PLACEHOLDER_RE.sub(_sub, template)
 
 
-def call_claude(prompt_text: str, model: str, effort: str, cwd: Path,
-                timeout: int = 1800, log_path: Path = None) -> str:
-    """Shell out to `claude -p` headless, prompt on stdin, at `model` and
-    `effort`. Both come from settings.md's `## X models` row for the step,
-    so an edit there reaches the agent on the next run with nothing else to
-    do. Returns the agent's stdout (its one-line summary); dies clearly on a
-    non-zero exit or a missing `claude` binary.
-
-    `log_path` is optional and nothing but a keyword: pass one and the
-    agent's whole reply -- stdout, then its stderr under a `--- stderr ---`
-    rule -- is written there before the exit code is judged, so an agent
-    that stopped early can be read afterwards. Callers that pass nothing
-    behave exactly as they did before.
-    """
-    # --add-dir last: it is variadic, and the prompt goes over stdin.
-    cmd = ["claude", "-p", "--model", model, "--effort", effort, "--add-dir", str(ROOT)]
-    try:
-        result = subprocess.run(
-            cmd, input=prompt_text, capture_output=True, text=True,
-            cwd=str(cwd), timeout=timeout,
-        )
-    except FileNotFoundError:
-        die("the `claude` CLI is not on PATH; cannot run an agent step")
-    except subprocess.TimeoutExpired:
-        die(f"claude -p timed out after {timeout}s")
-    if log_path is not None:
-        write_agent_log(Path(log_path), result.stdout or "", result.stderr or "",
-                        result.returncode)
-    if result.returncode != 0:
-        die(f"claude -p exited {result.returncode}: {result.stderr.strip()[:2000]}")
-    return result.stdout.strip()
-
-
-def write_agent_log(path: Path, stdout: str, stderr: str, returncode) -> None:
-    """One agent's reply on disk. Never lets a logging problem stop a run:
-    the log is an audit trail, not a step."""
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        body = f"exit: {returncode}\n\n--- stdout ---\n{stdout.rstrip()}\n"
-        if stderr.strip():
-            body += f"\n--- stderr ---\n{stderr.rstrip()}\n"
-        path.write_text(body, encoding="utf-8")
-    except OSError as e:  # noqa: BLE001 - a lost log never fails the chain
-        print(f"-- could not write {path}: {e}", file=sys.stderr)
-
-
 def tweet_block(t: dict, notes: dict = None) -> str:
     """One tweet as the cluster and judge prompts see it.
 
     Since 2026-09-06 the text comes from the read step's note when there is
-    one: `notes.json`-free, just notes/<id>.md, holding the tweet's FULL text
-    read off its own page. The feed text in kept.json is a collapsed preview
-    cut at ~280 characters, so it is only the fallback -- used when the read
-    step wrote no usable note for this id.
+    one: just notes/<id>.md, holding the tweet's FULL text read off its own
+    page. The feed text in kept.json is a collapsed preview cut at ~280
+    characters, so it is only the fallback -- used when the read step wrote
+    no usable note for this id.
     """
     note = (notes or {}).get(t["id"]) or {}
     text = note.get("full_text") or t.get("text")
@@ -310,29 +283,7 @@ def chunked(items, size):
         yield items[i:i + size]
 
 
-def run_pool(jobs, max_workers):
-    """Run `jobs` (zero-arg callables) with at most `max_workers` at once,
-    returning their results in the same order. Re-raises the first
-    exception any job raised, after every job has finished."""
-    if max_workers < 1:
-        max_workers = 1
-    results = [None] * len(jobs)
-    errors = [None] * len(jobs)
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as ex:
-        futures = {ex.submit(job): i for i, job in enumerate(jobs)}
-        for fut in concurrent.futures.as_completed(futures):
-            i = futures[fut]
-            try:
-                results[i] = fut.result()
-            except Exception as e:  # noqa: BLE001 - surface after all jobs finish
-                errors[i] = e
-    for e in errors:
-        if e is not None:
-            raise e
-    return results
-
-
-# ---- step 3: read ----
+# ---- links and notes ----
 
 # links.md (written by x_filter.py) is plain markdown: a `## POST` / `## REPOST`
 # heading per survivor, an `- author:` line, and the bare permalink on its own
@@ -458,7 +409,7 @@ UNAVAILABLE_REASON = "(unavailable: no note after two read passes)"
 
 
 def note_is_usable(notes_dir: Path, tweet_id: str) -> bool:
-    """The one test of a note, shared by the read step and validate_notes: the
+    """The one test of a note, shared by the read phase and validate_notes: the
     file exists and either holds a full_text or says `status: unavailable`.
     Anything else counts as no note at all."""
     path = notes_dir / f"{tweet_id}.md"
@@ -477,14 +428,14 @@ def links_without_notes(links: list, notes_dir: Path) -> list:
 
 
 def write_unavailable_note(notes_dir: Path, link: dict) -> None:
-    """The one note in the whole chain that code writes rather than an agent.
+    """The one note in the whole lane that code writes rather than an agent.
 
-    It is the last resort of step 3: two read passes went by and this link
-    still has no note. The shape is prompts/read.md's own "when a tweet will
-    not load" shape, so `parse_note`, `validate_notes` and `tweet_block`'s
-    fallback all read it as they read any other note -- and the reason line
-    says in words that no agent read this tweet, so nobody downstream mistakes
-    it for a page that was actually opened."""
+    It is the last resort of the read phase: two read passes went by and
+    this link still has no note. The shape is prompts/read.md's own "when a
+    tweet will not load" shape, so `parse_note`, `validate_notes` and
+    `tweet_block`'s fallback all read it as they read any other note -- and
+    the reason line says in words that no agent read this tweet, so nobody
+    downstream mistakes it for a page that was actually opened."""
     text = (
         f"# {link['id']}\n\n"
         f"- id: {link['id']}\n"
@@ -506,92 +457,6 @@ def write_unavailable_note(notes_dir: Path, link: dict) -> None:
     )
     notes_dir.mkdir(parents=True, exist_ok=True)
     (notes_dir / f"{link['id']}.md").write_text(text, encoding="utf-8")
-
-
-def step_read(run_dir: Path, settings: dict):
-    links = parse_links_md(run_dir / "links.md")
-    notes_dir = run_dir / "notes"
-    notes_dir.mkdir(parents=True, exist_ok=True)
-    read_log_dir = run_dir / "read-log"
-    if not links:
-        print("-- step 3 (read): links.md holds no survivors, nothing to read")
-        return
-
-    batch_size = settings["x_read_batch"]
-    model, effort = agent_settings(settings, "read")
-    max_workers = settings.get("x_agents_active_max", 1)
-    template = load_prompt_template("read.md", 3, "read")
-
-    batch_no = 0        # counts every batch of every pass, so no two agents
-                        # share a task space or a read-log file
-
-    def make_job(number, batch, position, of):
-        def job():
-            # One ego task space per batch (Samuele's rule, 2026-09-06):
-            # many read sub-agents run at the same time, each in its own
-            # task space, working only in it. Never two batches sharing one
-            # space -- that would be two agents in one task space, which is
-            # the thing that must never happen.
-            task_space = f"x-lists read {run_dir.name} batch {number}"
-            values = {
-                "RUN_DIR": str(run_dir),
-                "NOTES_DIR": str(notes_dir),
-                "TASK_SPACE": task_space,
-                "BATCH_NOTE": (
-                    f"This is batch {position} of {of}. Other batches hold "
-                    f"other tweets, read by other sub-agents at the same time in "
-                    f"their own task spaces; you read only the ones listed below, "
-                    f"one at a time, in your own task space."
-                ),
-                "LINKS": "\n\n".join(link_block(l) for l in batch),
-                "ALLOWED_URLS": "\n".join(l["url"] for l in batch),
-            }
-            prompt = fill_template(template, values)
-            call_claude(prompt, model, effort, HERE,
-                        log_path=read_log_dir / f"batch-{number}.txt")
-        return job
-
-    def read_pass(pass_links):
-        """One pooled pass over `pass_links`, in batches of `batch_size`."""
-        nonlocal batch_no
-        batches = list(chunked(pass_links, batch_size))
-        jobs = []
-        for position, batch in enumerate(batches, start=1):
-            batch_no += 1
-            jobs.append(make_job(batch_no, batch, position, len(batches)))
-        print(
-            f"-- step 3 (read): {len(pass_links)} link(s) in {len(batches)} batch(es) of "
-            f"{batch_size}, model={model}/{effort}, up to {max_workers} at once, each batch "
-            f"in its own ego task space"
-        )
-        run_pool(jobs, max_workers)
-
-    todo = links_without_notes(links, notes_dir)
-    skipped = len(links) - len(todo)
-    if skipped:
-        print(f"-- step 3 (read): {skipped} link(s) already have a usable note, "
-              f"skipping them")
-    if todo:
-        read_pass(todo)
-
-    # A read agent can exit cleanly having written only some of its batch --
-    # that is what killed the 2026-09-08 run. One more pass over whatever is
-    # missing costs a fraction of a fresh run, and usually ends it.
-    still_missing = links_without_notes(links, notes_dir)
-    if still_missing:
-        print(f"-- step 3 (read): {len(still_missing)} note(s) missing after pass 1, "
-              f"re-reading once")
-        read_pass(still_missing)
-
-    unwritten = links_without_notes(links, notes_dir)
-    for link in unwritten:
-        write_unavailable_note(notes_dir, link)
-    if unwritten:
-        print(f"-- step 3 (read): {len(unwritten)} note(s) written here in code as "
-              f"status: unavailable, no agent read them: "
-              + ", ".join(l["id"] for l in unwritten))
-
-    validate_notes(links, notes_dir)
 
 
 def validate_notes(links: list, notes_dir: Path):
@@ -625,106 +490,41 @@ def validate_notes(links: list, notes_dir: Path):
             f"{len(empty)} note(s) hold no full_text and are not marked "
             "status: unavailable: " + ", ".join(empty)
         )
-    print(f"-- step 3 (read): {len(links)} note(s) verified in {notes_dir}")
+    say(f"-- step 3 (read): {len(links)} note(s) verified in {notes_dir}")
 
 
-# ---- step 4: cluster ----
+# ---- cluster ----
 
-def step_cluster(run_dir: Path, settings: dict):
-    kept_doc = load_json(run_dir / "kept.json")
-    kept = kept_doc.get("kept") or []
-    # The read step's full text, where it exists; tweet_block prefers it.
-    notes = load_notes(run_dir)
-    chunk_size = settings["x_cluster_chunk"]
-    model, effort = agent_settings(settings, "cluster")
-    max_workers = settings.get("x_agents_active_max", 1)
-    subjects_path = run_dir / "subjects.json"
-
-    parts = list(chunked(kept, chunk_size))
-
-    if len(parts) <= 1:
-        template = load_prompt_template("cluster.md", 4, "cluster")
-        values = {
-            "RUN_DIR": str(run_dir),
-            "TWEETS": "\n\n".join(tweet_block(t, notes) for t in kept),
-            "PART_NOTE": "",
-            "OUTPUT_PATH": str(subjects_path),
-        }
-        prompt = fill_template(template, values)
-        print(f"-- step 4 (cluster): 1 agent, {len(kept)} tweet(s), model={model}/{effort}, "
-              f"{len(notes)} note(s) available")
-        call_claude(prompt, model, effort, HERE)
-    else:
-        part_template = load_prompt_template("cluster.md", 4, "cluster")
-        part_paths = [run_dir / f"cluster_part_{i+1}.json" for i in range(len(parts))]
-
-        def make_job(i, part):
-            def job():
-                values = {
-                    "RUN_DIR": str(run_dir),
-                    "TWEETS": "\n\n".join(tweet_block(t, notes) for t in part),
-                    "PART_NOTE": f"This is part {i+1} of {len(parts)}. Other parts hold "
-                                 f"other sources. Group only what is in front of you; an "
-                                 f"event another part ran is merged later.",
-                    "OUTPUT_PATH": str(part_paths[i]),
-                }
-                prompt = fill_template(part_template, values)
-                call_claude(prompt, model, effort, HERE)
-            return job
-
-        print(f"-- step 4 (cluster): {len(parts)} part(s), model={model}/{effort}, up to {max_workers} at once, "
-              f"{len(notes)} note(s) available")
-        run_pool([make_job(i, p) for i, p in enumerate(parts)], max_workers)
-
-        # Build PART_SUBJECTS text from what each part actually wrote.
-        by_id = {t["id"]: t for t in kept}
-        part_blocks = []
-        for i, part_path in enumerate(part_paths):
-            part_doc = load_json(part_path)
-            for subj in part_doc.get("subjects", []):
-                lines = [f"[part {i+1}] {subj['subject']}"]
-                for tid in subj["tweet_ids"]:
-                    t = by_id.get(tid)
-                    lines.append("  " + tweet_block(t, notes).replace("\n", " | ") if t else f"  {tid} (unknown)")
-                part_blocks.append("\n".join(lines))
-
-        merge_template = load_prompt_template("cluster-merge.md", 4, "cluster (merge)")
-        merge_values = {
-            "RUN_DIR": str(run_dir),
-            "PARTS": str(len(parts)),
-            "PART_SUBJECTS": "\n\n".join(part_blocks),
-            "ALL_TWEET_IDS": "\n".join(t["id"] for t in kept),
-            "OUTPUT_PATH": str(subjects_path),
-        }
-        merge_prompt = fill_template(merge_template, merge_values)
-        print(f"-- step 4 (cluster): merging parts, model={model}/{effort}")
-        call_claude(merge_prompt, model, effort, HERE)
-
-    if not subjects_path.exists():
-        die("step 4 (cluster) finished but subjects.json was not written")
-    subjects_doc = load_json(subjects_path)
-    validate_cluster_coverage(kept, subjects_doc)
-
-
-def validate_cluster_coverage(kept: list, subjects_doc: dict):
-    """Every kept id in exactly one subject -- checked here, in code, so a
-    bad agent output fails the run instead of drifting downstream."""
+def cluster_coverage_problem(kept: list, subjects_doc) -> str:
+    """Check 4 in code: every kept id in exactly one subject. Returns the
+    problem as text, or None when the file is right. The lane hands the text
+    back to the agent in its retry prompt, so it is written to be read."""
+    if not isinstance(subjects_doc, dict) or not isinstance(subjects_doc.get("subjects"), list):
+        return "the file is not a JSON object with a `subjects` list"
     kept_ids = {t["id"] for t in kept}
     seen = {}
-    for si, subj in enumerate(subjects_doc.get("subjects") or []):
+    for si, subj in enumerate(subjects_doc["subjects"]):
+        if not isinstance(subj, dict):
+            return f"subject #{si + 1} is not an object"
         for tid in subj.get("tweet_ids") or []:
             if tid in seen:
-                die(f"cluster output invalid: id {tid} in two subjects")
+                return f"id {tid} in two subjects"
             seen[tid] = si
     covered = set(seen)
     if covered != kept_ids:
-        die(
-            "cluster output invalid: coverage mismatch "
-            f"(missing={kept_ids - covered}, invented={covered - kept_ids})"
-        )
+        return (f"coverage mismatch (missing={sorted(kept_ids - covered)}, "
+                f"invented={sorted(covered - kept_ids)})")
+    return None
 
 
-# ---- step 6: judge ----
+def validate_cluster_coverage(kept: list, subjects_doc: dict):
+    """`cluster_coverage_problem` as a hard stop, for callers that want one."""
+    problem = cluster_coverage_problem(kept, subjects_doc)
+    if problem:
+        die(f"cluster output invalid: {problem}")
+
+
+# ---- judge and write inputs ----
 
 def read_optional(path: Path, empty_note: str) -> str:
     if path.exists():
@@ -742,7 +542,7 @@ def preference_lines(text: str) -> list:
     instructions below it. Only what is below the first `---` counts. Inside
     that, a line starting with # and anything in an HTML comment are notes
     too. A file with no `---` is read whole. The same function, character for
-    character, lives in x-lists/x_run.py; a test keeps the two identical.
+    character, lives in ybs_run.py; a test keeps the two identical.
     """
     parts = re.split(r"^---\s*$", text, maxsplit=1, flags=re.M)
     text = parts[1] if len(parts) == 2 else parts[0]
@@ -774,7 +574,7 @@ def format_profile(profile: dict) -> str:
 
 
 def find_lens_and_profile(root: Path):
-    """Read-only lookups outside x-lists/. The judge and write steps need
+    """Read-only lookups outside x-lists/. The judge and write phases need
     the show profile, Yaron's lens and his preferences, and all three live at
     the repo root: this pipeline reads outside its own folder but never
     writes there. Missing files degrade to an empty block, matching judge.md's
@@ -798,92 +598,6 @@ def find_lens_and_profile(root: Path):
     return profile_date, profile_text, preferences_text, lens_text
 
 
-def step_judge(run_dir: Path, settings: dict, root: Path):
-    subjects_doc = load_json(run_dir / "subjects.json")
-    subjects = subjects_doc.get("subjects") or []
-    kept_doc = load_json(run_dir / "kept.json")
-    by_id = {t["id"]: t for t in kept_doc.get("kept") or []}
-    notes = load_notes(run_dir)
-    model, effort = agent_settings(settings, "judge")
-    max_workers = settings.get("x_agents_active_max", 1)
-    curious_percentile = settings["x_curious_percentile"]
-
-    profile_date, profile_text, preferences_text, lens_text = find_lens_and_profile(root)
-
-    template = load_prompt_template("judge.md", 6, "judge")
-    verdict_paths = [run_dir / f"judge_{i+1}.json" for i in range(len(subjects))]
-
-    def make_job(i, subj):
-        def job():
-            tweets = [by_id[tid] for tid in subj["tweet_ids"] if tid in by_id]
-            measures = {k: subj.get(k) for k in
-                        ("authors", "lists", "endorsements", "velocity", "velocity_rank", "cross_list")}
-            values = {
-                "RUN_DIR": str(run_dir),
-                "SUBJECT": subj["subject"],
-                "SCORE_TAG": subj.get("tag", ""),
-                "FLAGS": ", ".join(subj.get("flags") or []),
-                "MEASURES": json.dumps(measures, indent=2),
-                "VELOCITY_RANK": str(subj.get("velocity_rank")),
-                "CURIOUS_PERCENTILE": str(curious_percentile),
-                "TWEETS": "\n\n".join(tweet_block(t, notes) + f"\nurl: {t.get('url','')}" for t in tweets),
-                "PROFILE_DATE": profile_date,
-                "PROFILE": profile_text,
-                "PREFERENCES": preferences_text,
-                "LENS": lens_text,
-                "OUTPUT_PATH": str(verdict_paths[i]),
-            }
-            prompt = fill_template(template, values)
-            call_claude(prompt, model, effort, HERE)
-        return job
-
-    print(f"-- step 6 (judge): {len(subjects)} subject(s), model={model}/{effort}, up to {max_workers} at once, "
-          f"{len(notes)} note(s) available")
-    run_pool([make_job(i, s) for i, s in enumerate(subjects)], max_workers)
-
-    verdict_texts = []
-    for i, path in enumerate(verdict_paths):
-        if not path.exists():
-            die(f"step 6 (judge) finished but subject #{i+1} wrote no verdict at {path}")
-        verdict_texts.append(path.read_text(encoding="utf-8"))
-        load_json(path)  # dies clearly if a verdict file is not valid JSON
-
-    merge_judge_verdicts(run_dir, verdict_texts, settings, model, effort)
-
-
-def merge_judge_verdicts(run_dir: Path, verdict_texts: list, settings: dict,
-                          model: str, effort: str):
-    """Step 6's second agent: judge-merge.md turns every per-subject verdict
-    into picks.md, applying the x_picks_max ceiling. This is the only
-    "judgment" left after each subject was judged alone -- which kept
-    subjects the ceiling cuts -- so it is an agent call, not code, per
-    prompts/judge-merge.md.
-
-    This is where check 6's ceiling lives: picks.md holds at most
-    `x_picks_max` subjects. The rest of check 6 -- each pick tagged TRENDING
-    or CURIOUS, with the tweet that states it best and the storyline it
-    touches -- is prompts/judge.md's and judge-merge.md's job; no function
-    here checks it."""
-    picks_max = settings["x_picks_max"]
-    picks_path = run_dir / "picks.md"
-    template = load_prompt_template("judge-merge.md", 6, "judge (merge)")
-    values = {
-        "RUN_DIR": str(run_dir),
-        "PICKS_MAX": str(picks_max),
-        "VERDICTS": "\n\n".join(verdict_texts),
-        "OUTPUT_PATH": str(picks_path),
-    }
-    prompt = fill_template(template, values)
-    print(f"-- step 6 (judge): merging {len(verdict_texts)} verdict(s), ceiling {picks_max}, "
-          f"model={model}/{effort}")
-    call_claude(prompt, model, effort, HERE)
-
-    if not picks_path.exists():
-        die("step 6 (judge) finished but picks.md was not written")
-
-
-# ---- step 7: write ----
-
 # One pick's block in picks.md is a level-2 heading "## <n>. <title>" (written
 # by judge-merge.md, see prompts/judge-merge.md's Output section) followed by
 # its Tag/Flags/Storyline/Why lines and a nested bullet with the best tweet's
@@ -896,7 +610,7 @@ PICK_TWEET_LINE_RE = re.compile(r"^\s*-\s*(@\S+)\s*—\s*(https?://\S+)\s*$", re
 def parse_picks_md(path: Path) -> list:
     """picks.md into a list of {title, handle, url, id} dicts, one per pick,
     in file order. Dies naming the pick if it carries no permalink line --
-    the write step cannot resolve a note without one."""
+    the write phase cannot resolve a note without one."""
     if not path.exists():
         die(
             "step 7 (write) cannot run: picks.md is missing at "
@@ -928,7 +642,7 @@ def parse_picks_md(path: Path) -> list:
 def build_notes_block(run_dir: Path, picks: list) -> str:
     """{{NOTES}}: the full text of each PICKED tweet's notes/<id>.md, one
     block per tweet, headed by its id. The id is resolved from the pick's
-    permalink (the last path segment), per the interface gap the write step
+    permalink (the last path segment), per the interface gap the write phase
     has to close: picks.md carries the permalink, notes are filed by id.
 
     Fails loudly, naming the pick and the missing id, when a pick has no
@@ -957,7 +671,7 @@ def format_run_datetime(run_name: str) -> str:
     """The run folder's name (e.g. `2026-09-06-0954`, or with a `-2`/`-final`
     collision suffix `new_run_dir` may add) into `{{RUN_DATETIME}}`'s fixed
     shape: `6 September 2026 at 09:54 UTC`. The write prompt does no date
-    maths itself, so this is the chain's job."""
+    maths itself, so this is the lane's job."""
     m = re.match(r"^(\d{4})-(\d{2})-(\d{2})-(\d{2})(\d{2})", run_name)
     if not m:
         die(f"step 7 (write) cannot run: run folder name {run_name!r} is not YYYY-MM-DD-HHMM")
@@ -966,96 +680,381 @@ def format_run_datetime(run_name: str) -> str:
     return f"{dt.day} {dt.strftime('%B')} {dt.year} at {hour}:{minute} UTC"
 
 
-def step_write(run_dir: Path, settings: dict, root: Path):
-    picks = parse_picks_md(run_dir / "picks.md")
-    picks_text = (run_dir / "picks.md").read_text(encoding="utf-8")
+# ---------------------------------------------------------------- the lane
+
+def launch_entry(phase: str, path: Path, description: str) -> dict:
+    return {"agent": AGENT_OF[phase],
+            "prompt": f"Read {path} and follow it.",
+            "description": description}
+
+
+def attempts(prompts_dir: Path, pattern: str) -> int:
+    """How many prompt files of one kind `next` has written: the attempts so
+    far. The files are the record; nothing else counts them."""
+    return len(list(prompts_dir.glob(pattern)))
+
+
+REJECTED = ("\n\n## Your last attempt was rejected\n\n"
+            "The file you wrote was set aside because code found this problem:\n\n"
+            "    {problem}\n\n"
+            "Write the file again, fixing exactly that.\n")
+NO_FILE = ("\n\n## Your last attempt wrote no file\n\n"
+           "Nothing was found at the output path afterwards. Write it this time.\n")
+
+
+def write_prompt(prompts_dir: Path, name: str, text: str, attempt: int,
+                 problem: str = None) -> Path:
+    """One prompt file, with the last attempt's verdict appended on a retry."""
+    if attempt > 1:
+        text = text.rstrip() + (REJECTED.format(problem=problem) if problem else NO_FILE)
+    prompts_dir.mkdir(parents=True, exist_ok=True)
+    path = prompts_dir / name
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+def lane_result(phase: str, attempt: int, launches: list, notes: list) -> dict:
+    return {"phase": phase, "attempt": attempt, "launch": launches, "notes": notes}
+
+
+def lane_failed(reason: str, notes: list) -> dict:
+    return {"phase": "failed", "launch": [], "notes": notes, "reason": reason}
+
+
+def lane_read(run_dir: Path, settings: dict, prompts_dir: Path, notes: list):
+    """Phase read: launches for the links without a usable note, two passes,
+    then the unavailable notes code writes. None once every link has one."""
+    links = parse_links_md(run_dir / "links.md")
+    notes_dir = run_dir / "notes"
+    notes_dir.mkdir(parents=True, exist_ok=True)
+    todo = links_without_notes(links, notes_dir)
+    if todo:
+        passes = max((int(m.group(1)) for p in prompts_dir.glob("read-p*-b*.md")
+                      for m in [re.match(r"read-p(\d+)-b\d+\.md$", p.name)] if m),
+                     default=0)
+        if passes >= 2:
+            for link in todo:
+                write_unavailable_note(notes_dir, link)
+            notes.append(f"{len(todo)} note(s) written here in code as status: "
+                         f"unavailable, no agent read them: "
+                         + ", ".join(l["id"] for l in todo))
+        else:
+            pass_no = passes + 1
+            skipped = len(links) - len(todo)
+            if skipped:
+                notes.append(f"{skipped} link(s) already have a usable note")
+            if pass_no == 2:
+                notes.append(f"{len(todo)} note(s) missing after pass 1, re-reading once")
+            batches = list(chunked(todo, settings["x_read_batch"]))
+            template = load_prompt_template("read.md", 3, "read")
+            launches = []
+            for k, batch in enumerate(batches, start=1):
+                values = {
+                    "RUN_DIR": str(run_dir),
+                    "NOTES_DIR": str(notes_dir),
+                    "TASK_SPACE": TASK_SPACE.format(run=run_dir.name, pass_no=pass_no, k=k),
+                    "BATCH_NOTE": (
+                        f"This is batch {k} of {len(batches)}. Other batches hold "
+                        f"other tweets, read by other sub-agents at the same time in "
+                        f"their own task spaces; you read only the ones listed below, "
+                        f"one at a time, in your own task space."
+                    ),
+                    "LINKS": "\n\n".join(link_block(l) for l in batch),
+                    "ALLOWED_URLS": "\n".join(l["url"] for l in batch),
+                }
+                path = write_prompt(prompts_dir, f"read-p{pass_no}-b{k}.md",
+                                    fill_template(template, values), 1)
+                launches.append(launch_entry("read", path, f"x read p{pass_no} b{k}"))
+            return lane_result("read", pass_no, launches, notes)
+    validate_notes(links, notes_dir)
+    return None
+
+
+def lane_cluster(run_dir: Path, settings: dict, settings_path: Path,
+                 prompts_dir: Path, notes: list):
+    """Phase cluster: one agent under `x_cluster_chunk`, parts and a merge
+    above it, two attempts each; then the score script. None once
+    subjects.json is valid and scored."""
+    kept = load_json(run_dir / "kept.json").get("kept") or []
+    subjects_path = run_dir / "subjects.json"
+    parts = list(chunked(kept, settings["x_cluster_chunk"]))
+    problem = None
+
+    if not kept:
+        if not subjects_path.exists():
+            write_json(subjects_path, {"subjects": []})
+            notes.append("no kept tweet: nothing to group, subjects.json written empty")
+    elif subjects_path.exists():
+        problem = cluster_coverage_problem(kept, load_json_or_none(subjects_path))
+        if problem:
+            kind = "cluster-merge-a*.md" if len(parts) > 1 else "cluster-a*.md"
+            n = attempts(prompts_dir, kind) or 1
+            aside = run_dir / f"subjects.invalid-a{n}.json"
+            subjects_path.rename(aside)
+            notes.append(f"subjects.json set aside as {aside.name}: {problem}")
+
+    if not subjects_path.exists():
+        tweet_notes = load_notes(run_dir)
+        if len(parts) <= 1:
+            n = attempts(prompts_dir, "cluster-a*.md")
+            if n >= 2:
+                return lane_failed("cluster: no valid subjects.json after 2 attempts"
+                                   + (f" ({problem})" if problem else ""), notes)
+            template = load_prompt_template("cluster.md", 4, "cluster")
+            values = {
+                "RUN_DIR": str(run_dir),
+                "TWEETS": "\n\n".join(tweet_block(t, tweet_notes) for t in kept),
+                "PART_NOTE": "",
+                "OUTPUT_PATH": str(subjects_path),
+            }
+            path = write_prompt(prompts_dir, f"cluster-a{n + 1}.md",
+                                fill_template(template, values), n + 1, problem)
+            return lane_result("cluster", n + 1,
+                               [launch_entry("cluster", path, f"x cluster a{n + 1}")], notes)
+
+        launches, attempt = [], 0
+        part_template = load_prompt_template("cluster.md", 4, "cluster")
+        for k, part in enumerate(parts, start=1):
+            part_path = run_dir / f"cluster_part_{k}.json"
+            doc = load_json_or_none(part_path)
+            if isinstance(doc, dict) and isinstance(doc.get("subjects"), list):
+                continue
+            n = attempts(prompts_dir, f"cluster-part{k}-a*.md")
+            if n >= 2:
+                return lane_failed(f"cluster: part {k} wrote no valid "
+                                   f"cluster_part_{k}.json after 2 attempts", notes)
+            values = {
+                "RUN_DIR": str(run_dir),
+                "TWEETS": "\n\n".join(tweet_block(t, tweet_notes) for t in part),
+                "PART_NOTE": f"This is part {k} of {len(parts)}. Other parts hold "
+                             f"other sources. Group only what is in front of you; an "
+                             f"event another part ran is merged later.",
+                "OUTPUT_PATH": str(part_path),
+            }
+            path = write_prompt(prompts_dir, f"cluster-part{k}-a{n + 1}.md",
+                                fill_template(part_template, values), n + 1)
+            launches.append(launch_entry("cluster", path, f"x cluster part {k} a{n + 1}"))
+            attempt = max(attempt, n + 1)
+        if launches:
+            return lane_result("cluster", attempt, launches, notes)
+
+        n = attempts(prompts_dir, "cluster-merge-a*.md")
+        if n >= 2:
+            return lane_failed("cluster-merge: no valid subjects.json after 2 attempts"
+                               + (f" ({problem})" if problem else ""), notes)
+        by_id = {t["id"]: t for t in kept}
+        part_blocks = []
+        for k in range(1, len(parts) + 1):
+            part_doc = load_json(run_dir / f"cluster_part_{k}.json")
+            for subj in part_doc.get("subjects", []):
+                lines = [f"[part {k}] {subj.get('subject', '')}"]
+                for tid in subj.get("tweet_ids") or []:
+                    t = by_id.get(tid)
+                    lines.append("  " + tweet_block(t, tweet_notes).replace("\n", " | ")
+                                 if t else f"  {tid} (unknown)")
+                part_blocks.append("\n".join(lines))
+        merge_template = load_prompt_template("cluster-merge.md", 4, "cluster (merge)")
+        values = {
+            "RUN_DIR": str(run_dir),
+            "PARTS": str(len(parts)),
+            "PART_SUBJECTS": "\n\n".join(part_blocks),
+            "ALL_TWEET_IDS": "\n".join(t["id"] for t in kept),
+            "OUTPUT_PATH": str(subjects_path),
+        }
+        path = write_prompt(prompts_dir, f"cluster-merge-a{n + 1}.md",
+                            fill_template(merge_template, values), n + 1, problem)
+        return lane_result("cluster-merge", n + 1,
+                           [launch_entry("cluster", path, f"x cluster-merge a{n + 1}")], notes)
+
+    subjects = load_json(subjects_path).get("subjects") or []
+    if subjects and not all("velocity_rank" in s for s in subjects):
+        run_script_step(5, "x_score.py", run_dir, settings_path, quiet=True)
+    return None
+
+
+def lane_judge(run_dir: Path, settings: dict, prompts_dir: Path, root: Path, notes: list):
+    """Phase judge: one agent per subject without a valid verdict, two
+    attempts each. None once every subject has a verdict or is given up."""
+    subjects = load_json(run_dir / "subjects.json").get("subjects") or []
+    if not subjects:
+        return None
+    by_id = {t["id"]: t for t in load_json(run_dir / "kept.json").get("kept") or []}
+    tweet_notes = load_notes(run_dir)
+    profile_date, profile_text, preferences_text, lens_text = find_lens_and_profile(root)
+    template = load_prompt_template("judge.md", 6, "judge")
+    launches, unjudged, attempt = [], [], 0
+    for i, subj in enumerate(subjects, start=1):
+        verdict_path = run_dir / f"judge_{i}.json"
+        if load_json_or_none(verdict_path) is not None:
+            continue
+        n = attempts(prompts_dir, f"judge-{i}-a*.md")
+        if n >= 2:
+            unjudged.append(i)
+            continue
+        tweets = [by_id[tid] for tid in subj.get("tweet_ids") or [] if tid in by_id]
+        measures = {k: subj.get(k) for k in
+                    ("authors", "lists", "endorsements", "velocity", "velocity_rank", "cross_list")}
+        values = {
+            "RUN_DIR": str(run_dir),
+            "SUBJECT": subj.get("subject", ""),
+            "SCORE_TAG": subj.get("tag", ""),
+            "FLAGS": ", ".join(subj.get("flags") or []),
+            "MEASURES": json.dumps(measures, indent=2),
+            "VELOCITY_RANK": str(subj.get("velocity_rank")),
+            "CURIOUS_PERCENTILE": str(settings["x_curious_percentile"]),
+            "TWEETS": "\n\n".join(tweet_block(t, tweet_notes) + f"\nurl: {t.get('url', '')}"
+                                  for t in tweets),
+            "PROFILE_DATE": profile_date,
+            "PROFILE": profile_text,
+            "PREFERENCES": preferences_text,
+            "LENS": lens_text,
+            "OUTPUT_PATH": str(verdict_path),
+        }
+        path = write_prompt(prompts_dir, f"judge-{i}-a{n + 1}.md",
+                            fill_template(template, values), n + 1)
+        launches.append(launch_entry("judge", path, f"x judge {i} a{n + 1}"))
+        attempt = max(attempt, n + 1)
+    if launches:
+        return lane_result("judge", attempt, launches, notes)
+    if unjudged and len(unjudged) == len(subjects):
+        return lane_failed("judge: no subject got a verdict after 2 attempts", notes)
+    if unjudged:
+        notes.append(f"{len(unjudged)} subject(s) unjudged after two attempts: "
+                     + ", ".join(str(i) for i in unjudged))
+    return None
+
+
+def lane_judge_merge(run_dir: Path, settings: dict, prompts_dir: Path, notes: list):
+    """Phase judge-merge: every verdict into picks.md, within the
+    `x_picks_max` ceiling -- the one judgment left after each subject was
+    judged alone is which subjects the ceiling cuts, so it is an agent, not
+    code. None once picks.md exists."""
+    picks_path = run_dir / "picks.md"
+    if picks_path.exists():
+        return None
+    n = attempts(prompts_dir, "judge-merge-a*.md")
+    if n >= 2:
+        return lane_failed("judge-merge: no picks.md after 2 attempts", notes)
+    subjects = load_json(run_dir / "subjects.json").get("subjects") or []
+    verdicts = []
+    for i in range(1, len(subjects) + 1):
+        path = run_dir / f"judge_{i}.json"
+        if load_json_or_none(path) is not None:
+            verdicts.append(path.read_text(encoding="utf-8"))
+    template = load_prompt_template("judge-merge.md", 6, "judge (merge)")
+    values = {
+        "RUN_DIR": str(run_dir),
+        "PICKS_MAX": str(settings["x_picks_max"]),
+        "VERDICTS": "\n\n".join(verdicts) or "(no verdicts: no subject was judged)",
+        "OUTPUT_PATH": str(picks_path),
+    }
+    path = write_prompt(prompts_dir, f"judge-merge-a{n + 1}.md",
+                        fill_template(template, values), n + 1)
+    return lane_result("judge-merge", n + 1,
+                       [launch_entry("judge", path, f"x judge-merge a{n + 1}")], notes)
+
+
+def lane_write(run_dir: Path, settings: dict, prompts_dir: Path, root: Path, notes: list):
+    """Phase write: picks.md and the picked notes into brief.md. `done` once
+    it exists."""
+    output_path = run_dir / "brief.md"
+    if output_path.exists():
+        return {"phase": "done", "launch": [], "notes": notes}
+    n = attempts(prompts_dir, "write-a*.md")
+    if n >= 2:
+        return lane_failed("write: no brief.md after 2 attempts", notes)
+    picks_path = run_dir / "picks.md"
+    picks = parse_picks_md(picks_path)
     notes_block = build_notes_block(run_dir, picks)
-
-    subjects_doc = load_json(run_dir / "subjects.json")
-    subjects_judged = len(subjects_doc.get("subjects") or [])
-
+    subjects = load_json(run_dir / "subjects.json").get("subjects") or []
     template_path = HERE / "templates" / "x-brief.md"
     if not template_path.exists():
         die(f"step 7 (write) cannot run: templates/x-brief.md does not exist yet at {template_path}")
-    template_text = template_path.read_text(encoding="utf-8")
-
-    prompt_template = load_prompt_template("write.md", 7, "write")
     _, _, preferences_text, lens_text = find_lens_and_profile(root)
-
-    output_path = run_dir / "brief.md"
-    model, effort = agent_settings(settings, "write")
+    template = load_prompt_template("write.md", 7, "write")
     values = {
         "RUN_DIR": str(run_dir),
         "RUN_NAME": run_dir.name,
         "WINDOW_HOURS": str(settings["x_window_hours"]),
         "RUN_DATETIME": format_run_datetime(run_dir.name),
-        "SUBJECTS_JUDGED": str(subjects_judged),
+        "SUBJECTS_JUDGED": str(len(subjects)),
         "WORDS_PER_SENTENCE_MAX": str(settings["x_words_per_sentence_max"]),
         "OUTPUT_PATH": str(output_path),
-        "PICKS": picks_text,
+        "PICKS": picks_path.read_text(encoding="utf-8"),
         "NOTES": notes_block,
-        "TEMPLATE": template_text,
+        "TEMPLATE": template_path.read_text(encoding="utf-8"),
         "LENS": lens_text,
         "PREFERENCES": preferences_text,
     }
-    prompt = fill_template(prompt_template, values)
-    print(f"-- step 7 (write): {len(picks)} pick(s), model={model}/{effort}")
-    call_claude(prompt, model, effort, HERE)
-
-    if not output_path.exists():
-        die("step 7 (write) finished but brief.md was not written")
+    path = write_prompt(prompts_dir, f"write-a{n + 1}.md",
+                        fill_template(template, values), n + 1)
+    return lane_result("write", n + 1,
+                       [launch_entry("write", path, f"x write a{n + 1}")], notes)
 
 
-# ---------------------------------------------------------------- chain
+def next_lane(run_dir: Path, settings: dict, settings_path: Path, root: Path) -> dict:
+    """What the orchestrator must launch now, derived from the run folder.
 
-def run_chain(run_dir: Path, settings_path: Path, settings: dict, start: int, only: int, root: Path):
-    steps = [only] if only else list(range(start, 8))
-    for step in steps:
-        if step == 1:
-            run_script_step(1, "x_scrape.py", run_dir, settings_path)
-        elif step == 2:
-            run_script_step(2, "x_filter.py", run_dir, settings_path)
-        elif step == 3:
-            step_read(run_dir, settings)
-        elif step == 4:
-            step_cluster(run_dir, settings)
-        elif step == 5:
-            run_script_step(5, "x_score.py", run_dir, settings_path)
-        elif step == 6:
-            step_judge(run_dir, settings, root)
-        elif step == 7:
-            step_write(run_dir, settings, root)
-        else:
-            die(f"no such step: {step}")
+    The phases are tried in order and each one answers, or falls through
+    when it has nothing left to do. Called only when every launch the last
+    call printed has returned: that is the orchestrator's one rule, and it
+    is what keeps a prompt file from being launched twice."""
+    run_dir = Path(run_dir)
+    for name in ("links.md", "kept.json"):
+        if not (run_dir / name).exists():
+            die(f"the lane cannot start: {run_dir / name} is missing; "
+                f"it is written by `x_run.py scrape`")
+    prompts_dir = run_dir / "prompts"
+    prompts_dir.mkdir(parents=True, exist_ok=True)
+    notes = []
+    return (lane_read(run_dir, settings, prompts_dir, notes)
+            or lane_cluster(run_dir, settings, settings_path, prompts_dir, notes)
+            or lane_judge(run_dir, settings, prompts_dir, root, notes)
+            or lane_judge_merge(run_dir, settings, prompts_dir, notes)
+            or lane_write(run_dir, settings, prompts_dir, root, notes))
 
 
-def main():
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--run-dir", default=None,
-                     help="use this folder instead of creating a fresh one")
-    ap.add_argument("--settings", default=None,
-                     help="path to settings.md (default: the root settings.md)")
-    ap.add_argument("--from", dest="from_step", type=int, default=1, choices=range(1, 8),
-                     help="start at this step, skipping earlier ones")
-    ap.add_argument("--only", type=int, default=0, choices=range(0, 8),
-                     help="run just this one step (0 = off)")
-    args = ap.parse_args()
+# ---------------------------------------------------------------- commands
 
-    settings_path = Path(args.settings).resolve() if args.settings else default_settings_path()
-    settings = load_settings(settings_path)
-
-    root = ROOT  # the repo root, for read-only lens/profile/preferences
-
+def cmd_scrape(args, settings_path: Path) -> int:
     if args.run_dir:
         run_dir = Path(args.run_dir).resolve()
         run_dir.mkdir(parents=True, exist_ok=True)
     else:
         run_dir = new_run_dir(ROOT / "briefs" / "x")
-
     print(f"run folder: {run_dir}")
-    run_chain(run_dir, settings_path, settings, args.from_step, args.only, root)
-    print(f"done: {run_dir}")
+    run_script_step(1, "x_scrape.py", run_dir, settings_path)
+    run_script_step(2, "x_filter.py", run_dir, settings_path)
+    print(f"scraped: {run_dir}")
     return 0
+
+
+def cmd_next(args, settings_path: Path, settings: dict) -> int:
+    result = next_lane(Path(args.run_dir).resolve(), settings, settings_path, ROOT)
+    # One line: ybs_run.py x-next reads the last non-empty line of stdout.
+    print(json.dumps(result, ensure_ascii=False))
+    return 0
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    p = sub.add_parser("scrape", help="steps 1 and 2: scrape the lists and filter, no agent")
+    p.add_argument("--run-dir", default=None,
+                   help="use this folder instead of creating a fresh one")
+    p.add_argument("--settings", default=None,
+                   help="path to settings.md (default: the root settings.md)")
+    p = sub.add_parser("next", help="the lane: print what the orchestrator launches now")
+    p.add_argument("--run-dir", required=True)
+    p.add_argument("--settings", default=None,
+                   help="path to settings.md (default: the root settings.md)")
+    args = ap.parse_args()
+
+    settings_path = Path(args.settings).resolve() if args.settings else default_settings_path()
+    settings = load_settings(settings_path)
+    if args.cmd == "scrape":
+        return cmd_scrape(args, settings_path)
+    return cmd_next(args, settings_path, settings)
 
 
 if __name__ == "__main__":

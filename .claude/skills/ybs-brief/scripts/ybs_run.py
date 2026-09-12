@@ -25,8 +25,8 @@ Commands
   read-list --run DIR      the article ids still to read, one launch line each
   check-sync --run DIR     apply figure-check verdicts; list redos or strikes
   picks-sync --run DIR     validate the pick reply, and trim it to picks_max
-  x-start --run DIR        launch the X-list pipeline in the background, once
-  x-wait --run DIR         block until that X run is done, failed or out of time
+  x-start --run DIR        scrape and filter the X lists in the background, once
+  x-next --run DIR         the X lane: print what to launch now, or done / failed
   write-stitch --run DIR   join the section files into brief.md
   x-merge --run DIR        put the X run's brief under the article brief
   event --run DIR ...      record something that happened (failure, retry, ...)
@@ -245,6 +245,7 @@ SCHEMA = {
         "reader": "<id> | <source> | <url> | <run_dir>",
         "reader_saved": "<id> | <source> | <url> | <run_dir> | saved-page",
         "checker": "<id> | <run_dir>",
+        "x": "Read <x_run_dir>/prompts/<file> and follow it.",
     },
     "taskspace": {
         "screen": "ybs screen <slug> a<attempt>",
@@ -276,8 +277,13 @@ SCHEMA = {
         "log": "<run_dir>/x/x-run.log",
         "brief": "<x_run_dir>/brief.md",
         "record": ("run.json 'x': run_dir, pid, log, started_utc, status, "
-                   "retries, reason"),
-        "status": "running | completed | failed | skipped | merged",
+                   "retries, reason, phase, attempt, closing_utc"),
+        "status": "running | lane | completed | failed | skipped | merged",
+        "lane": ("x-next prints the launches; every X agent's prompt is "
+                 "`Read <path> and follow it.`"),
+        "prompts": ("<x_run_dir>/prompts/read-p<pass>-b<k>.md | cluster-a<n>.md | "
+                    "cluster-part<k>-a<n>.md | cluster-merge-a<n>.md | "
+                    "judge-<i>-a<n>.md | judge-merge-a<n>.md | write-a<n>.md"),
         "placeholder": "{{X_SECTION}}",
     },
     "reason_type": {
@@ -471,6 +477,39 @@ def preferences() -> str:
     return "\n".join("- " + ln.lstrip("-* ").strip() for ln in lines)
 
 
+def load_x_models(path: Path = None) -> dict:
+    """The `## X models` table of settings.md: `<step>_model` and
+    `<step>_effort` per row, the way `load_settings` reads `## Models`. It
+    is the one X table this half reads, and only so that `build` can put
+    the X agents' model and effort into their agent files; every X number
+    stays with x_settings.py.
+    """
+    path = path or (project_root() / "settings.md")
+    if not path.exists():
+        die(f"no settings file at {path}")
+    out, section = {}, ""
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line.startswith("## "):
+            section = line[3:].strip().lower()
+            continue
+        if section != "x models" or not line.startswith("|"):
+            continue
+        cells = [c.strip() for c in line.strip("|").split("|")]
+        if len(cells) < 2:
+            continue
+        key = cells[0]
+        if key.lower() in ("setting", "step") or set(key) <= set("-: "):
+            continue
+        if len(cells) < 3 or not cells[2]:
+            die(f"settings.md: X models row {key} has no effort")
+        for suffix, value in (("_model", cells[1]), ("_effort", cells[2])):
+            if key + suffix in out:
+                die(f"settings.md names X models {key + suffix} twice")
+            out[key + suffix] = value
+    return out
+
+
 def namespace(shows_dir: Path = None, need_profile: bool = True) -> dict:
     """Everything a prompt or an agent file may ask for, apart from run data."""
     ns = {
@@ -491,6 +530,8 @@ def namespace(shows_dir: Path = None, need_profile: bool = True) -> dict:
     }
     for key, value in load_settings().items():
         ns[f"settings.{key}"] = str(value)
+    for key, value in load_x_models().items():
+        ns[f"xsettings.{key}"] = str(value)
     for group, entries in SCHEMA.items():
         for key, value in entries.items():
             ns[f"schema.{group}.{key}"] = value
@@ -2913,13 +2954,16 @@ def cmd_picks_sync(args):
 
 # ---------------------------------------------------------------- the X run
 #
-# The X-list pipeline is one command of its own, `.claude/skills/ybs-brief/x-lists/x_run.py`, and nothing
-# here reaches inside it: this launches it, waits for it, and copies the brief it
-# wrote under the article brief. Every number it obeys lives in
-# `settings.md` under `## X numbers`; the only number here is how long step 10
-# waits.
+# The X list is a lane of this run, not a process of its own. `x-start`
+# detaches `.claude/skills/ybs-brief/x-lists/x_run.py scrape`, the two script
+# steps that need no agent, and that is the only thing that runs in the
+# background. Every X agent after that is launched by the orchestrator, from
+# what `x-next` prints: it asks `x_run.py next` what the lane needs now and
+# folds the answer into run.json. Nothing here reaches inside the lane's
+# files. Every number it obeys lives in `settings.md` under `## X numbers`;
+# the only number here is how long step 10 keeps driving it.
 
-X_POLL_SECONDS = 2          # how often x-wait looks; the run takes minutes
+X_POLL_SECONDS = 2          # how often x-next --closing looks at a scrape still running
 X_KILL_GRACE_SECONDS = 5    # between SIGTERM and SIGKILL on a timeout
 X_LOG_MARK = "=== x-start"   # one launch's output starts below this line
 
@@ -2929,7 +2973,7 @@ def x_lists_dir() -> Path:
 
 
 def x_script() -> Path:
-    """The X chain's entry point. `YBS_X_RUN` overrides it, and only the tests
+    """The X lane's script. `YBS_X_RUN` overrides it, and only the tests
     set it: a stub there is how they exercise this without a browser."""
     override = os.environ.get("YBS_X_RUN")
     if override:
@@ -2968,7 +3012,7 @@ def pid_age_seconds(pid: int):
 
 
 def x_alive(pid, started_utc: str = None) -> bool:
-    """Is the X run still going?
+    """Is the scrape still going?
 
     `os.kill(pid, 0)` alone would be fooled by a pid the system has handed to
     someone else, so the process's own age is checked against the moment we
@@ -2994,8 +3038,8 @@ def x_alive(pid, started_utc: str = None) -> bool:
 
 
 def x_reason(log: Path) -> str:
-    """Why an X run that wrote no brief stopped: its last `ERROR:` line, else
-    the last thing it printed. A traceback ends without an `ERROR:`.
+    """Why a scrape that left no links.md stopped: its last `ERROR:` line,
+    else the last thing it printed. A traceback ends without an `ERROR:`.
 
     A retry appends to the same log, so only what the last launch wrote counts:
     the first run's error is not the second run's reason.
@@ -3013,37 +3057,14 @@ def x_reason(log: Path) -> str:
     return (errors[-1] if errors else lines[-1]).strip()[:300]
 
 
-X_STEP_LINE = re.compile(r"^--\s*step\s+([1-7])\s*\(")
-
-
-def x_failed_step(log: Path):
-    """Which step of the X chain the last launch got to, or None.
-
-    The chain prints one `-- step N (name): ...` line as it enters a step, so
-    the highest N it printed is the step that failed. Only the last launch's
-    section of the log counts -- a retry appends to the same file, and the
-    first run's steps are not this one's. None means the log does not say, and
-    the caller starts a fresh run rather than guessing.
-    """
-    if not log or not Path(log).exists():
-        return None
-    lines = Path(log).read_text(encoding="utf-8", errors="replace").splitlines()
-    marks = [i for i, ln in enumerate(lines) if ln.startswith(X_LOG_MARK)]
-    if marks:
-        lines = lines[marks[-1] + 1:]
-    steps = [int(m.group(1)) for ln in lines
-             for m in [X_STEP_LINE.match(ln.strip())] if m]
-    return max(steps) if steps else None
-
-
 def x_state(run_dir: Path) -> dict:
-    """The one status test, used by x-start, x-wait and x-merge.
+    """The one status test, used by x-start, x-next and x-merge.
 
-    `running` while the pid is alive. `completed` once it is gone **and** the X
-    run wrote its brief: the write agent edits that file while the chain is
-    still up, so the file alone is not a finish signal. `failed` when it is gone
-    and there is no brief. `skipped`, `failed` and `merged` are settled facts and
-    are never recomputed.
+    `running` while the scrape process is alive. Once it is gone: `completed`
+    when the X run has its brief, `lane` when the scrape left `links.md` and
+    the agent phases are still to run (x-next drives them), `failed` when
+    neither is there. `skipped`, `failed` and `merged` are settled facts and
+    are never recomputed: a lane failure is written by x-next and stays.
     """
     data = load_run(run_dir)
     x = data.get("x")
@@ -3056,6 +3077,8 @@ def x_state(run_dir: Path) -> dict:
         x["status"] = "running"
     elif (Path(x["run_dir"]) / "brief.md").exists():
         x["status"] = "completed"
+    elif (Path(x["run_dir"]) / "links.md").exists():
+        x["status"] = "lane"
     else:
         x["status"] = "failed"
         x["reason"] = x_reason(Path(x["log"]))
@@ -3076,26 +3099,25 @@ def x_out(state: dict, **extra) -> int:
 
 
 def cmd_x_start(args):
-    """Launch the X-list pipeline in its own process, once.
+    """Launch the X scrape in its own process, once.
 
     Detached (`start_new_session`) so it outlives this command, and with its
     stdin closed: a child holding on to the Bash tool's pipe would keep the
-    orchestrator's call hanging until the chain finished, which is the one thing
-    running it in parallel is for.
+    orchestrator's call hanging until the scrape finished, which is the one
+    thing running it in parallel is for. It runs `x_run.py scrape`: the list
+    scrape and the filter, and nothing that needs an agent. The agent phases
+    are the lane's, launched by the orchestrator from what x-next prints.
 
-    `--retry` after a failure resumes the failed run rather than starting over.
-    The folder that run left behind is reused, and the chain is launched with
-    `--from N` at the step its log says it reached, so the scrape, the filter
-    and every note already written are kept: a step 3 failure used to cost a
-    fresh scrape and 29 minutes of re-reading. If the folder is gone, or the
-    log does not say which step failed, a fresh run starts from step 1 as
-    before and the printed JSON says so (`"resumed": false` with a note).
+    `--retry` after a failed scrape launches one fresh scrape in a new folder.
+    A failure inside the lane is not retried here: each of its phases already
+    had its own second attempt, so `--retry` refuses when the failed run left
+    a `links.md`.
     """
     run_dir = run_dir_of(args)
     state = x_state(run_dir)
     status = state.get("status")
 
-    if status in ("running", "completed", "merged"):
+    if status in ("running", "lane", "completed", "merged"):
         return x_out(state, launched=False,
                      note=f"an X run is already {status}; nothing was launched")
     if status == "skipped":
@@ -3109,6 +3131,11 @@ def cmd_x_start(args):
             return x_out(state, launched=False,
                          note=f"already retried {state['retries']} time(s); "
                               f"retries_max is {RETRIES_MAX}")
+        old_dir = Path(state["run_dir"]) if state.get("run_dir") else None
+        if old_dir and (old_dir / "links.md").exists():
+            return x_out(state, launched=False,
+                         note="the lane failed after the scrape; each lane step "
+                              "already had its retry, so nothing was launched")
 
     retries = state.get("retries", 0) + 1 if status == "failed" else 0
     data = load_run(run_dir)
@@ -3124,31 +3151,13 @@ def cmd_x_start(args):
     script = x_script()
     if not script.exists():
         return skip(f"no X pipeline at {script}")
-    # The browser check is for the real chain only. `YBS_X_RUN` names a stub,
+    # The browser check is for the real scrape only. `YBS_X_RUN` names a stub,
     # and a stub needs no browser.
     if not os.environ.get("YBS_X_RUN") and not shutil.which("ego-browser"):
         return skip("ego-browser is not on the PATH")
 
-    # A retry resumes the failed run's own folder from the step it died on,
-    # when the folder is still there and its log says which step that was.
-    resume_dir, resume_step, resume_note = None, None, None
-    if retries:
-        old_dir = Path(state["run_dir"]) if state.get("run_dir") else None
-        if not old_dir or not old_dir.is_dir():
-            resume_note = ("the failed run's folder is gone, so this retry "
-                           "starts a fresh run from step 1")
-        else:
-            step = x_failed_step(state.get("log"))
-            if not step:
-                resume_note = (f"{old_dir.name}'s log does not say which step "
-                               "failed, so this retry starts a fresh run from step 1")
-            else:
-                resume_dir, resume_step = old_dir, step
-
-    x_dir = resume_dir or new_x_run_dir()
-    cmd = [sys.executable, str(script), "--run-dir", str(x_dir)]
-    if resume_step:
-        cmd += ["--from", str(resume_step)]
+    x_dir = new_x_run_dir()
+    cmd = [sys.executable, str(script), "scrape", "--run-dir", str(x_dir)]
     log_path = run_dir / "x" / "x-run.log"
     log_path.parent.mkdir(parents=True, exist_ok=True)
     with open(log_path, "a", encoding="utf-8") as log:
@@ -3161,7 +3170,7 @@ def cmd_x_start(args):
             cwd=str(x_lists_dir()), stdin=subprocess.DEVNULL,
             stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
             # Unbuffered, so the log reads in the order things happened: the
-            # chain's progress goes to stdout and its errors to stderr, and a
+            # scrape's progress goes to stdout and its errors to stderr, and a
             # buffered stdout would land after them, on top of the reason.
             env={**os.environ, "PYTHONUNBUFFERED": "1"})
 
@@ -3171,76 +3180,134 @@ def cmd_x_start(args):
                  "retries": retries}
     save_run(run_dir, data)
     if retries:
-        where = (f"resumed {x_dir.name} from step {resume_step}" if resume_dir
-                 else f"fresh {x_dir.name}")
-        log_event(run_dir, "x_retry", f"{where} as pid {proc.pid}", retry=True)
+        log_event(run_dir, "x_retry", f"fresh scrape {x_dir.name} as pid {proc.pid}",
+                  retry=True)
     else:
         log_event(run_dir, "x_started", f"{x_dir.name} as pid {proc.pid}")
-
-    extra = {}
-    if retries:
-        extra["resumed"] = bool(resume_dir)
-        if resume_dir:
-            extra["from_step"] = resume_step
-        else:
-            extra["note"] = resume_note
-    return x_out(data["x"], launched=True, **extra)
+    return x_out(data["x"], launched=True)
 
 
-def cmd_x_wait(args):
-    """Block until the X run is done, failed, or out of time.
+def x_lane_step(run_dir: Path, state: dict):
+    """Ask `x_run.py next` what the lane needs, and fold its answer into
+    run.json. Returns (state, answer). The script's stdout is its one JSON
+    object, on its last line; anything on stderr is its progress, and its
+    last `ERROR:` line is the reason when it could not answer."""
+    x_dir = Path(state["run_dir"])
+    cmd = [sys.executable, str(x_script()), "next", "--run-dir", str(x_dir),
+           "--settings", str(project_root() / "settings.md")]
+    r = subprocess.run(cmd, cwd=str(x_lists_dir()), capture_output=True, text=True,
+                       env={**os.environ, "PYTHONUNBUFFERED": "1"})
+    lines = [ln for ln in (r.stdout or "").splitlines() if ln.strip()]
+    answer = None
+    if r.returncode == 0 and lines:
+        try:
+            answer = json.loads(lines[-1])
+        except json.JSONDecodeError:
+            answer = None
+    if not isinstance(answer, dict) or "phase" not in answer:
+        err = [ln.rstrip() for ln in (r.stderr or "").splitlines() if ln.strip()]
+        errors = [ln for ln in err if ln.lstrip().startswith("ERROR:")]
+        reason = (errors[-1] if errors else
+                  (err[-1] if err else f"x_run.py next exited {r.returncode}")).strip()[:300]
+        answer = {"phase": "failed", "launch": [], "notes": [], "reason": reason}
 
-    The orchestrator calls this once and gets one answer; the polling is here so
-    that no agent ever sits in a loop. `--timeout-seconds` is for the tests,
-    which run the real settings table and so cannot inject a shorter wait.
+    data = load_run(run_dir)
+    x = data["x"]
+    phase, attempt = answer.get("phase"), answer.get("attempt")
+    if phase == "failed":
+        x["status"], x["phase"] = "failed", "failed"
+        x["reason"] = answer.get("reason") or "the lane failed without a reason"
+        data["x"] = x
+        save_run(run_dir, data)
+        x = x_note_failure(run_dir, x)
+    elif phase == "done":
+        x["status"], x["phase"] = "completed", "done"
+        data["x"] = x
+        save_run(run_dir, data)
+    else:
+        changed = (x.get("phase"), x.get("attempt")) != (phase, attempt)
+        x["phase"], x["attempt"] = phase, attempt
+        data["x"] = x
+        save_run(run_dir, data)
+        if changed:
+            log_event(run_dir, "x_phase",
+                      f"{phase} attempt {attempt}: {len(answer.get('launch') or [])} launch(es)")
+    return x, answer
+
+
+def cmd_x_next(args):
+    """What the orchestrator launches for the X lane now.
+
+    Never blocks, with one exception: `--closing` (step 10) waits for a scrape
+    still running, the way x-wait used to, because there is no article step
+    left to do meanwhile. `--closing` also starts the `x_wait_minutes_max`
+    clock on its first call; when the clock runs out the lane is failed and
+    the brief goes out without it. `--timeout-seconds` is for the tests, which
+    run the real settings table and so cannot inject a shorter wait.
     """
     run_dir = run_dir_of(args)
-    state = x_state(run_dir)
-    if state.get("status") in ("none", "skipped", "merged", "completed"):
-        return x_out(state, waited_seconds=0)
-    if state.get("status") == "failed":
-        return x_out(x_note_failure(run_dir, state), waited_seconds=0)
-
     limit = args.timeout_seconds or X_WAIT_MINUTES * 60
-    started = time.monotonic()
-    while state.get("status") == "running":
-        left = limit - (time.monotonic() - started)
-        if left <= 0:
-            break
-        time.sleep(min(X_POLL_SECONDS, left))
-        state = x_state(run_dir)
+    if args.closing:
+        data = load_run(run_dir)
+        x = data.get("x")
+        if x and x.get("status") not in ("skipped", "failed", "merged") \
+                and not x.get("closing_utc"):
+            x["closing_utc"] = iso(utc_now())
+            data["x"] = x
+            save_run(run_dir, data)
+    state = x_state(run_dir)
 
-    waited = round(time.monotonic() - started, 1)
+    def over(st):
+        stamp = st.get("closing_utc")
+        return bool(args.closing and stamp
+                    and (utc_now() - parse_iso(stamp)).total_seconds() > limit)
 
-    if state.get("status") == "running":
-        # Out of time. Nothing this run started outlives step 10: the whole
-        # process group goes, so no headless agent is left heating the Mac.
-        pid = state.get("pid")
-        try:
-            group = os.getpgid(pid)
-            os.killpg(group, signal.SIGTERM)
-            for _ in range(X_KILL_GRACE_SECONDS * 2):
-                time.sleep(0.5)
-                if not x_alive(pid, state.get("started_utc")):
-                    break
-            else:
-                os.killpg(group, signal.SIGKILL)
-        except (ProcessLookupError, PermissionError, TypeError):
-            pass
+    if state.get("status") == "running" and args.closing:
+        while state.get("status") == "running" and not over(state):
+            time.sleep(X_POLL_SECONDS)
+            state = x_state(run_dir)
+
+    status = state.get("status")
+    if status in ("running", "lane") and over(state):
+        if status == "running":
+            # Out of time. Nothing this run started outlives step 10: the whole
+            # process group goes, so no scrape is left heating the Mac.
+            pid = state.get("pid")
+            try:
+                group = os.getpgid(pid)
+                os.killpg(group, signal.SIGTERM)
+                for _ in range(X_KILL_GRACE_SECONDS * 2):
+                    time.sleep(0.5)
+                    if not x_alive(pid, state.get("started_utc")):
+                        break
+                else:
+                    os.killpg(group, signal.SIGKILL)
+            except (ProcessLookupError, PermissionError, TypeError):
+                pass
         spent = (f"{limit // 60} minutes" if limit >= 60 else f"{limit} seconds")
-        state["status"] = "failed"
+        state["status"], state["phase"] = "failed", "failed"
         state["reason"] = f"timeout after {spent}"
         data = load_run(run_dir)
         data["x"] = state
         save_run(run_dir, data)
+        return x_out(x_note_failure(run_dir, state), phase="failed", launch=[])
 
-    if state.get("status") == "failed":
-        state = x_note_failure(run_dir, state)
-    return x_out(state, waited_seconds=waited)
+    if status in ("none", "skipped", "merged"):
+        return x_out(state, phase=status, launch=[])
+    if status == "failed":
+        return x_out(x_note_failure(run_dir, state), phase="failed", launch=[])
+    if status == "running":
+        return x_out(state, phase="scraping", launch=[])
+    if status == "completed":
+        return x_out(state, phase="done", launch=[])
+
+    state, answer = x_lane_step(run_dir, state)
+    return x_out(state, phase=answer.get("phase"), attempt=answer.get("attempt"),
+                 launch=answer.get("launch") or [], notes=answer.get("notes") or [])
 
 
 def x_note_failure(run_dir: Path, state: dict) -> dict:
-    """Record a failed X run once, however x-wait came to see it. The audit line
+    """Record a failed X run once, however x-next came to see it. The audit line
     counts it as a failure from here, and a retry is launched from x-start."""
     events = load_run(run_dir).get("events", [])
     logged = sum(1 for e in events if e.get("type") == "x_failed")
@@ -3773,14 +3840,17 @@ def main():
 
     p = with_run(sub.add_parser("x-start"))
     p.add_argument("--retry", action="store_true",
-                   help="launch again after a failed X run, once")
+                   help="scrape again after a failed scrape, once")
     p.set_defaults(fn=cmd_x_start)
 
-    p = with_run(sub.add_parser("x-wait"))
+    p = with_run(sub.add_parser("x-next"))
+    p.add_argument("--closing", action="store_true",
+                   help="step 10: start the x_wait_minutes_max clock, and wait "
+                        "for a scrape still running")
     # Hidden: the tests read the same settings.md the run does, so a short wait
     # can only come from here.
     p.add_argument("--timeout-seconds", type=int, default=0, help=argparse.SUPPRESS)
-    p.set_defaults(fn=cmd_x_wait)
+    p.set_defaults(fn=cmd_x_next)
 
     with_run(sub.add_parser("write-stitch")).set_defaults(fn=cmd_write_stitch)
     with_run(sub.add_parser("x-merge")).set_defaults(fn=cmd_x_merge)

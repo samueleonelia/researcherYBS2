@@ -1,5 +1,8 @@
 # Write the X brief
 
+Your launch line named this file. It is the only thing you open; everything
+you need is in it.
+
 You write the finished brief for one X-list run. The choosing is already done:
 another agent judged every subject, a merger cut the survivors to the ceiling,
 and the result is the picks below. Your job is to turn each pick into something

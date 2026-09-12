@@ -1,5 +1,8 @@
 # Merge the parts into one set of subjects
 
+Your launch line named this file. It is the only thing you open; everything
+you need is in it.
+
 This run's kept tweets were too many for one call, so the list was cut into
 {{PARTS}} parts and each part was grouped into subjects on its own. You see
 every subject every part made, with the tweets inside it. One job: **produce the

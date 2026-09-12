@@ -1,5 +1,8 @@
 # Read these tweets on their own pages
 
+Your launch line named this file. It is the only thing you open; everything
+you need is in it.
+
 You are given a small batch of tweet permalinks that survived this run's
 filter. One job: **open each one, read the tweet in full on its own page, and
 write down what is there.**

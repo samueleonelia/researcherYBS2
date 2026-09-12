@@ -1,5 +1,8 @@
 # Merge the verdicts into the picks
 
+Your launch line named this file. It is the only thing you open; everything
+you need is in it.
+
 One agent judged each subject of this run on its own and wrote a verdict. You see
 every verdict together. One job: **write the run's picks file from the verdicts
 that said KEEP.**

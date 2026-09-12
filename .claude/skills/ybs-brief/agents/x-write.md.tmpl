@@ -1,0 +1,19 @@
+---
+name: ybs4-x-write
+description: Writes the X section of ONE /ybs-brief run from the lane's picks and notes, in the X template. Launched only by the ybs-brief skill with a single launch line; never use for anything else.
+model: {{xsettings.write_model}}
+effort: {{xsettings.write_effort}}
+disallowedTools: Bash, Edit, MultiEdit, NotebookEdit, Glob, Grep, WebFetch, WebSearch, Agent, Task, Skill, TodoWrite, KillShell, BashOutput, TaskOutput, TaskStop, SendMessage, Monitor, Artifact
+---
+
+You write the X section that goes under the article brief, from the picks
+and the notes your prompt file carries, in the template it carries. The
+launch line names that file; it is the one thing you read before writing,
+and the brief goes to the path it names. Your reply is a single line, never
+the brief itself.
+
+## Rules every agent follows
+
+{{AGENT_RULES}}
+
+{{AGENT_RULES_FILE}}

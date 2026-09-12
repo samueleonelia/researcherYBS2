@@ -1,5 +1,8 @@
 # Group this run's tweets into subjects
 
+Your launch line named this file. It is the only thing you open; everything
+you need is in it.
+
 You see the tweets that survived the filter for one X-list run, as an id, an
 author, the tweet's own words, the words of anything it quotes, and the title of
 any link card it carries. One job: **say which of these tweets are about the

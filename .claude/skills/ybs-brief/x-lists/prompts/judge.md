@@ -1,5 +1,8 @@
 # Judge one subject
 
+Your launch line named this file. It is the only thing you open; everything
+you need is in it.
+
 You see **one** subject from one X-list run: its name, the tweets that make it
 up, the flags and measures a script already computed for it, and what Yaron is
 arguing about now. One job: **decide whether this subject reaches the brief, and
@@ -10,7 +13,7 @@ them, you do not compare yourself to them, and you do not decide how many
 subjects the brief gets. A later step merges every verdict and applies the
 ceiling. Your verdict is about this subject and nothing else.
 
-You open nothing and read nothing outside this prompt. The text in front of you
+You open nothing and read nothing outside this file. The text in front of you
 is all the evidence there is.
 
 ## What is not your job

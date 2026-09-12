@@ -33,9 +33,10 @@ home; never copy it into a prompt or a reply.
 | model and effort per agent | `settings.md`, the `## Models` table |
 | the X list: its steps and where each rule lives | `.claude/skills/ybs-brief/x-lists/x_run.py`, whose header lists them |
 
-The eight agent files in `.claude/agents/ybs4-*.md` are **generated** from the
-templates in `agents/` and the `## Models` table in `settings.md`. Edit either
-one; step 0 rebuilds the agent files at the start of every run.
+The twelve agent files in `.claude/agents/ybs4-*.md` are **generated** from the
+templates in `agents/` and the `## Models` and `## X models` tables in
+`settings.md`. Edit either one; step 0 rebuilds the agent files at the start of
+every run.
 
 ## Prompts
 
@@ -91,6 +92,47 @@ Used by triage, read, figure check and counterpoints.
    --retry`, which is what the audit line counts. After that, record the failure
    with `event --type <step>_failed --article <id>` and move on.
 
+### The X lane
+
+The X lists are a lane of the same run, not a job of their own. `x-start`
+(step 1) scrapes and filters them in a process of its own, and that is the
+only work that runs detached. Every X agent after that is yours to launch,
+and one command says which:
+
+```bash
+python3 .claude/skills/ybs-brief/scripts/ybs_run.py x-next --run <run_dir>
+```
+
+It prints a `phase` and a `launch` list. Each entry is one `Agent` call:
+`subagent_type` is its `agent`, `prompt` is its `prompt` verbatim (always
+`Read <path> and follow it.`), `description` is its `description`,
+`run_in_background: true`. Launch them as entries of the rolling pool that is
+running, or start a pool with them when none is: the ceiling
+`agents_active_max` counts article and X agents together.
+
+| phase | agent | it writes |
+|---|---|---|
+| read | `ybs4-x-reader` | one note per tweet, in its own ego task space |
+| cluster, cluster-merge | `ybs4-x-cluster` | the subjects file, or one part of it |
+| judge, judge-merge | `ybs4-x-judge` | one verdict per subject, then the picks |
+| write | `ybs4-x-write` | the X section's own brief |
+
+The lane is **idle** when every launch `x-next` printed has returned. Call
+`x-next` again only then, and every time then, until it prints `done` or
+`failed`. Never call it while one of its launches is still out, and never
+launch the same prompt file twice: the command counts every file it wrote as
+an attempt, and a second launch of one steals a retry.
+
+`phase: scraping` with an empty list means the scrape is still running: carry
+on with the article step and ask again at the next checkpoint. The checkpoints
+are the start of step 6, after `read-list`, and the start of steps 7, 8, 9 and
+10, plus every moment in between when the lane goes idle.
+
+A lane that fails before there is a `links.md` is a scrape that died, and it
+gets one relaunch: `x-start --run <run_dir> --retry`. A failure inside the lane
+is final: each phase already had its second attempt, and the audit line
+carries the reason.
+
 ---
 
 ## Step 0 — preflight
@@ -131,10 +173,11 @@ If it says there is no topic profile, stop and tell the user to run `/ybs-shows`
 python3 .claude/skills/ybs-brief/scripts/ybs_run.py x-start --run <run_dir>
 ```
 
-This puts the X list on its own process, working while you screen and triage.
-`skipped` means this copy has no X pipeline, or no browser to run it in: the
-brief goes on without that section. Either way X is not touched again until
-step 6.
+This scrapes and filters the X lists in a process of their own, working while
+you screen and triage. `skipped` means this copy has no X pipeline, or no
+browser to run it in: the brief goes on without that section. Either way X is
+not touched again until step 6, where the X lane starts launching its agents
+through you.
 
 ## Step 2 — screen every source
 
@@ -269,14 +312,11 @@ stop: the run has no plan, and a plan is never written by hand.
 
 ```bash
 python3 .claude/skills/ybs-brief/scripts/ybs_run.py read-list --run <run_dir>
-python3 .claude/skills/ybs-brief/scripts/ybs_run.py x-start --run <run_dir> --retry
+python3 .claude/skills/ybs-brief/scripts/ybs_run.py x-next --run <run_dir>
 ```
 
-`x-start --retry` launches again only if the first X run has failed, and only
-this once; on anything else it does nothing and says so. A failure inside one
-of its pooled steps can take a while to surface, because the chain waits for
-its other agents before it exits, so `running` here is not proof that all is
-well. There is nothing to do about that: read what it prints and carry on.
+The X lane's first checkpoint. What `x-next` prints joins the same pool as the
+article readers, under the same ceiling; `scraping` means it has nothing yet.
 
 **Run the rolling pool** with `ybs4-reader`. Each reader opens its article in its
 own ego task space, saves the page and writes its own note; you write neither.
@@ -299,6 +339,8 @@ python3 .claude/skills/ybs-brief/scripts/ybs_run.py event --run <run_dir> --type
 which retires it, so the next `read-list` no longer offers it.
 
 ## Step 7 — pick
+
+X lane: if it is idle, `x-next` and launch what it prints.
 
 The pick runs **before** the figure check. A struck figure cannot change which
 stories are picked: the pick judges evidence from each note's `WEAK SPOTS`, which
@@ -324,6 +366,8 @@ what it cut. One rerun on failure, quoting the check.
 
 ## Step 8 — check the figures
 
+X lane: if it is idle, `x-next` and launch what it prints.
+
 The pick has already run, so the figures worth checking are the ones the brief
 will print: **the picked notes**, not every note.
 
@@ -346,6 +390,8 @@ Anything under `already_struck` was settled on an earlier pass; leave it alone.
 is still the best account of that story; the brief just loses one number.
 
 ## Step 9 — counterpoints
+
+X lane: if it is idle, `x-next` and launch what it prints.
 
 **LEAD stories only.** A counterpoint hangs under a lead, so `fill counterpoint`
 refuses any other tag: `a051 is tagged BODY; counterpoints run for LEAD stories
@@ -413,21 +459,26 @@ writer, quoting the problem, rewrite its file, and stitch again; a section
 rejected twice is recorded with `event --type write_failed --detail
 "<section>"` and the run stops, because a brief is never written by hand.
 
-Then, in this order:
+Then drive the X lane to its end:
 
 ```bash
-python3 .claude/skills/ybs-brief/scripts/ybs_run.py x-wait --run <run_dir>
+python3 .claude/skills/ybs-brief/scripts/ybs_run.py x-next --run <run_dir> --closing
+```
+
+Launch what it prints, wait for the returns, run it again with `--closing`,
+until it prints `done` or `failed`. `--closing` starts the `x_wait_minutes_max`
+clock on its first call; when the clock runs out the lane is failed and the
+brief goes out without it. Give every `--closing` call the Bash tool's
+`timeout: 600000`, its highest: while the scrape is still running this is the
+one call that waits, and the wait is deliberately shorter than that. Whatever
+it ends on, the next commands run: a lane that failed or ran out of time is a
+fact the audit line carries, never a reason to hold the brief.
+
+```bash
 python3 .claude/skills/ybs-brief/scripts/ybs_run.py x-merge --run <run_dir>
 python3 .claude/skills/ybs-brief/scripts/ybs_run.py audit-line --run <run_dir> --append
 python3 .claude/skills/ybs-brief/scripts/ybs_run.py close --run <run_dir>
 ```
-
-Give `x-wait` the Bash tool's `timeout: 600000`, its highest: the wait is
-deliberately shorter than that, and a tool kill would land on the wrong
-process. It usually returns at once, because X started hours of agent-minutes
-ago in wall-clock terms and is long done. Whatever it says, the next command
-runs: an X run that failed or ran out of time is a fact the audit line
-carries, never a reason to hold the brief.
 
 `x-merge` puts the X section under the last article section, and `audit-line`
 replaces the placeholder the template ends with. Report the audit line and the
@@ -443,10 +494,10 @@ path to `brief.md` to the user. Nothing else.
    Never pass `model` to the Agent tool, never state an effort in a prompt. To
    change what a step runs at, edit the `## Models` table: step 0's `build`
    rebuilds the agent files, so there is nothing else to do. The
-   X pipeline's models are its own: they live in the same `settings.md` under
-   `## X models`, and reach its agents through `x_run.py`, never through the
-   Agent tool. Each half reads only its own headings, so a step named `cluster`
-   in both tables is two different settings.
+   X lane's models are its own: they live in the same `settings.md` under
+   `## X models`, and reach its agents the same way, through the built
+   `ybs4-x-*` files. Each half reads only its own headings, so a step named
+   `cluster` in both tables is two different settings.
 3. **Never write a pooled agent's result file.** You launch, you count, you run
    the sync command. For the single-call steps, match the reply to its file by
    the agent's label, never by reading the content and guessing.
@@ -468,7 +519,8 @@ path to `brief.md` to the user. Nothing else.
     skill produces one file and reports where it is.
 12. **Every number in `settings.md` is a ceiling**, apart from the one its
     table marks as a floor. No step fills a slot to reach a number.
-13. **`x-start` is the only door to X.** Never open the list yourself, never run
-    `x_run.py` by hand, never start a second one while a run is recorded as
-    going, and never write the X section yourself. One relaunch is the ceiling,
-    and `x-start --retry` is where it happens.
+13. **`x-start` and `x-next` are the only doors to X.** Never open the list
+    yourself, never run `x_run.py` by hand, never write an X prompt or an X
+    result file, and never write the X section yourself. One relaunch of the
+    scrape is the ceiling, and `x-start --retry` is where it happens; inside
+    the lane, `x-next` decides every retry.

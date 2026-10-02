@@ -444,6 +444,10 @@ def mcp_transcript(vid: str, timeout: int = 300) -> dict:
     we are ready, then call the one tool. Its answer goes straight to a file.
     """
     pkg = SETTINGS["transcript_package"]
+    # Say which language. Left to itself the package takes whichever track
+    # YouTube lists first, and for an English show that can be one of YouTube's
+    # automatic translations: four shows once arrived in Arabic that way.
+    lang = SETTINGS.get("transcript_language", "en")
     try:
         proc = subprocess.Popen(["npx", "-y", pkg],
                                 stdin=subprocess.PIPE, stdout=subprocess.PIPE,
@@ -461,7 +465,7 @@ def mcp_transcript(vid: str, timeout: int = 300) -> dict:
                          "clientInfo": {"name": "ybs-shows", "version": "1"}}})
         send({"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}})
         send({"jsonrpc": "2.0", "id": 2, "method": "tools/call",
-              "params": {"name": "get_transcript", "arguments": {"url": vid}}})
+              "params": {"name": "get_transcript", "arguments": {"url": vid, "lang": lang}}})
         proc.stdin.close()
         text = ""
         for line in proc.stdout:

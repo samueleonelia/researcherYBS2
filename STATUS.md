@@ -1,6 +1,6 @@
 # STATUS: researcherYBS2
 
-_Updated: 2026-09-12 · the X lane_
+_Updated: 2026-10-02 · English captions for /ybs-shows_
 
 <!-- Rewrite this file in place. Never append. History belongs in DEVLOG.md. Keep under 60 lines. -->
 
@@ -23,14 +23,14 @@ _Updated: 2026-09-12 · the X lane_
 | X lane inside `/ybs-brief` | ✅ working | ran live 09-12, every phase on its first attempt; `--closing` at step 10 |
 | Afternoon update | ✅ working | ran live 09-10 and 09-11; the X half failed both times on the old chain |
 | Evening report | ✅ working | ran live 09-10, X merged |
-| Show profile (`/ybs-shows`) | ✅ working | archive and profile refreshed 09-11 |
+| Show profile (`/ybs-shows`) | ✅ working | asks for English captions since 10-02: YouTube's AI dubs had put Arabic tracks first |
 | Settings | ✅ working | one root `settings.md` |
 | Test suite | ⚠️ partial | 4 old failures, see bugs; `/setup` names them instead of counting; `run-all.sh` stops at the first failing file |
 | Git remote | ✅ working | github.com/samueleonelia/researcherYBS2 (private) |
 | Install (`/setup`) and update (`/update`) | ✅ working | `/update` keeps briefs/, shows/, preferences.md |
 
 ## Next up
-1. Yaron runs `/update`, then `/setup`, then a morning brief
+1. Push the English-captions fix, then Yaron runs `/update` (his local fix is the same change)
 2. One live `/ybs-brief afternoon`: the first real test of the `**Follows:**` pointer
 3. The 09-12 morning took 46.6 min, over the 45 ceiling: see whether the 55 judge agents at step 6 are the reason
 4. Fix the old test failures and make `run-all.sh` run every file

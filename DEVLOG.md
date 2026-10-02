@@ -837,3 +837,29 @@ archive and crashed on mine once `/ybs-shows` rotated the profile.
   spawned with the x-lists folder as its working directory, so it never saw
   the root permission list and could not run ego-browser at all. A second
   cause with the same root, and gone with it.
+
+## 2026-10-02 · /ybs-shows asks for English captions
+
+**What happened**
+- Yaron's own `/ybs-shows` run saved 4 of 5 new shows (and 5 older ones) as
+  Arabic text. His session fixed it locally; `/update` would have undone it.
+
+**Cause**
+- The shows are English. Since early September YouTube adds AI dubbing to
+  many of them (`dubbed-auto` audio in about 20 languages: ar, bn, de-DE,
+  es-US, fr-FR, hi, ...), and every dub brings its own auto-generated caption
+  track. The package lists the tracks alphabetically, so `ar` comes before
+  `en`, and `get_transcript` without `lang` takes the first one. On the
+  YouTube page the viewer still sees English, because the player picks the
+  viewer's language. Checked on 6 recent shows: 4 list Arabic first, the 2
+  without dubs list only English.
+
+**What changed**
+- New setting `transcript_language` (`en`) in `settings.md`;
+  `mcp_transcript` sends it as `lang` on every fetch.
+- Two checks in `test-shows-v4.py`: the setting exists, and the fetch sends it.
+
+**Verified**
+- Live fetch of `zm1efvYAFvg` with the new code: English, 19,502 words.
+- Shows suite all green; bookkeeping and prompts give the same 3 known
+  failures and nothing new.

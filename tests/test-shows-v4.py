@@ -491,6 +491,9 @@ def test_transcript_guards():
     src = (SKILL / "scripts" / "ybs_shows.py").read_text(encoding="utf-8")
     check("the tool's own error flag is read", "isError" in src)
     check("the floor is applied, not just declared", "transcript_words_min" in src)
+    check("settings name the caption language", S.SETTINGS.get("transcript_language") == "en",
+          str(S.SETTINGS.get("transcript_language")))
+    check("the language is sent with every fetch", '"lang": lang' in src)
 
     # The exact notice that was once written to disk as a transcript.
     notice = ("MCP error -32603: YouTube rate limit detected.\nThis could be due to:\n"

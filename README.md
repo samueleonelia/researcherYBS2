@@ -1,11 +1,14 @@
 # Yaron Brook morning brief
 
-Two skills that build the morning news brief, and two that keep the setup working.
+Two skills that build the morning news brief, two that keep the setup working, and two
+that run the briefs by themselves and email them to you.
 
 - `/ybs-brief morning` — reads the day's news and writes the brief; `/ybs-brief afternoon` writes what changed since it; `/ybs-brief evening` gathers the good news of the day, saying of each how far along it really is
 - `/ybs-shows` — refreshes what the show has been arguing about lately
 - `/setup` — installs the tools this needs, and checks everything works
 - `/update` — gets the newest version of this project
+- `/autopilot` — sets up the automatic briefs, once (see "Automatic briefs" below)
+- `/ybs-daily` — what the automatic runs start; you never need to type it
 
 ## Install (once)
 
@@ -41,6 +44,28 @@ arrives; its last line then says X gave nothing, and why.
 
 ego lite has to be open while a brief runs.
 
+## Automatic briefs
+
+The briefs can run by themselves and arrive in your Gmail, unread. Each email
+has a link at the top to the same brief saved in your Google Drive, in a folder
+called `YBS briefs`, and the brief itself below it. Set it up once:
+
+1. In the Claude app: **Settings → Connectors**. Connect **Gmail** and
+   **Google Drive**, both with the same Google account.
+2. In the project: `/update`, then `/setup`.
+3. `/autopilot`. It shows the times (every day, your Mac's time: shows 02:00,
+   morning 05:30, afternoon 13:00, evening 19:00), lets you change any of them
+   or switch one off, and sends you a test email. Check that it arrived unread.
+4. **System Settings → Battery → Options**: turn on "Prevent automatic sleeping
+   on power adapter when the display is off". Keep the Mac plugged in.
+
+Then leave the Claude app open. The briefs run only while it is open; one that
+was missed runs as soon as you open it again. A run that fails sends you an
+email saying "Brief failed" and why, so silence never means a lost brief.
+
+To change a time, type `/autopilot` again. Running a brief by hand with
+`/ybs-brief` still sends nothing.
+
 ## Changing what it does
 
 Three files are yours to edit:
@@ -69,7 +94,7 @@ beside it ending in `.backup` and says so.
 | `preferences.md`, `sources.md`, `settings.md` | the three files that steer every run | you |
 | `briefs/` | one folder per brief with `brief.md` inside, and `briefs/x/` for the X engine's scratch | written by `/ybs-brief`, read by you |
 | `shows/` | your show archive and the topic profile | written by `/ybs-shows` |
-| `.claude/` | the four skills, the agents they launch, and the X lane's scripts and prompts inside ybs-brief | Claude, during a run |
+| `.claude/` | the six skills, the agents they launch, and the X lane's scripts and prompts inside ybs-brief | Claude, during a run |
 | `tests/` | checks that the project still works, run by `/setup` | nobody |
 | `DEVLOG.md`, `STATUS.md` | the build history and the current state, for whoever maintains this | Samuele |
 

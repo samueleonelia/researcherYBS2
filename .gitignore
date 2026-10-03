@@ -23,3 +23,6 @@ credentials.json
 
 # Claude desktop app session copies
 .claude/worktrees/
+
+# Written on each Mac by /autopilot: that account's own connector ids
+.claude/settings.local.json

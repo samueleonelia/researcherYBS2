@@ -240,6 +240,48 @@ def test_agent_files_are_generated():
         check(f"{t.name} asks for no run data", not left, f"asks for {sorted(left)}")
 
 
+def test_daily_skills():
+    """/ybs-daily and /autopilot are the two skills that send and schedule. They
+    run with nobody watching, so a command they name that does not exist, or a
+    connector id typed into them, is a brief that never arrives."""
+    print("\nthe skills that send and schedule")
+    skills = ROOT / ".claude" / "skills"
+    daily = (skills / "ybs-daily" / "SKILL.md").read_text()
+    auto = (skills / "autopilot" / "SKILL.md").read_text()
+    for name, text in (("ybs-daily", daily), ("autopilot", auto)):
+        check(f"{name}/SKILL.md is named {name}",
+              re.search(rf"^name:\s*{name}\s*$", text, re.M) is not None)
+        check(f"{name}/SKILL.md types no connector id",
+              not re.search(r"mcp__[0-9a-f]{8}-[0-9a-f]{4}", text))
+
+    src = SCRIPT.read_text()
+    commands = set(re.findall(r'add_parser\("([a-z-]+)"', src))
+    named = set(re.findall(r"ybs_run\.py ([a-z][a-z-]*)", daily))
+    check("every ybs_run.py command /ybs-daily names exists", named <= commands,
+          f"missing {sorted(named - commands)}")
+    flags = set(re.findall(r"(?<![\w-])(--[a-z][a-z-]*)", daily))
+    unknown = sorted(f for f in flags if '"' + f + '"' not in src)
+    check("every flag /ybs-daily passes is one ybs_run.py takes", not unknown,
+          f"missing {unknown}")
+    check("/ybs-daily never sleeps on its own", "sleep " not in daily.replace("never run `sleep`", ""))
+
+    for name in ("ybs-brief", "ybs-shows"):
+        text = (skills / name / "SKILL.md").read_text()
+        check(f"{name} still never sends anything",
+              "never send anything anywhere" in text.lower())
+
+    ids = re.findall(r"`(ybs-daily-[a-z]+)`", auto)
+    check("/autopilot names one task per slot",
+          sorted(ids) == sorted(f"ybs-daily-{s}" for s in
+                                ("shows", "morning", "afternoon", "evening")), str(ids))
+    folders = {d.name for d in skills.iterdir() if d.is_dir()}
+    check("no task id is the name of a skill", not set(ids) & folders,
+          str(sorted(set(ids) & folders)))
+    check("the task prompt runs /ybs-daily", "Invoke the ybs-daily skill" in auto)
+    ignored = (ROOT / ".gitignore").read_text().splitlines()
+    check("settings.local.json is never committed", ".claude/settings.local.json" in ignored)
+
+
 SHINGLE = 12          # words; long enough that a shared run of them is a copy
 
 
@@ -556,6 +598,7 @@ def main():
     test_screen_prompt_has_no_login_check()
     test_agent_files_are_generated()
     test_agents_match_skill()
+    test_daily_skills()
     test_examples_are_valid_json()
 
     run_dir = fresh_run()

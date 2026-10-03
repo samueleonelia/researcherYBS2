@@ -32,11 +32,20 @@ Commands
   event --run DIR ...      record something that happened (failure, retry, ...)
   audit-line --run DIR     build the audit line from run.json (never from a model)
   close --run DIR          write run-log.md and mark the run finished
+  morning-check [--date D] print completed, none, running <minutes> or stale
+                           <minutes> for that day's morning run, one plain line;
+                           --wait keeps asking while it is running
+  email RUN_DIR            print a finished brief's email as JSON: subject, HTML
+                           and its Google Drive title; --link URL or --no-link
+                           adds the line about the Drive copy
+  email --failed SLOT --reason TEXT
+                           print the short email that says a run did not arrive
 
 Exit codes: 0 = ok, 1 = did the job but found a problem, 2 = bad usage / error.
 """
 
 import argparse
+import html
 import json
 import re
 import shutil
@@ -1868,6 +1877,25 @@ def base_record(run_dir: Path, run: dict) -> dict:
             "time": template_time(tpl)}
 
 
+def day_runs(local_date: str, slot: str, status: str = None) -> list:
+    """The run folders of one local date and slot, oldest start first, as
+    `(started_utc, folder name, folder, run.json)` tuples.
+
+    `status` None takes a run whatever its status. find_base and morning-check
+    ask the same question of the same folders, so the folders are walked here
+    once rather than in two loops that could drift apart.
+    """
+    found = []
+    for d in sorted(runs_root().glob("*")):
+        r = load_json(d / "run.json")
+        if not r:
+            continue
+        if (r.get("local_date") == local_date and r.get("slot") == slot
+                and (status is None or r.get("status") == status)):
+            found.append((r.get("started_utc") or "", d.name, d, r))
+    return sorted(found)
+
+
 def find_base(named: str, local_date: str, slot: str = "morning",
               optional: bool = False):
     """The earlier run of today a later one is built on.
@@ -1899,21 +1927,14 @@ def find_base(named: str, local_date: str, slot: str = "morning",
                 f"{local_date}; it is built on today's {slot} brief")
         return base_record(d, r)
 
-    found = []
-    for d in sorted(runs_root().glob("*")):
-        r = load_json(d / "run.json")
-        if not r:
-            continue
-        if (r.get("local_date") == local_date and r.get("slot") == slot
-                and r.get("status") == "completed"):
-            found.append((r.get("started_utc") or "", d.name, d, r))
+    found = day_runs(local_date, slot, "completed")
     if not found:
         if optional:
             return None
         die(f"no {slot} brief to update: nothing under {runs_root()} has "
             f"local_date {local_date}, slot {slot} and status completed. "
             f"Run the {slot} brief first, or name a run with --base.")
-    _, _, d, r = sorted(found)[-1]
+    _, _, d, r = found[-1]
     return base_record(d, r)
 
 
@@ -3777,6 +3798,301 @@ def cmd_close(args):
     return 0
 
 
+# ---------------------------------------------------------------- morning-check
+#
+# The scheduled afternoon and evening runs ask this before they start. Both are
+# built on the day's morning brief, and run.json's status is only ever running
+# or completed: a morning that crashed never says so, it just stays running.
+# So the answer carries the minutes since that morning started, and past
+# MORNING_WAIT_MINUTES_MAX it says stale instead, which the caller treats as a
+# failed morning and reports by email rather than waiting for ever.
+
+MORNING_POLL_SECONDS = 30       # how often --wait looks at the morning's run.json again
+# How long one --wait call may wait. It stays under the Bash tool's 10-minute
+# ceiling, the way screen_timeout_seconds does, so a call is never killed from
+# outside; the skill calls again for as long as the answer is running.
+MORNING_WAIT_CALL_SECONDS = 540
+# Minutes after its start that a morning still running counts as failed. A
+# morning takes about three quarters of an hour; this leaves room for a slow
+# one and still gets the failure email out the same hour. It is a property of
+# the schedule /ybs-daily runs, not of the brief, so it lives with this
+# command rather than in settings.md.
+MORNING_WAIT_MINUTES_MAX = 60
+
+
+def morning_state(local_date: str) -> str:
+    """completed, none, running <minutes> or stale <minutes>, for one date.
+
+    A completed morning wins over any run still marked running: a crashed
+    first attempt followed by a good second one is a morning that arrived.
+    With several still running, the latest started is the one that counts.
+    """
+    if day_runs(local_date, "morning", "completed"):
+        return "completed"
+    running = day_runs(local_date, "morning", "running")
+    if not running:
+        return "none"
+    started_utc, _, d, _ = running[-1]
+    started = parse_iso(started_utc)
+    if started is None:
+        # A run.json with no readable start still has a time it was last
+        # written, and that is never later than the real start's last sign of life.
+        started = datetime.fromtimestamp((d / "run.json").stat().st_mtime, timezone.utc)
+    minutes = max(0, int((utc_now() - started).total_seconds() // 60))
+    word = "stale" if minutes >= MORNING_WAIT_MINUTES_MAX else "running"
+    return f"{word} {minutes}"
+
+
+def cmd_morning_check(args):
+    """One line on the day's morning run, for a shell loop to read.
+
+    Plain text, not JSON, because the caller compares a word. `--wait` keeps
+    asking until the answer is no longer running, for one call's worth of
+    time at most; `--wait-seconds` is for the tests, which cannot wait nine
+    minutes to see a wait end.
+    """
+    if args.date:
+        try:
+            datetime.strptime(args.date, "%Y-%m-%d")
+        except ValueError:
+            die(f"--date wants YYYY-MM-DD, got {args.date!r}")
+    local_date = args.date or datetime.now().strftime("%Y-%m-%d")
+    state = morning_state(local_date)
+    if args.wait:
+        limit = args.wait_seconds or MORNING_WAIT_CALL_SECONDS
+        # A real call looks every 30 seconds; a test's few seconds are cut
+        # into a few looks of their own, or one look would use them all.
+        step = min(MORNING_POLL_SECONDS, limit / 6)
+        deadline = time.monotonic() + limit
+        while state.startswith("running ") and time.monotonic() < deadline:
+            time.sleep(max(0.0, min(step, deadline - time.monotonic())))
+            state = morning_state(local_date)
+    print(state)
+    return 0
+
+
+# ---------------------------------------------------------------- email
+#
+# The scheduled runs mail their result, and something has to turn brief.md
+# into a message. It is done here, in code, so the email is the same every
+# time and no model ever retypes a brief: a model asked to "format this as
+# HTML" can drop a line or change a figure, and this cannot.
+#
+# The Markdown is the small set the writers actually use: headings, paragraphs,
+# bullet and numbered lists, rules, bold, italic, links and code. Anything else,
+# raw HTML included, is shown as the text it is and never passed through.
+
+EMAIL_SLOTS = ("morning", "afternoon", "evening", "shows")
+EMAIL_WRAP = ('<div style="font-family: Georgia, serif; font-size: 16px; '
+              'line-height: 1.5; max-width: 680px;">')
+EMAIL_UNFINISHED = ("{{AUDIT_LINE}}", "{{X_SECTION}}")
+
+MD_HEADING = re.compile(r"^(#{1,6})\s+(.*?)\s*#*\s*$")
+MD_RULE = re.compile(r"^\s*([-*_])(\s*\1){2,}\s*$")
+MD_BULLET = re.compile(r"^\s*[-*+]\s+(.*)$")
+MD_NUMBER = re.compile(r"^\s*(\d+)[.)]\s+(.*)$")
+# One level of parentheses inside a URL is allowed, the way Wikipedia needs.
+MD_LINK = re.compile(r"\[([^\]]*)\]\(((?:[^()\s]|\([^()\s]*\))+)\)")
+MD_AUTOLINK = re.compile(r"<(https?://[^>\s]+)>")
+MD_CODE = re.compile(r"`([^`]+)`")
+MD_BOLD = re.compile(r"\*\*(.+?)\*\*")
+MD_STAR_ITALIC = re.compile(r"(?<![*\w])\*(?=[^\s*])(.+?)(?<=[^\s*])\*(?![*\w])")
+MD_UNDER_ITALIC = re.compile(r"(?<!\w)_(?=[^\s_])(.+?)(?<=[^\s_])_(?!\w)")
+TOKEN = re.compile("\x00(\\d+)\x00")
+
+
+def safe_href(url: str) -> str:
+    """The URL ready for an href, or "" when it is not one a reader should get.
+
+    Only web and mail links are kept. A `javascript:` link, or any other
+    scheme, is not a link a brief has a reason to carry.
+    """
+    if re.match(r"(?i)(https?://|mailto:)", url):
+        return html.escape(url, quote=True)
+    return ""
+
+
+def md_inline(text: str, links: bool = True) -> str:
+    """One line of Markdown as HTML.
+
+    Links come out first, into placeholders, so the underscores and asterisks
+    a URL is full of are never read as emphasis. Then the rest is escaped, and
+    only then are code, bold and italic applied, so no tag in the source ever
+    reaches the email as a tag. Code goes into a placeholder of its own for
+    the same reason as links: what is inside backticks is shown as written.
+    """
+    held = []
+
+    def hold(piece: str) -> str:
+        held.append(piece)
+        return f"\x00{len(held) - 1}\x00"
+
+    text = text.replace("\x00", "")
+    if links:
+        def link(m):
+            label, href = md_inline(m.group(1), links=False), safe_href(m.group(2))
+            return hold(f'<a href="{href}">{label}</a>' if href else label)
+
+        def autolink(m):
+            href = safe_href(m.group(1))
+            return hold(f'<a href="{href}">{html.escape(m.group(1), quote=False)}</a>')
+
+        text = MD_LINK.sub(link, text)
+        text = MD_AUTOLINK.sub(autolink, text)
+    text = html.escape(text, quote=False)
+    text = MD_CODE.sub(lambda m: hold(f"<code>{m.group(1)}</code>"), text)
+    text = MD_BOLD.sub(r"<strong>\1</strong>", text)
+    text = MD_STAR_ITALIC.sub(r"<em>\1</em>", text)
+    text = MD_UNDER_ITALIC.sub(r"<em>\1</em>", text)
+    # A held piece can hold another (a link whose label has code in it), so
+    # the placeholders are put back until none is left.
+    while TOKEN.search(text):
+        text = TOKEN.sub(lambda m: held[int(m.group(1))], text)
+    return text
+
+
+def brief_html(md: str) -> str:
+    """A brief's Markdown as the plain HTML its email carries.
+
+    Block by block, one line at a time: a blank line ends a paragraph or a
+    list, a heading or a rule ends either too, and a list marker starts a list
+    or adds to the one already open. An indented line under a list item is
+    more of that item. Lists are flat, which is all a brief uses. A numbered
+    list keeps the number it starts at, since a writer may continue one.
+    """
+    blocks, para, items = [], [], []
+    kind = start = None                 # the open list: "ul" or "ol", and its first number
+
+    def close_para():
+        if para:
+            blocks.append(f"<p>{md_inline(' '.join(para))}</p>")
+            para.clear()
+
+    def close_list():
+        nonlocal kind, start
+        if items:
+            opening = f'<ol start="{start}">' if kind == "ol" and start != 1 else f"<{kind}>"
+            lines = [opening] + [f"<li>{md_inline(' '.join(i))}</li>" for i in items]
+            blocks.append("\n".join(lines + [f"</{kind}>"]))
+            items.clear()
+        kind = start = None
+
+    for line in md.splitlines():
+        if not line.strip():
+            close_para()
+            close_list()
+            continue
+        heading = MD_HEADING.match(line)
+        if heading:
+            close_para()
+            close_list()
+            n = len(heading.group(1))
+            blocks.append(f"<h{n}>{md_inline(heading.group(2))}</h{n}>")
+            continue
+        if MD_RULE.match(line):
+            close_para()
+            close_list()
+            blocks.append("<hr>")
+            continue
+        bullet, number = MD_BULLET.match(line), MD_NUMBER.match(line)
+        if bullet or number:
+            close_para()
+            want = "ul" if bullet else "ol"
+            if kind != want:
+                close_list()
+                kind = want
+                start = int(number.group(1)) if number else None
+            items.append([bullet.group(1) if bullet else number.group(2)])
+            continue
+        if items and line[:1] in (" ", "\t"):
+            items[-1].append(line.strip())
+            continue
+        close_list()
+        para.append(line.strip())
+    close_para()
+    close_list()
+    return EMAIL_WRAP + "\n" + "\n".join(blocks) + "\n</div>"
+
+
+def with_lead(page: str, lead: str) -> str:
+    """The same page with one line and a rule above the brief, inside the wrapper."""
+    return page.replace(EMAIL_WRAP + "\n", EMAIL_WRAP + "\n" + lead + "\n<hr>\n", 1)
+
+
+def cmd_email(args):
+    """The email a scheduled run sends: subject and HTML, as JSON.
+
+    Two shapes. With a run folder, the finished brief itself, plus the title
+    its Google Drive copy is saved under; with no flag the HTML is exactly
+    that Drive copy, and `--link` or `--no-link` adds the one line that says
+    where the copy is or that it could not be saved. With `--failed`, the
+    short message that says a run did not arrive and why. Nothing is sent from
+    here: the caller sends what this prints.
+    """
+    if args.failed:
+        if args.run:
+            die("--failed reports a run that did not finish; "
+                "it takes no run folder")
+        if args.link or args.no_link:
+            die("--link and --no-link belong to a brief's email, not to --failed")
+        reason = re.sub(r"\s+", " ", args.reason or "").strip()
+        if not reason:
+            die("--failed needs --reason, the one line that says what went wrong")
+        local = datetime.now()
+        date = local.strftime("%Y-%m-%d")
+        safe = html.escape(reason, quote=False)
+        if args.failed == "shows":
+            subject = f"Shows refresh failed: {reason}"
+            first = f"<p>The show archive refresh of {date} did not finish.</p>"
+        else:
+            subject = f"Brief failed: {reason}"
+            first = f"<p>The {args.failed} brief of {date} did not arrive.</p>"
+        body = "\n".join([
+            first, f"<p>Reason: {safe}</p>",
+            f"<p>Written at {local.strftime('%H:%M')}, this Mac's time.</p>",
+            "<p>Nothing else was sent. The next scheduled run will try again.</p>"])
+        print(json.dumps({"subject": subject, "html": EMAIL_WRAP + "\n" + body + "\n</div>",
+                          "slot": args.failed, "date": date, "drive_title": None},
+                         indent=2, ensure_ascii=False))
+        return 0
+
+    if args.reason is not None:
+        die("--reason goes with --failed")
+    if not args.run:
+        die("name a finished run folder, or use --failed SLOT --reason TEXT")
+    if args.link and args.no_link:
+        die("--link and --no-link say opposite things; give one")
+    run_dir = run_dir_of(args)
+    run = load_run(run_dir)
+    if run.get("status") != "completed":
+        die(f"{run_dir.name} is still {run.get('status')!r}; "
+            f"only a finished brief is sent")
+    brief = run_dir / "brief.md"
+    if not brief.exists():
+        die(f"{run_dir.name} has no brief.md to send")
+    text = brief.read_text(encoding="utf-8")
+    left = [p for p in EMAIL_UNFINISHED if p in text]
+    if left:
+        die(f"{run_dir.name}/brief.md still holds {', '.join(left)}; "
+            f"an unfinished brief is not sent")
+
+    slot, date = run.get("slot"), run.get("local_date")
+    page = brief_html(text)
+    if args.link:
+        if not re.match(r"(?i)https?://", args.link):
+            die(f"--link wants a web address, got {args.link!r}")
+        page = with_lead(page, f'<p><a href="{html.escape(args.link, quote=True)}">'
+                               f'Open this brief in Google Drive</a></p>')
+    elif args.no_link:
+        page = with_lead(page, "<p><em>The Google Drive copy could not be saved "
+                               "this time. The full brief is below.</em></p>")
+    print(json.dumps({"subject": f"YBS {slot} brief, {date}", "html": page,
+                      "slot": slot, "date": date,
+                      "drive_title": f"YBS {slot} brief {date}"},
+                     indent=2, ensure_ascii=False))
+    return 0
+
+
 # ---------------------------------------------------------------- main
 
 def main():
@@ -3868,6 +4184,28 @@ def main():
     p.set_defaults(fn=cmd_audit_line)
 
     with_run(sub.add_parser("close")).set_defaults(fn=cmd_close)
+
+    p = sub.add_parser("morning-check")
+    p.add_argument("--date", metavar="YYYY-MM-DD",
+                   help="the local date to ask about; without it, today")
+    p.add_argument("--wait", action="store_true",
+                   help="keep asking while the morning is running, for one "
+                        "call's worth of time at most")
+    # Hidden: a test cannot wait nine minutes to see a wait end.
+    p.add_argument("--wait-seconds", type=int, default=0, help=argparse.SUPPRESS)
+    p.set_defaults(fn=cmd_morning_check)
+
+    p = sub.add_parser("email")
+    p.add_argument("run", nargs="?", metavar="RUN_DIR",
+                   help="the finished run whose brief is sent")
+    p.add_argument("--failed", metavar="SLOT", choices=list(EMAIL_SLOTS),
+                   help="the run that did not arrive, instead of a run folder")
+    p.add_argument("--reason", help="with --failed: what went wrong, in one line")
+    p.add_argument("--link", metavar="URL",
+                   help="the brief's Google Drive copy, put above the brief")
+    p.add_argument("--no-link", action="store_true",
+                   help="say above the brief that the Drive copy was not saved")
+    p.set_defaults(fn=cmd_email)
 
     args = ap.parse_args()
     return args.fn(args)

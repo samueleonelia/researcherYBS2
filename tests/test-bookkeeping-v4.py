@@ -12,6 +12,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -2987,6 +2988,233 @@ def test_x_afternoon(tmp):
         shutil.rmtree(runs, ignore_errors=True)
 
 
+def test_morning_check():
+    """The scheduled afternoon and evening runs ask `morning-check` before they
+    start, and a shell loop reads its one line.
+
+    run.json only ever says running or completed, so a morning that crashed
+    looks like one still at work. The answer therefore carries the minutes
+    since the morning started, says stale past MORNING_WAIT_MINUTES_MAX, and
+    a completed morning beats any run still marked running. `--wait` keeps
+    asking for one call's worth of time and stops the moment the answer
+    changes. Everything runs inside a runs folder of its own, named by
+    YBS_RUNS_DIR, so the real morning runs of today are never seen.
+    """
+    print("\nmorning-check: has today's morning arrived")
+    tmp = Path(tempfile.mkdtemp(prefix="ybs-runs-"))
+    env = {"YBS_RUNS_DIR": str(tmp)}
+
+    def answer(*extra):
+        _, r = run("morning-check", *extra, expect=0, env=env)
+        return r.stdout.strip()
+
+    def minutes(line, word):
+        """The minutes after `word`, or None when the line is not that shape."""
+        parts = line.split()
+        if len(parts) == 2 and parts[0] == word and parts[1].isdigit():
+            return int(parts[1])
+        return None
+
+    try:
+        a = answer()
+        check("with no run at all, the answer is none", a == "none", repr(a))
+        build_afternoon(tmp, "2026-x_afternoon_160000", now_iso(-1))
+        a = answer()
+        check("an afternoon on its own is not a morning", a == "none", repr(a))
+
+        fresh = build_morning(tmp, "2026-x_morning_093000", now_iso(-20 / 60),
+                              status="running")
+        a = answer()
+        m = minutes(a, "running")
+        check("a morning started 20 minutes ago is running, with its minutes",
+              m is not None and 19 <= m <= 21, repr(a))
+        a = answer("--date", "2000-01-01")
+        check("--date of another day knows nothing of today's", a == "none", repr(a))
+
+        t0 = time.monotonic()
+        a = answer("--wait", "--wait-seconds", 3)
+        took = time.monotonic() - t0
+        check("--wait with nothing changing answers running once its wait is up",
+              minutes(a, "running") is not None and 2.5 <= took < 6,
+              f"{a!r} after {took:.1f}s")
+
+        def finish():
+            path = fresh / "run.json"
+            data = json.loads(path.read_text())
+            data["status"] = "completed"
+            write(path, data)
+
+        timer = threading.Timer(1.0, finish)
+        timer.start()
+        t0 = time.monotonic()
+        a = answer("--wait", "--wait-seconds", 3)
+        took = time.monotonic() - t0
+        timer.join()
+        check("--wait answers completed as soon as the morning finishes",
+              a == "completed" and took < 3, f"{a!r} after {took:.1f}s")
+
+        crashed = build_morning(tmp, "2026-x_morning_080000", now_iso(-90 / 60),
+                                status="running")
+        a = answer()
+        check("a completed morning wins over one still marked running",
+              a == "completed", repr(a))
+        shutil.rmtree(fresh)
+        a = answer()
+        m = minutes(a, "stale")
+        check("a morning running for 90 minutes is stale, with its minutes",
+              m is not None and 89 <= m <= 91, repr(a))
+        a = answer("--wait", "--wait-seconds", 3)
+        check("--wait does not wait on a stale morning", minutes(a, "stale") is not None,
+              repr(a))
+
+        # find_base walks the same folders through the same helper now.
+        done = build_morning(tmp, "2026-x_morning_100000", now_iso(-2))
+        out, _ = run("start", "--slot", "afternoon", expect=0, env=env)
+        check("start --slot afternoon still finds the completed morning",
+              isinstance(out, dict) and out["base"]["run_dir"] == str(done),
+              str(out)[:200])
+        check("and passes over the morning still marked running",
+              isinstance(out, dict) and out["base"]["run_dir"] != str(crashed))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+EMAIL_BRIEF = """**Date:** 3 October 2026 at 10:00
+
+## What leads
+
+### 1. A heading with <script>alert(1)</script> & ampersand
+
+The first line has **bold** and *italic* in it
+and a snake_case_word on the second line.
+
+1. [First source](https://example.com/a_b_c*d_e) — Example
+2. [Second source](https://example.org/plain) — Example
+
+- **Storyline:** x
+- **Flags:** VELOCITY
+
+---
+
+Audit: 6 of 6 sources screened.
+"""
+
+
+def test_email():
+    """`email RUN_DIR` turns a finished brief.md into the email the scheduled
+    run sends, in code, so no model retypes a brief.
+
+    The converter must escape every tag the Markdown holds, leave URLs and
+    snake_case words alone however many underscores and asterisks they have,
+    and put the Drive line above the brief only when asked. A run that has not
+    finished, has no brief, or still holds a placeholder is never sent. The
+    runs live in a runs folder of the test's own, named by YBS_RUNS_DIR.
+    """
+    print("\nemail: a finished brief as HTML")
+    tmp = Path(tempfile.mkdtemp(prefix="ybs-runs-"))
+    env = {"YBS_RUNS_DIR": str(tmp)}
+    today = datetime.now().strftime("%Y-%m-%d")
+    try:
+        rd = build_morning(tmp, "2026-x_morning_100000", now_iso(-1))
+        (rd / "brief.md").write_text(EMAIL_BRIEF, encoding="utf-8")
+        out, _ = run("email", rd, expect=0, env=env)
+        ok = isinstance(out, dict)
+        check("the subject names the slot and the date",
+              ok and out["subject"] == f"YBS morning brief, {today}", str(out)[:200])
+        check("so do the Drive title, the slot and the date fields",
+              ok and out["drive_title"] == f"YBS morning brief {today}"
+              and out["slot"] == "morning" and out["date"] == today)
+        page = out["html"] if ok else ""
+        check("the page is wrapped in one styled div",
+              page.startswith('<div style="font-family: Georgia') and page.endswith("</div>"))
+        missing = [t for t in ("<h2>", "<h3>", "<ol>", "<ul>", "<li>", "<hr>",
+                               "<strong>", "<em>") if t not in page]
+        check("headings, both lists, the rule, bold and italic all come out",
+              not missing, f"missing {missing}")
+        check("a script tag in the Markdown is escaped, never passed through",
+              "&lt;script&gt;" in page and "<script>" not in page)
+        check("an ampersand is escaped", "&amp; ampersand" in page)
+        check("a URL full of underscores and an asterisk stays whole in its href",
+              'href="https://example.com/a_b_c*d_e"' in page and page.count("<em>") == 1,
+              f"{page.count('<em>')} <em>")
+        check("a snake_case word is left alone", "snake_case_word" in page)
+        check("the two lines of a paragraph become one <p>",
+              "<p>The first line has <strong>bold</strong> and <em>italic</em> in it "
+              "and a snake_case_word on the second line.</p>" in page)
+        check("a bold label in a bullet stays bold",
+              "<li><strong>Storyline:</strong> x</li>" in page)
+
+        out, _ = run("email", rd, "--link", "https://docs.google.com/x", expect=0, env=env)
+        page = out["html"] if isinstance(out, dict) else ""
+        check("--link puts the Drive link above the brief",
+              'href="https://docs.google.com/x"' in page
+              and page.index("https://docs.google.com/x") < page.index("<h2>"))
+        out, _ = run("email", rd, "--no-link", expect=0, env=env)
+        page = out["html"] if isinstance(out, dict) else ""
+        check("--no-link says first that the Drive copy was not saved",
+              page.split("\n")[1].startswith(
+                  "<p><em>The Google Drive copy could not be saved"), page[:200])
+        _, r = run("email", rd, "--link", "https://docs.google.com/x", "--no-link",
+                   expect=2, env=env)
+        check("--link with --no-link is refused", r.returncode == 2)
+        _, r = run("email", rd, "--link", "javascript:alert(1)", expect=2, env=env)
+        check("a --link that is not a web address is refused", r.returncode == 2)
+
+        running = build_morning(tmp, "2026-x_morning_110000", now_iso(-0.5),
+                                status="running")
+        (running / "brief.md").write_text(EMAIL_BRIEF, encoding="utf-8")
+        _, r = run("email", running, expect=2, env=env)
+        check("a run still running is not sent",
+              "only a finished brief is sent" in r.stderr, r.stderr.strip()[:200])
+        bare = build_morning(tmp, "2026-x_morning_120000", now_iso(-0.4))
+        _, r = run("email", bare, expect=2, env=env)
+        check("a finished run with no brief.md is refused",
+              "no brief.md" in r.stderr, r.stderr.strip()[:200])
+        (bare / "brief.md").write_text(EMAIL_BRIEF + "\n{{AUDIT_LINE}}\n", encoding="utf-8")
+        _, r = run("email", bare, expect=2, env=env)
+        check("a brief still holding {{AUDIT_LINE}} is not sent",
+              "{{AUDIT_LINE}}" in r.stderr, r.stderr.strip()[:200])
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_email_failed():
+    """`email --failed SLOT --reason TEXT` is the message that replaces silence
+    when a scheduled run does not finish. The reason is one line in the
+    subject and escaped in the body, and the shows job, which is not a brief,
+    says so in its own subject."""
+    print("\nemail: the failure message")
+    today = datetime.now().strftime("%Y-%m-%d")
+    out, _ = run("email", "--failed", "morning", "--reason", "ego browser   not open\n",
+                 expect=0)
+    ok = isinstance(out, dict)
+    check("the subject carries the reason on one line",
+          ok and out["subject"] == "Brief failed: ego browser not open", str(out)[:200])
+    check("there is no Drive copy, and the date is today",
+          ok and out["drive_title"] is None and out["date"] == today
+          and out["slot"] == "morning")
+    check("the body says which brief and why",
+          ok and "The morning brief of" in out["html"]
+          and "Reason: ego browser not open" in out["html"])
+    out, _ = run("email", "--failed", "shows", "--reason", "no captions", expect=0)
+    check("the shows job says refresh, not brief",
+          isinstance(out, dict) and out["subject"].startswith("Shows refresh failed:")
+          and "show archive refresh" in out["html"], str(out)[:200])
+    out, _ = run("email", "--failed", "evening", "--reason", "<b>bold</b> & co", expect=0)
+    page = out["html"] if isinstance(out, dict) else ""
+    check("a tag in the reason is escaped in the body",
+          "&lt;b&gt;bold&lt;/b&gt; &amp; co" in page and "<b>" not in page, page[:300])
+    _, r = run("email", "--failed", "morning", expect=2)
+    check("--failed without --reason is refused", "--reason" in r.stderr,
+          r.stderr.strip()[:200])
+    _, r = run("email", ROOT, "--failed", "morning", "--reason", "x", expect=2)
+    check("--failed with a run folder is refused", r.returncode == 2)
+    _, r = run("email", "--reason", "x", expect=2)
+    check("--reason without --failed is refused", r.returncode == 2)
+    _, r = run("email", expect=2)
+    check("email with neither a run folder nor --failed is refused", r.returncode == 2)
+
+
 def test_sources_halves():
     """sources.md holds the news front pages and, at the bottom, the X lists.
     A screener agent must never be sent to x.com, so the two halves are read
@@ -3101,6 +3329,9 @@ def main():
         test_audit_afternoon()
         test_audit_evening()
         test_audit_and_close(rd)
+        test_morning_check()
+        test_email()
+        test_email_failed()
     finally:
         shutil.rmtree(rd, ignore_errors=True)
     tmp = tempfile.mkdtemp(prefix="ybs-x-stub-")

@@ -4014,8 +4014,8 @@ def brief_html(md: str) -> str:
     return EMAIL_WRAP + "\n" + "\n".join(blocks) + "\n</div>"
 
 
-EMAIL_PS = ('<p>P.S. If you need help with this or other AI projects, contact Sam at '
-            '<a href="mailto:samueleonelia@gmail.com">samueleonelia@gmail.com</a>.</p>')
+EMAIL_PS = ('<p><strong>Shameless plug:</strong> need help with this or another AI project? '
+            'Contact Sam at <a href="mailto:samueleonelia@gmail.com">samueleonelia@gmail.com</a>.</p>')
 
 
 def finished_local(run: dict) -> str:
@@ -4039,7 +4039,7 @@ def cmd_email(args):
     Two shapes. With a run folder, the finished brief itself, plus the title
     its Google Drive copy is saved under; with no flag the HTML is exactly
     that Drive copy. `--link` makes it the short email instead: when the brief
-    finished, the link, and the PS. `--no-link`, for when the Drive copy could
+    finished, the link, and the plug. `--no-link`, for when the Drive copy could
     not be saved, puts the same lines above the whole brief, so it still
     arrives. With `--failed`, the
     short message that says a run did not arrive and why. Nothing is sent from

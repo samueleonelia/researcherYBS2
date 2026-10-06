@@ -1,6 +1,6 @@
 ---
 name: ybs-daily
-description: Run one scheduled job of the day and deliver it. `morning`, `afternoon` or `evening` runs that /ybs-brief, saves the brief to the user's Google Drive and emails the user's own Gmail address a short note: when the brief finished, its Drive link, and a PS. `shows` runs /ybs-shows and emails only if it fails. A run that fails sends a "Brief failed" email instead, never silence. Started by the scheduled tasks /autopilot creates; the only skill in this project that sends anything.
+description: Run one scheduled job of the day and deliver it. `morning`, `afternoon` or `evening` runs that /ybs-brief, saves the brief to the user's Google Drive and emails the user's own Gmail address a short note: when the brief finished, its Drive link, and a one-line plug for Sam. `shows` runs /ybs-shows and emails only if it fails. A run that fails sends a "Brief failed" email instead, never silence. Started by the scheduled tasks /autopilot creates; the only skill in this project that sends anything.
 argument-hint: "morning | afternoon | evening | shows"
 ---
 
@@ -127,7 +127,7 @@ at and why as the reason. Then step 4.
    ```
 
    It prints the short email: when the brief finished, the Drive link, and
-   the PS. Never the brief itself: that lives in Drive.
+   the plug line. Never the brief itself: that lives in Drive.
 
    If step 2 or 3 failed, use `--no-link` instead: with no link to send, the
    email carries the whole brief, under a line saying the Drive copy could not

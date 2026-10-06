@@ -46,9 +46,9 @@ ego lite has to be open while a brief runs.
 
 ## Automatic briefs
 
-The briefs can run by themselves and arrive in your Gmail, unread. Each email
-has a link at the top to the same brief saved in your Google Drive, in a folder
-called `YBS briefs`, and the brief itself below it. Set it up once:
+The briefs can run by themselves and arrive in your Gmail, unread. Each brief
+is saved in your Google Drive, in a folder called `YBS briefs`, and the email
+is a short note: when it finished and the link to open it. Set it up once:
 
 1. In the Claude app: **Settings → Connectors**. Connect **Gmail** and
    **Google Drive**, both with the same Google account.

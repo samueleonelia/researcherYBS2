@@ -3146,14 +3146,21 @@ def test_email():
 
         out, _ = run("email", rd, "--link", "https://docs.google.com/x", expect=0, env=env)
         page = out["html"] if isinstance(out, dict) else ""
-        check("--link puts the Drive link above the brief",
-              'href="https://docs.google.com/x"' in page
-              and page.index("https://docs.google.com/x") < page.index("<h2>"))
+        check("--link makes the short email: the Drive link",
+              'href="https://docs.google.com/x"' in page, page[:300])
+        check("and when the brief finished",
+              "<p>Your morning brief is ready. It finished " in page, page[:300])
+        check("and the PS with Sam's address",
+              "PS: If you need help with this or with your AI project, contact Sam" in page
+              and "mailto:samueleonelia@gmail.com" in page)
+        check("and not the brief itself", "<h2>" not in page and "<li>" not in page)
         out, _ = run("email", rd, "--no-link", expect=0, env=env)
         page = out["html"] if isinstance(out, dict) else ""
-        check("--no-link says first that the Drive copy was not saved",
-              page.split("\n")[1].startswith(
-                  "<p><em>The Google Drive copy could not be saved"), page[:200])
+        check("--no-link says first when it finished, then that the Drive copy was not saved",
+              page.split("\n")[1].startswith("<p>Your morning brief is ready.")
+              and "<p><em>The Google Drive copy could not be saved" in page, page[:300])
+        check("and still carries the whole brief, below the PS",
+              "<h2>" in page and page.index("PS: If you need") < page.index("<h2>"))
         _, r = run("email", rd, "--link", "https://docs.google.com/x", "--no-link",
                    expect=2, env=env)
         check("--link with --no-link is refused", r.returncode == 2)

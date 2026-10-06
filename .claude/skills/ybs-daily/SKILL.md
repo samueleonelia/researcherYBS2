@@ -1,6 +1,6 @@
 ---
 name: ybs-daily
-description: Run one scheduled job of the day and deliver it. `morning`, `afternoon` or `evening` runs that /ybs-brief, saves the brief to the user's Google Drive and emails it to the user's own Gmail address with the Drive link at the top. `shows` runs /ybs-shows and emails only if it fails. A run that fails sends a "Brief failed" email instead, never silence. Started by the scheduled tasks /autopilot creates; the only skill in this project that sends anything.
+description: Run one scheduled job of the day and deliver it. `morning`, `afternoon` or `evening` runs that /ybs-brief, saves the brief to the user's Google Drive and emails the user's own Gmail address a short note: when the brief finished, its Drive link, and a PS. `shows` runs /ybs-shows and emails only if it fails. A run that fails sends a "Brief failed" email instead, never silence. Started by the scheduled tasks /autopilot creates; the only skill in this project that sends anything.
 argument-hint: "morning | afternoon | evening | shows"
 ---
 
@@ -126,8 +126,12 @@ at and why as the reason. Then step 4.
    python3 .claude/skills/ybs-brief/scripts/ybs_run.py email <run_dir> --link <viewUrl>
    ```
 
-   If step 2 or 3 failed, use `--no-link` instead: the email goes out anyway,
-   with one line at the top saying the Drive copy could not be saved. Record
+   It prints the short email: when the brief finished, the Drive link, and
+   the PS. Never the brief itself: that lives in Drive.
+
+   If step 2 or 3 failed, use `--no-link` instead: with no link to send, the
+   email carries the whole brief, under a line saying the Drive copy could not
+   be saved. Record
    it with `event --run <run_dir> --type drive_failed --detail "<what the tool said>"`.
 
 5. The address: the account's own. The Gmail tools have no profile call, so

@@ -4014,6 +4014,20 @@ def brief_html(md: str) -> str:
     return EMAIL_WRAP + "\n" + "\n".join(blocks) + "\n</div>"
 
 
+EMAIL_PS = ('<p>PS: If you need help with this or with your AI project, contact Sam: '
+            '<a href="mailto:samueleonelia@gmail.com">samueleonelia@gmail.com</a></p>')
+
+
+def finished_local(run: dict) -> str:
+    """When a run finished, in this Mac's own time, for a person to read."""
+    stamp = run.get("completed_utc") or run.get("started_utc")
+    try:
+        when = datetime.fromisoformat(stamp.replace("Z", "+00:00")).astimezone()
+    except (AttributeError, ValueError):
+        return run.get("local_date") or "today"
+    return f"{when:%A} {when.day} {when:%B %Y}, {when:%H:%M}"
+
+
 def with_lead(page: str, lead: str) -> str:
     """The same page with one line and a rule above the brief, inside the wrapper."""
     return page.replace(EMAIL_WRAP + "\n", EMAIL_WRAP + "\n" + lead + "\n<hr>\n", 1)
@@ -4024,8 +4038,10 @@ def cmd_email(args):
 
     Two shapes. With a run folder, the finished brief itself, plus the title
     its Google Drive copy is saved under; with no flag the HTML is exactly
-    that Drive copy, and `--link` or `--no-link` adds the one line that says
-    where the copy is or that it could not be saved. With `--failed`, the
+    that Drive copy. `--link` makes it the short email instead: when the brief
+    finished, the link, and the PS. `--no-link`, for when the Drive copy could
+    not be saved, puts the same lines above the whole brief, so it still
+    arrives. With `--failed`, the
     short message that says a run did not arrive and why. Nothing is sent from
     here: the caller sends what this prints.
     """
@@ -4050,7 +4066,8 @@ def cmd_email(args):
         body = "\n".join([
             first, f"<p>Reason: {safe}</p>",
             f"<p>Written at {local.strftime('%H:%M')}, this Mac's time.</p>",
-            "<p>Nothing else was sent. The next scheduled run will try again.</p>"])
+            "<p>Nothing else was sent. The next scheduled run will try again.</p>",
+            EMAIL_PS])
         print(json.dumps({"subject": subject, "html": EMAIL_WRAP + "\n" + body + "\n</div>",
                           "slot": args.failed, "date": date, "drive_title": None},
                          indent=2, ensure_ascii=False))
@@ -4078,14 +4095,18 @@ def cmd_email(args):
 
     slot, date = run.get("slot"), run.get("local_date")
     page = brief_html(text)
+    ready = f"<p>Your {slot} brief is ready. It finished {finished_local(run)}, this Mac's time.</p>"
     if args.link:
         if not re.match(r"(?i)https?://", args.link):
             die(f"--link wants a web address, got {args.link!r}")
-        page = with_lead(page, f'<p><a href="{html.escape(args.link, quote=True)}">'
-                               f'Open this brief in Google Drive</a></p>')
+        page = "\n".join([EMAIL_WRAP, ready,
+                          f'<p><a href="{html.escape(args.link, quote=True)}">'
+                          f'Open the brief in Google Drive</a></p>',
+                          EMAIL_PS, "</div>"])
     elif args.no_link:
-        page = with_lead(page, "<p><em>The Google Drive copy could not be saved "
-                               "this time. The full brief is below.</em></p>")
+        page = with_lead(page, "\n".join([
+            ready, "<p><em>The Google Drive copy could not be saved this time, "
+                   "so the full brief is below.</em></p>", EMAIL_PS]))
     print(json.dumps({"subject": f"YBS {slot} brief, {date}", "html": page,
                       "slot": slot, "date": date,
                       "drive_title": f"YBS {slot} brief {date}"},

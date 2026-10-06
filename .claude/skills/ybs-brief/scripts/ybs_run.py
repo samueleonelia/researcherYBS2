@@ -4014,8 +4014,8 @@ def brief_html(md: str) -> str:
     return EMAIL_WRAP + "\n" + "\n".join(blocks) + "\n</div>"
 
 
-EMAIL_PS = ('<p>PS: If you need help with this or with your AI project, contact Sam: '
-            '<a href="mailto:samueleonelia@gmail.com">samueleonelia@gmail.com</a></p>')
+EMAIL_PS = ('<p>P.S. If you need help with this or with your AI project, contact Sam at '
+            '<a href="mailto:samueleonelia@gmail.com">samueleonelia@gmail.com</a>.</p>')
 
 
 def finished_local(run: dict) -> str:

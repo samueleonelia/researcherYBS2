@@ -28,7 +28,7 @@ goes into every task.
 ## Step 2 — Gmail and Google Drive
 
 The connector tools may be deferred. Load them with ToolSearch: search
-`gmail send`, `gmail profile`, `google drive create file` and
+`gmail send message`, `gmail search threads`, `google drive create file` and
 `drive search files`, and load what comes back. Find them by what they do,
 exactly as `/ybs-daily` step 0 describes; never type a server id.
 
@@ -122,9 +122,10 @@ check every task is there with the right time and the right on or off.
 
 ## Step 6 — the test email
 
-Send one email the way `/ybs-daily` sends: the Gmail profile tool for the
-address, then the send tool once, to that address only, content type HTML,
-subject `YBS autopilot: test email`. The body is a few short lines: that the
+Send one email the way `/ybs-daily` sends: the account's own address found as
+in its step 3.5, then the send tool once, `to` that address only, `htmlBody`
+the message, subject `YBS autopilot: test email`. Tell the user which address
+it went to: that is where every brief will go. The body is a few short lines: that the
 automatic briefs are set up, and the schedule as agreed, one line per job,
 with the ones switched off marked off.
 

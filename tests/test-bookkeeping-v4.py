@@ -3151,7 +3151,7 @@ def test_email():
         check("and when the brief finished",
               "<p>Your morning brief is ready. It finished " in page, page[:300])
         check("and the PS with Sam's address",
-              "P.S. If you need help with this or with your AI project, contact Sam at" in page
+              "P.S. If you need help with this or other AI projects, contact Sam at" in page
               and "mailto:samueleonelia@gmail.com" in page)
         check("and not the brief itself", "<h2>" not in page and "<li>" not in page)
         out, _ = run("email", rd, "--no-link", expect=0, env=env)

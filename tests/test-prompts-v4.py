@@ -271,9 +271,15 @@ def test_daily_skills():
               "never send anything anywhere" in text.lower())
 
     ids = re.findall(r"`(ybs-daily-[a-z]+)`", auto)
-    check("/autopilot names one task per slot",
-          sorted(ids) == sorted(f"ybs-daily-{s}" for s in
-                                ("shows", "morning", "afternoon", "evening")), str(ids))
+    check("/autopilot names one task per slot, and the one-off test task",
+          sorted(set(ids)) == sorted(f"ybs-daily-{s}" for s in
+                                     ("shows", "morning", "afternoon", "evening", "test")),
+          str(ids))
+    check("/autopilot turns auto mode on for this project only, and only on the user's yes",
+          "`permissions.defaultMode` to `auto`" in auto
+          and "never set it without asking" in auto)
+    check("the test email is sent by a scheduled run, never by /autopilot itself",
+          "Never send the test email from this session" in auto)
     folders = {d.name for d in skills.iterdir() if d.is_dir()}
     check("no task id is the name of a skill", not set(ids) & folders,
           str(sorted(set(ids) & folders)))

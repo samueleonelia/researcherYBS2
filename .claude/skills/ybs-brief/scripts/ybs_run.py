@@ -4042,9 +4042,25 @@ def cmd_email(args):
     finished, the link, and the plug. `--no-link`, for when the Drive copy could
     not be saved, puts the same lines above the whole brief, so it still
     arrives. With `--failed`, the
-    short message that says a run did not arrive and why. Nothing is sent from
-    here: the caller sends what this prints.
+    short message that says a run did not arrive and why. With `--test`, the
+    one /autopilot has a scheduled run send, to prove the whole chain works
+    with nobody at the keyboard. Nothing is sent from here: the caller sends
+    what this prints.
     """
+    if args.test:
+        if args.run or args.failed or args.reason is not None or args.link or args.no_link:
+            die("--test stands alone: no run folder, no --failed, --reason or link")
+        body = "\n".join([
+            "<p>This email came from a scheduled run on this Mac, with nobody at the "
+            "keyboard. The automatic briefs are set up.</p>",
+            "<p>Each brief will arrive like this one: a short note saying when it "
+            "finished, with a link to the full brief in your Google Drive.</p>",
+            EMAIL_PS])
+        print(json.dumps({"subject": "YBS autopilot: test email",
+                          "html": EMAIL_WRAP + "\n" + body + "\n</div>",
+                          "slot": "test", "date": datetime.now().strftime("%Y-%m-%d"),
+                          "drive_title": None}, indent=2, ensure_ascii=False))
+        return 0
     if args.failed:
         if args.run:
             die("--failed reports a run that did not finish; "
@@ -4226,6 +4242,8 @@ def main():
                    help="the brief's Google Drive copy, put above the brief")
     p.add_argument("--no-link", action="store_true",
                    help="say above the brief that the Drive copy was not saved")
+    p.add_argument("--test", action="store_true",
+                   help="the test email /autopilot has a scheduled run send")
     p.set_defaults(fn=cmd_email)
 
     args = ap.parse_args()

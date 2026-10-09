@@ -3211,6 +3211,13 @@ def test_email_failed():
     page = out["html"] if isinstance(out, dict) else ""
     check("a tag in the reason is escaped in the body",
           "&lt;b&gt;bold&lt;/b&gt; &amp; co" in page and "<b>" not in page, page[:300])
+    out, _ = run("email", "--test", expect=0)
+    check("--test prints the autopilot test email",
+          isinstance(out, dict) and out["subject"] == "YBS autopilot: test email"
+          and "nobody at the keyboard" in out["html"] and "Shameless plug:" in out["html"],
+          str(out)[:200])
+    _, r = run("email", "--test", "--failed", "morning", "--reason", "x", expect=2)
+    check("--test with --failed is refused", r.returncode == 2)
     _, r = run("email", "--failed", "morning", expect=2)
     check("--failed without --reason is refused", "--reason" in r.stderr,
           r.stderr.strip()[:200])

@@ -13,8 +13,12 @@ and every failure ends in an email.
 You are the orchestrator, as in the skill you run. You add two things to it:
 a check before, and the delivery after.
 
-The word after `/ybs-daily` is the slot: `morning`, `afternoon`, `evening` or
-`shows`. Any other word: stop and say so.
+The word after `/ybs-daily` is the slot: `morning`, `afternoon`, `evening`,
+`shows` or `test`. Any other word: stop and say so.
+
+`test` is the run `/autopilot` schedules once, to prove this Mac can send
+with nobody at the keyboard. It does step 0 (Gmail only), skips steps 1 and 2,
+and in step 3 sends the test email. It never runs a brief.
 
 Every command here runs from the project folder, the one holding
 `sources.md`. If the session is somewhere else, change into it first.
@@ -151,6 +155,16 @@ at and why as the reason. Then step 4.
 7. If the send fails, record it with
    `event --run <run_dir> --type email_failed --detail "<what the tool said>"`.
    Do not try another way.
+
+### `test`
+
+```bash
+python3 .claude/skills/ybs-brief/scripts/ybs_run.py email --test
+```
+
+Then the address as in step 3.5 (from the sent mail; there is no Drive file
+here), and the send tool once, with `to`, its `subject` and `htmlBody` = its
+`html`. Then step 4.
 
 ### The failure email
 

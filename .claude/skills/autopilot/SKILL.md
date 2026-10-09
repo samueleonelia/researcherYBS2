@@ -56,6 +56,26 @@ mcp__<gmail server>__*
 mcp__<drive server>__*
 ```
 
+Then the permission mode. Scheduled runs use the **default** mode, not the
+one picked in a chat's mode menu. A rule can only allow a command it names,
+and a brief runs hundreds of steps: one worded a little differently from its
+rule, and a run that started at five in the morning waits for a click until
+someone comes. Auto mode avoids that: Claude's own safety check approves
+routine steps and still stops risky ones.
+
+Read `permissions.defaultMode` in `.claude/settings.local.json`, then in
+`~/.claude/settings.json`; the first one set wins. If it is `auto`, say so in
+one line and go on. If not, ask the user with AskUserQuestion, in plain words:
+the scheduled briefs need auto mode as this folder's default; it applies to
+this project folder only, and sessions here will ask less. Two answers:
+
+- **Turn it on:** set `permissions.defaultMode` to `auto` in this project's
+  `.claude/settings.local.json`.
+- **Not now:** change nothing, and tell them the scheduled runs may stop on
+  an "Allow" prompt; step 6 will show it.
+
+Only the user's answer turns it on; never set it without asking.
+
 Keep every key and every entry already in the file. Add an entry only if it
 is not there yet. Never touch `.claude/settings.json`: that one ships with
 the project, and `/update` replaces it.
@@ -120,24 +140,40 @@ For each job:
 The slot of the shows task is `shows`. Then call the list tool again and
 check every task is there with the right time and the right on or off.
 
-## Step 6 — the test email
+## Step 6 — the test run
 
-Send one email the way `/ybs-daily` sends: the account's own address found as
-in its step 3.5, then the send tool once, `to` that address only, `htmlBody`
-the message, subject `YBS autopilot: test email`. Tell the user which address
-it went to: that is where every brief will go. The body is a few short lines: that the
-automatic briefs are set up, and the schedule as agreed, one line per job,
-with the ones switched off marked off.
+Prove it on this Mac the way the briefs will run: a scheduled task, with
+nobody at the keyboard. Never send the test email from this session: a send
+from here proves nothing about a run at five in the morning.
 
-Then ask with AskUserQuestion whether it arrived in their inbox, unread:
+The time two minutes from now, with its offset:
+
+```bash
+python3 -c "from datetime import datetime,timedelta;print((datetime.now().astimezone()+timedelta(minutes=2)).replace(microsecond=0).isoformat())"
+```
+
+A task with id `ybs-daily-test` may exist from an earlier `/autopilot`
+(the list in step 5 shows it). If it does, update it with that `fireAt`.
+If not, create it: taskId `ybs-daily-test`, title `YBS test email`,
+`fireAt` that time, `notifyOnCompletion: false`, a one-line description, and
+the prompt of step 5 with the slot `test`. It runs once and switches itself
+off.
+
+Tell the user: in about three minutes an email titled `YBS autopilot: test
+email` arrives, from a run nobody is watching, and it goes to the address
+every brief will go to. Then ask with AskUserQuestion whether it arrived in
+their inbox, unread:
 
 - **Yes:** good, go on.
 - **Arrived, but already read:** a Gmail filter is marking mail they send
   themselves as read. In Gmail: **Settings → See all settings → Filters and
   Blocked Addresses**, and look for a filter on their own address that marks
   as read. Remove that action, or every brief will arrive read.
-- **Not there:** check Spam and wait a minute. If it is still missing, say
-  that the send tool reported what it reported, and stop.
+- **Not there:** check Spam and wait a minute. Then call the run list for
+  `ybs-daily-test`. A run still `running` with no activity for minutes is
+  waiting for an "Allow" click: tell the user to open **Scheduled → YBS test
+  email** in the sidebar, approve what it asks, and type `/autopilot` again.
+  A run that `failed`: say its error and stop.
 
 ## Step 7 — what the user keeps doing
 
@@ -160,9 +196,10 @@ Tell them, plainly:
 1. **Run from the project folder.** The tasks run where this session runs.
 2. **Never type a server id.** Read both from this session's own tool names.
 3. **Never drop anything from `settings.local.json`.** Add the two entries,
-   keep the rest.
+   and auto mode only when the user says yes; keep the rest.
 4. **Never make a task twice.** List first; update what exists.
-5. **The test email goes to the user's own address, once.**
+5. **The test email is sent by the scheduled test run, never by this
+   session,** to the user's own address, once.
 6. **The task prompt only names `/ybs-daily`.** Everything a run does lives
    in the project, so `/update` can fix it; nothing else goes in the prompt.
 7. **Never start a brief here.** This skill sets things up; the tasks run

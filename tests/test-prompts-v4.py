@@ -324,6 +324,22 @@ def test_daily_skills():
           str(ids))
     check("/autopilot makes auto mode this project's default, and says how to undo it",
           "`permissions.defaultMode` to `auto`" in auto and "to undo it" in auto)
+    rules = [ln.strip() for ln in auto.splitlines() if ln.strip().startswith("mcp__")]
+    check("/autopilot allows exactly the four tools a run calls, by name",
+          rules == ["mcp__<gmail server>__send_message", "mcp__<gmail server>__search_threads",
+                    "mcp__<drive server>__create_file", "mcp__<drive server>__search_files"],
+          str(rules))
+    check("and never a whole server", not [r for r in rules if r.endswith("__*")], str(rules))
+    called = set(re.findall(r"`(send_message|search_threads|create_file|search_files|"
+                            r"create_draft|share_file|reply|forward|trash_\w+|"
+                            r"update_file|copy_file|\w+_label\w*)`", daily))
+    allowed = {"send_message", "search_threads", "create_file", "search_files"}
+    # create_draft, share_file and reply are named only to tell the right
+    # tool or server apart, and share_file again in the rule that forbids it.
+    check("/ybs-daily calls no connector tool /autopilot does not allow",
+          called - allowed <= {"create_draft", "share_file", "reply"}
+          and "Never call the share tool" in daily
+          and "Call only four connector tools" in daily, str(sorted(called)))
     check("the test email is sent by a scheduled run, never by /autopilot itself",
           "Never send the test email from this session" in auto)
     folders = {d.name for d in skills.iterdir() if d.is_dir()}

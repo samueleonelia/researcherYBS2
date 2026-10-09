@@ -1,6 +1,6 @@
 ---
 name: autopilot
-description: Set up the automatic briefs on this Mac, once. Checks that Gmail and Google Drive are connected, lets their tools run without a prompt, agrees the four daily times with the user, creates (or updates) the four scheduled tasks that run /ybs-daily, and sends one test email. Use when the user types /autopilot, wants the briefs to arrive by email by themselves, or wants to change their times or switch one off. Run it again at any time to change the schedule; it never makes a task twice.
+description: Set up the automatic briefs on this Mac, once. Checks that Gmail and Google Drive are connected, lets the four of their tools a run calls work without a prompt, agrees the four daily times with the user, creates (or updates) the four scheduled tasks that run /ybs-daily, and sends one test email. Use when the user types /autopilot, wants the briefs to arrive by email by themselves, or wants to change their times or switch one off. Run it again at any time to change the schedule; it never makes a task twice.
 argument-hint: ""
 ---
 
@@ -49,12 +49,20 @@ alike.
 A tool is named `mcp__<server>__<tool>`. Take the two server ids from this
 session's own tool names: the Gmail server's and the Drive server's. Then
 read `.claude/settings.local.json` if it exists, and write it back with these
-two entries in `permissions.allow`:
+four entries in `permissions.allow`, one for each tool a scheduled run calls:
 
 ```
-mcp__<gmail server>__*
-mcp__<drive server>__*
+mcp__<gmail server>__send_message
+mcp__<gmail server>__search_threads
+mcp__<drive server>__create_file
+mcp__<drive server>__search_files
 ```
+
+Exactly these four, never a whole server (`__*`). A rule for a whole server
+lets every step of a run use every tool on it without asking, a reader on an
+untrusted page included: forward, trash, share. An entry ending in `__*` for
+either server, left by an earlier `/autopilot`, is that wider rule: remove
+it.
 
 Then the permission mode. Scheduled runs use the **default** mode, not the
 one picked in a chat's mode menu. A rule can only allow a command it names,
@@ -69,8 +77,8 @@ applies to this project folder only. Tell the user in one line: auto mode is
 now this folder's default, so sessions here ask less; to undo it, remove the
 `defaultMode` line from that file.
 
-Keep every key and every entry already in the file. Add an entry only if it
-is not there yet. Never touch `.claude/settings.json`: that one ships with
+Keep every key and every entry already in the file, but the old `__*` rule
+above. Add an entry only if it is not there yet. Never touch `.claude/settings.json`: that one ships with
 the project, and `/update` replaces it.
 
 ## Step 4 — the times
@@ -188,8 +196,8 @@ Tell them, plainly:
 
 1. **Run from the project folder.** The tasks run where this session runs.
 2. **Never type a server id.** Read both from this session's own tool names.
-3. **Never drop anything from `settings.local.json`.** Add the two entries
-   and auto mode, keep the rest.
+3. **Never drop anything from `settings.local.json`** but an old `__*` rule
+   for these two servers. Add the four entries and auto mode, keep the rest.
 4. **Never make a task twice.** List first; update what exists.
 5. **The test email is sent by the scheduled test run, never by this
    session,** to the user's own address, once.

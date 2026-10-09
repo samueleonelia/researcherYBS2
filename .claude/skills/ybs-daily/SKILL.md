@@ -256,6 +256,9 @@ when there is one. Or: that nothing was sent, and why.
 5. **Never edit the brief or its HTML.** What `email` prints is what is
    uploaded and what is sent.
 6. **Never type a server id.** Find each tool by what it does, every run.
+   Call only four connector tools: Gmail's `send_message` and
+   `search_threads`, Drive's `create_file` and `search_files`. `/autopilot`
+   lets those four run unattended and no other.
 7. **Every failure ends in the failure email.** A run that stops in silence
    is the one thing this skill exists to prevent.
 8. **Never schedule anything.** `/autopilot` makes the scheduled tasks; this

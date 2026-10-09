@@ -311,6 +311,8 @@ main() {
     say "  $n. Open ego lite and check you are signed in to youtube.com."
     n=$((n + 1))
     say "  $n. Back in Claude, run /ybs-shows. Then /ybs-brief morning."
+    n=$((n + 1))
+    say "  $n. To get every brief by email without typing anything, run /autopilot once."
   fi
 }
 

@@ -64,7 +64,9 @@ was missed runs as soon as you open it again. A run that fails sends you an
 email saying "Brief failed" and why, so silence never means a lost brief.
 
 To change a time, type `/autopilot` again. Running a brief by hand with
-`/ybs-brief` still sends nothing.
+`/ybs-brief` still sends nothing. Do not start one by hand while a scheduled
+one is running: the end of each run closes every browser space, the other
+run's pages included.
 
 ## Changing what it does
 

@@ -4064,19 +4064,30 @@ def daily_lock_path() -> Path:
 
 
 def daily_lock_state():
-    """The lock as it stands: None when free or stale, else (slot, minutes held)."""
+    """The lock as it stands: None when free or stale, else (slot, minutes held).
+
+    A lock that cannot be read is held, by a slot unknown (`?`), until its
+    file is older than the ceiling. The holder makes the file with O_EXCL and
+    writes it a moment later, so in between it is empty. Reading that as
+    free would let a second job clear it and take the lock too.
+    """
     path = daily_lock_path()
     try:
         held = json.loads(path.read_text(encoding="utf-8"))
         taken = datetime.fromisoformat(held["taken_utc"].replace("Z", "+00:00"))
+        slot = held.get("slot", "?")
     except FileNotFoundError:
         return None
     except (ValueError, KeyError, TypeError, AttributeError):
-        return None                                   # unreadable: as good as stale
+        try:
+            taken = datetime.fromtimestamp(path.stat().st_mtime, timezone.utc)
+        except FileNotFoundError:
+            return None                               # freed while we looked
+        slot = "?"
     minutes = int((utc_now() - taken).total_seconds() // 60)
     if minutes >= DAILY_LOCK_MINUTES_MAX:
         return None
-    return held.get("slot", "?"), minutes
+    return slot, minutes
 
 
 def daily_lock_take(slot: str) -> bool:

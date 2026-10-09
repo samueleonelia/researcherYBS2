@@ -3211,6 +3211,17 @@ def test_daily_lock():
         lock.write_text(json.dumps({"slot": "shows", "taken_utc": now_iso(-3)}))
         out = run("daily-lock", "take", "--slot", "afternoon", env=env)[1].stdout.strip()
         check("a lock older than the ceiling is stale and taken over", out == "taken", out)
+
+        # The holder makes the file with O_EXCL and writes it a moment later.
+        lock.write_text("")
+        out = run("daily-lock", "take", "--slot", "evening", env=env)[1].stdout.strip()
+        check("a lock file not written yet is busy, never free",
+              out.startswith("busy ? ") and lock.read_text() == "", out)
+        old = time.time() - 3 * 3600
+        os.utime(lock, (old, old))
+        out = run("daily-lock", "take", "--slot", "evening", env=env)[1].stdout.strip()
+        check("an unreadable lock older than the ceiling is stale and taken over",
+              out == "taken", out)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

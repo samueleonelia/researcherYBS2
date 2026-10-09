@@ -11,7 +11,7 @@ This is the active successor to the sibling repo `../researcherYBS/`. Evidence f
 - Per the parent `yaronBrook/CLAUDE.md`: researcherYBS's last commit is 2026-09-01 with no GitHub remote; this repo's last commit is 2026-09-12 with a remote configured (`github.com/samueleonelia/researcherYBS2`, private).
 
 ## What's inside
-- `.claude/skills/`: `ybs-brief` (morning/afternoon/evening news brief, includes its own X-list engine), `ybs-shows` (refreshes the show transcript archive and topic profile), `setup` (installs yt-dlp/Node, checks the project), `update` (pulls the newest GitHub zip, preserves `briefs/`, `shows/`, and the user's edited `preferences.md`).
+- `.claude/skills/`: `autopilot` (sets up the daily scheduled tasks on the Mac it runs on, auto mode for this folder, a scheduled test email), `ybs-daily` (what each scheduled task runs: the brief, its Google Drive copy, the email to self; the only skill that sends), `ybs-brief` (morning/afternoon/evening news brief, includes its own X-list engine), `ybs-shows` (refreshes the show transcript archive and topic profile), `setup` (installs yt-dlp/Node, checks the project), `update` (pulls the newest GitHub zip, preserves `briefs/`, `shows/`, and the user's edited `preferences.md`).
 - `briefs/`: one dated folder per brief run, each with `brief.md`.
 - `shows/`: transcript archive and `profile.json` topic profile, built by `/ybs-shows`.
 - `preferences.md`, `sources.md`, `settings.md`: the three user-editable config files (brief preferences, news sources + X lists, numeric settings/models per stage).
@@ -22,7 +22,7 @@ This is the active successor to the sibling repo `../researcherYBS/`. Evidence f
 None configured for this folder in `~/.claude.json`. The brief work runs through the `ego-browser` skill (ego lite, signed into YouTube) rather than an MCP connector.
 
 ## Rules
-- Currently on `main`, tag `v4.4-x-lane`, pushed. Treat `main` as the version `/update` distributes to Yaron — verify tests before pushing.
+- Currently on `main`, tag `v4.5-autopilot`, pushed. Treat `main` as the version `/update` distributes to Yaron — verify tests before pushing.
 - Known test failures are pre-existing and named in STATUS.md/DEVLOG.md (`picks-sync` >15 refusal, `SKILL.md`'s hard-coded number, a beat-vs-topic check); `/setup` reports only a *new* failure as something to flag.
 - `/update` must never overwrite `preferences.md`, `briefs/`, or `shows/`.
 

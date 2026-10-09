@@ -863,3 +863,57 @@ archive and crashed on mine once `/ybs-shows` rotated the profile.
 - Live fetch of `zm1efvYAFvg` with the new code: English, 19,502 words.
 - Shows suite all green; bookkeeping and prompts give the same 3 known
   failures and nothing new.
+
+## 2026-10-03 to 10-09 · Automatic briefs: /autopilot and /ybs-daily
+
+**What happened**
+- Yaron wants the briefs to run by themselves and arrive in his own Gmail.
+  Built on branch `autopilot`, merged to `main`, tag `v4.5-autopilot`.
+
+**Decisions**
+- Scheduled tasks live on the Mac, not in the project, so `/update` cannot
+  install them. `/autopilot` (run once by Yaron) creates four daily tasks
+  (ids `ybs-daily-shows/-morning/-afternoon/-evening`, so no task shadows a
+  skill), each a one-line prompt calling `/ybs-daily <slot>`; all logic stays
+  in the repo where `/update` can fix it.
+- `/ybs-daily` is the only skill that sends. `/ybs-brief` and `/ybs-shows`
+  keep "never send anything".
+- The brief goes to Google Drive (folder `YBS briefs`, HTML upload becomes a
+  Google Doc); the email is a short note: when it finished, the link, and a
+  "Shameless plug" line for Sam. If Drive fails, the email carries the whole
+  brief. Every failure sends a "Brief failed" email.
+- Gmail connector facts (from the connected tool list, not the docs): the
+  send tool is `send_message` (`to`, `subject`, `htmlBody`, and `attachments`
+  up to 25 MB); there is no profile tool, so the own address is the sender of
+  the newest SENT message, with the Drive file's owner as fallback. Self-sent
+  mail lands with labels UNREAD + INBOX.
+- Permissions: connector rules `mcp__<server>__*` go in the project's
+  `.claude/settings.local.json` (git-ignored; `update.sh` only copies over the
+  top, so it survives). The app's own "Always allow" resets on app updates.
+  A scheduled run reads the default permission mode, not a chat's picker: in
+  ask-every-time mode a delivery run stopped on an Allow prompt (a compound
+  Bash line no rule matched). `/autopilot` therefore sets auto mode as this
+  folder's default and says how to undo it. The safety classifier refused to
+  let Claude commit the silent version twice; Samuele chose it explicitly.
+- `/autopilot` proves the setup with a one-off scheduled `/ybs-daily test`
+  run two minutes ahead, never a send from its own session.
+- Afternoon/evening wait for the morning with `morning-check --wait`
+  (`stale` after 60 min, since run.json has no `failed` state).
+
+**Verified**
+- Real brief 2026-09-12: folder created, 35 KB HTML uploaded as a complete
+  Doc, short email sent and arrived unread.
+- Scheduled delivery-only run and scheduled failure email on Samuele's Mac,
+  both unattended, both arrived (auto mode).
+- Suites: only the 4 known failures. `update.sh` + `setup.sh` on a copy of
+  Yaron's version (origin/main 97161eb): new skills arrive, briefs/,
+  preferences.md and settings.local.json survive.
+
+**Not verified**
+- Anything on Yaron's Mac. A full brief started by a scheduled task in this
+  project (option skipped: the Asia brief already runs that way).
+
+**Next**
+- Yaron: connect Gmail + Google Drive (same Google account), `/update`,
+  `/setup`, `/autopilot`, check the test email; Mac plugged in with
+  "Prevent automatic sleeping" on, Claude app left open.

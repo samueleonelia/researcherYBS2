@@ -1,12 +1,12 @@
 # STATUS: researcherYBS2
 
-_Updated: 2026-10-02 · English captions for /ybs-shows_
+_Updated: 2026-10-09 · Automatic briefs: /autopilot and /ybs-daily_
 
 <!-- Rewrite this file in place. Never append. History belongs in DEVLOG.md. Keep under 60 lines. -->
 
-**What this is:** A Claude Code skill (`/ybs-brief`) that builds a news brief for Yaron Brook from six sources plus two X lists, and `/ybs-shows` which keeps his show profile current.
+**What this is:** A Claude Code skill (`/ybs-brief`) that builds a news brief for Yaron Brook from six sources plus two X lists, `/ybs-shows` which keeps his show profile current, and `/autopilot` + `/ybs-daily` which run both on a schedule on his Mac and email him each brief's Google Drive link.
 
-**Right now:** `main`, tagged `v4.4-x-lane`, pushed: the X lane is what `/update` downloads. The X half no longer spawns a second Claude Code: its four agents are the orchestrator's own, launched from what `x-next` prints, so neither the expired-login failure (this Mac) nor the missing-permission failure (Yaron's) can happen. One live morning run went through the whole lane clean on 09-12: X: 5 picks from 55 subjects, 68 tweets read, 0 retries.
+**Right now:** `main`, tagged `v4.5-autopilot`, pushed: the automatic briefs are what `/update` downloads. Built and tested on Samuele's Mac (Drive upload of a real brief, short email arriving unread, a scheduled delivery run and a scheduled failure email, `update.sh` + `setup.sh` rehearsed on a copy of Yaron's version). Not yet run on Yaron's Mac.
 
 ## Feature areas
 | Area | State | Note |
@@ -27,13 +27,15 @@ _Updated: 2026-10-02 · English captions for /ybs-shows_
 | Settings | ✅ working | one root `settings.md` |
 | Test suite | ⚠️ partial | 4 old failures, see bugs; `/setup` names them instead of counting; `run-all.sh` stops at the first failing file |
 | Git remote | ✅ working | github.com/samueleonelia/researcherYBS2 (private) |
-| Install (`/setup`) and update (`/update`) | ✅ working | `/update` keeps briefs/, shows/, preferences.md |
+| Install (`/setup`) and update (`/update`) | ✅ working | `/update` keeps briefs/, shows/, preferences.md, and `.claude/settings.local.json` |
+| Automatic briefs (`/autopilot`, `/ybs-daily`) | ✅ tested here | 4 daily tasks (shows 02:00, morning 05:30, afternoon 13:00, evening 19:00); brief to Drive `YBS briefs`, email = time + link + plug; auto mode as the folder default; never run on Yaron's Mac yet |
 
 ## Next up
-1. Push the English-captions fix, then Yaron runs `/update` (his local fix is the same change)
-2. One live `/ybs-brief afternoon`: the first real test of the `**Follows:**` pointer
-3. The 09-12 morning took 46.6 min, over the 45 ceiling: see whether the 55 judge agents at step 6 are the reason
-4. Fix the old test failures and make `run-all.sh` run every file
+1. Yaron: connect Gmail + Google Drive, then `/update`, `/setup`, `/autopilot`; check the test email arrives unread
+2. His first real 05:30 morning email: confirm it arrived, and check the Drive Doc is complete (Claude copies a ~35 KB brief into the upload)
+3. One live `/ybs-brief afternoon`: the first real test of the `**Follows:**` pointer
+4. The 09-12 morning took 46.6 min, over the 45 ceiling: see whether the 55 judge agents at step 6 are the reason
+5. Fix the old test failures and make `run-all.sh` run every file
 
 ## Known bugs
 - `picks-sync` does not refuse more than 15 picks (2 tests fail)
@@ -43,4 +45,5 @@ _Updated: 2026-10-02 · English captions for /ybs-shows_
 - `tests/run-all.sh` stops at the first failing file, so two files never run
 
 ## Blocked on you
+- Send Yaron the setup steps (Phase 4 in the DEVLOG 10-09 entry)
 - Say when to run the afternoon live

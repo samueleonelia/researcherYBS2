@@ -222,6 +222,15 @@ has not just printed.
 python3 .claude/skills/ybs-brief/scripts/ybs_run.py screen-sync --run <run_dir>
 ```
 
+A screen that lists **0 links** is a failure, whatever the screener replied:
+a front page always links something, and one October afternoon the Economist
+returned 0 with no error and the run took it as a success. You will not see it in the
+reply; `screen-sync` names it in `problems` and gives it the status `empty`.
+Every source it names that way, or as `missing`, gets its one retry through the
+`fill screen --retry` gate above, and then `screen-sync` runs again (it may be
+re-run until triage is frozen). A source that is `empty` after its retry is a
+`screen_failed`: record it and go on without that source.
+
 This assigns ids, merges duplicate URLs and drops anything dated outside the
 window or carrying no date at all. The per-source count is in the output: a
 source whose undated count approaches its listed count has stopped publishing
@@ -481,8 +490,18 @@ python3 .claude/skills/ybs-brief/scripts/ybs_run.py close --run <run_dir>
 ```
 
 `x-merge` puts the X section under the last article section, and `audit-line`
-replaces the placeholder the template ends with. Report the audit line and the
-path to `brief.md` to the user. Nothing else.
+replaces the placeholder the template ends with. `x-merge` also closes any ego
+task spaces this run's X readers left open: a reader's own closing call can
+time out (exit 144) and leave its "x read <run> ..." space behind. It closes
+only spaces the agent owns, with their tabs, never touches one that shows as
+the user's, never fails the brief, and prints what it found under `spaces`
+(`left_user` is the number it left alone). `close`, the last command, then
+closes **every** ego task space, whoever it shows as owned by: Yaron uses Ego
+only through this pipeline, so anything still open when a run is over is a
+leftover. It logs the result as an `ego_spaces_closed` event and prints it to
+stderr (`closed`, `left`, `failed`); `YBS_SKIP_SPACE_CLEANUP=1` turns it off for
+a day he is using Ego himself. Do not close spaces by hand.
+Report the audit line and the path to `brief.md` to the user. Nothing else.
 
 ---
 

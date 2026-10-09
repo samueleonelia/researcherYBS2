@@ -84,11 +84,21 @@ Open the links **one at a time**, in the order given. Finish a tweet — read it
 write its note — before opening the next one. Never open several tweet pages at
 once, and never fan the batch out.
 
-A workable round looks like this. Reuse the same task space for every round:
+**One task space, `{{TASK_SPACE}}`, and only these calls.** Open it with
+`useOrCreateTaskSpace`, open pages with `openOrReuseTab`, close it with
+`completeTaskSpace`. Nothing else manages the space: no `taskSpace()`,
+`claimTaskSpace()`, `takeOverTaskSpace()`, `task.finish()`, `adopt()`,
+`release()` or `page.close()`, and no second space. The ego-browser skill
+documents `task.finish()` for spaces made another way; on this one it does not
+close the space, it hands it to the user with its tabs still open, which is how
+a pile of `x read` spaces gets left behind. Do not close tweet tabs one by one
+either: they go with the space.
+
+A workable round looks like this. Every round uses the same name:
 
 ```bash
 ego-browser nodejs <<'EOF'
-const task = await useOrCreateTaskSpace('THE TASK SPACE NAME ABOVE')
+const task = await useOrCreateTaskSpace('{{TASK_SPACE}}')
 const tab = await openOrReuseTab('THE ONE PERMALINK', { wait: true, timeout: 25 })
 await wait(2)
 cliLog(await snapshotText())
@@ -113,18 +123,29 @@ project's own notes on x.com:
   buttons show. Prefer that aria-label. On the tweet's own page the view count
   is often also spelled out under the timestamp.
 
-Close each tweet's tab when you are done with it, so tabs do not pile up. When
-the whole batch is written, finish with a dedicated last round:
+### Closing the space: always the last thing you do
+
+When every note in the batch is written, run this as its own last round. Run it
+**whether the batch went well or not**: after notes marked `unavailable`, after
+a page that would not load, after a round that errored. A task space left open
+is a failure of this step, however good the notes are.
 
 ```bash
 ego-browser nodejs <<'EOF'
-await completeTaskSpace('THE TASK SPACE NAME ABOVE', { keep: false })
+await completeTaskSpace('{{TASK_SPACE}}', { keep: false })
 EOF
 ```
 
-If a round fails with "user is controlling", an "inactive" task space, or any
-similar message saying the browser is not yours: **stop**. Do not retry, do not
-take the browser back. Say so in one line and end.
+Run it once, in the foreground, and do not wait on it past what the command
+gives you. If it runs long, is moved to the background or is killed (exit 144),
+count it as done: the space is closing. Do not run it again, do not look for
+the space, do not try another way of closing it, and do not hold your final
+line for it.
+
+The one exception: if a round fails with "user is controlling", an "inactive"
+task space, or any similar message saying the browser is not yours, **stop**.
+Do not retry, do not take the browser back, and do not run the closing round,
+because the space is no longer yours to close. Say so in one line and end.
 
 ## What to write
 
@@ -232,6 +253,9 @@ id in your batch.** Code checks this and the run fails, naming the missing ids.
    folder itself. Do not create a summary file, an index, or a log.
 6. **Do not judge.** No ranking, no grouping, no relevance, no opinion, no
    "this one is the best". Not in the note, not in your final line.
+7. **Close your task space last, every time.** `completeTaskSpace` on
+   `{{TASK_SPACE}}`, never `task.finish()`, never a second space. Skip it only
+   when the browser stopped being yours.
 
 When the batch is done, say in one line how many notes you wrote and how many
 of them are `status: unavailable`. That line is all you say.

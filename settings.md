@@ -126,7 +126,7 @@ is which login is allowed to read them.
 
 | Setting | Value |
 |---|---|
-| x_account | @EgoismoEfficace |
+| x_account | @yaronbrook |
 
 ## X models
 

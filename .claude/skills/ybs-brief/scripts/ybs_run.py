@@ -2085,6 +2085,16 @@ def cmd_screen_sync(args):
             continue
         links = reply.get("links") or []
         sinfo["listed"] = len(links)
+        if not links:
+            # A front page always links something, so 0 listed is a screen that
+            # did not work, not a quiet day: the Economist returned 0 with no
+            # error on 2026-10-08 (143 the day before) and the run took it as
+            # a success. The source's own window filter comes after this, so
+            # "nothing new today" still shows as listed > 0, in_window 0.
+            sinfo["status"] = "empty"
+            problems.append(f"{name}: the screen listed 0 links with no error; "
+                            f"treat it as failed and give it its one retry")
+            continue
         kept = 0
         undated = 0
         old = 0
@@ -3529,12 +3539,140 @@ def cmd_write_stitch(args):
     return 0
 
 
+X_SPACE_SCRIPT = r"""
+const PREFIX = __PREFIX__
+const sleep = ms => new Promise(r => setTimeout(r, ms))
+const mine = async () => (await listTaskSpaces()).filter(s => (s.name || '').startsWith(PREFIX))
+const found = await mine()
+const failed = []
+for (const s of found) {
+  if (s.ownership !== 'agent') continue            // the user's: never claimed here
+  try {
+    // completeTaskSpace by id closes the space with its tabs. finish() does
+    // not: it hands a space that still holds a tab to the user instead.
+    await Promise.race([completeTaskSpace(s.id, { keep: false }),
+                        sleep(20000).then(() => { throw new Error('timeout') })])
+  } catch (e) { failed.push(s.id + ': ' + String(e).slice(0, 80)) }
+}
+await sleep(2000)                                  // let the closes settle before counting
+const left = await mine()
+console.log('XSPACES ' + JSON.stringify({
+  found: found.length,
+  left_agent: left.filter(s => s.ownership === 'agent').length,
+  left_user: left.filter(s => s.ownership !== 'agent').length,
+  failed }))
+"""
+
+
+def close_x_read_spaces(x_run_dir: Path) -> dict:
+    """Close the ego task spaces this X run's readers left open.
+
+    A reader is told to close its own space, but its closing call can time out
+    (exit 144) and move to the background, and nothing else ever checks: by
+    2026-10-08 fifty-odd "x read ..." spaces were open. The names are
+    `x read <x run folder> p<pass> b<k>`, so the folder name picks out exactly
+    this run's. Only spaces the agent owns are touched; one that shows as the
+    user's is counted and left alone. Never raises: a stuck cleanup must not
+    hold the brief, so the worst case is a note saying what was left.
+
+    It calls `completeTaskSpace(id, {keep: false})`, not `task.finish()`. The
+    first version used finish(), and on 2026-10-08 that closed only 7 of 27
+    leftovers: finish() hands a space that still holds a tab to the user, who
+    then owns it. completeTaskSpace closes the space with its tabs (it also
+    closed user-owned spaces when Yaron asked for that by hand). Spaces already
+    shown as the user's are still left alone here, since the user may be
+    working in one. The counts returned say what was left.
+    """
+    if os.environ.get("YBS_SKIP_SPACE_CLEANUP"):
+        return {"note": "space cleanup skipped (YBS_SKIP_SPACE_CLEANUP)"}
+    if not shutil.which("ego-browser"):
+        return {"note": "space cleanup skipped: ego-browser is not on the PATH"}
+    prefix = f"x read {x_run_dir.name} "
+    script = X_SPACE_SCRIPT.replace("__PREFIX__", json.dumps(prefix))
+    try:
+        r = subprocess.run(["ego-browser", "nodejs"], input=script, text=True,
+                           capture_output=True, timeout=300)
+    except Exception as e:                       # timeout, OSError: never fatal
+        return {"note": f"space cleanup failed: {str(e)[:120]}"}
+    # The CLI may prefix its output, and sends console.log to stderr.
+    for line in reversed(((r.stdout or "") + "\n" + (r.stderr or "")).splitlines()):
+        m = re.search(r"XSPACES (\{.*\})\s*$", line)
+        if m:
+            try:
+                return json.loads(m.group(1))
+            except ValueError:
+                break
+    tail = ((r.stderr or r.stdout or "").strip().splitlines() or [""])[-1]
+    return {"note": f"space cleanup gave no result (exit {r.returncode}): {tail[:120]}"}
+
+
+ALL_SPACES_SCRIPT = r"""
+const sleep = ms => new Promise(r => setTimeout(r, ms))
+const found = await listTaskSpaces()
+const failed = []
+for (const s of found) {
+  try {
+    // By id, and whoever owns it: completeTaskSpace closes the space with its
+    // tabs, which finish() would not (see close_x_read_spaces).
+    await Promise.race([completeTaskSpace(s.id, { keep: false }),
+                        sleep(20000).then(() => { throw new Error('timeout') })])
+  } catch (e) { failed.push(s.id + ' ' + (s.name || '') + ': ' + String(e).slice(0, 80)) }
+}
+await sleep(2000)                                  // let the closes settle before counting
+const left = await listTaskSpaces()
+console.log('EGOSPACES ' + JSON.stringify({
+  found: found.length,
+  closed: found.length - left.length,
+  left: left.map(s => s.id + ' ' + (s.name || '') + ' (' + s.ownership + ')'),
+  failed }))
+"""
+
+
+def close_all_ego_spaces() -> dict:
+    """Close every ego task space, whoever owns it, when a run is over.
+
+    On 2026-10-09 Yaron said he never uses Ego except through this pipeline, so
+    a space that shows as his is a leftover, not work in progress: a reader whose
+    task was handed over, a screener that timed out, `ybs cookies`, an `x read`
+    space from an old run. Leaving them piled up for a day (52 on 2026-10-08)
+    and made him close them by hand. The run is finished when this runs: `close`
+    is the last command, every agent has returned.
+
+    Never raises, and never holds the brief: the worst case is a note saying
+    what was left. Skipped when YBS_SKIP_SPACE_CLEANUP is set, which is the
+    switch for the day he does use Ego himself, or runs two pipelines at once.
+    """
+    if os.environ.get("YBS_SKIP_SPACE_CLEANUP"):
+        return {"note": "space cleanup skipped (YBS_SKIP_SPACE_CLEANUP)"}
+    if not shutil.which("ego-browser"):
+        return {"note": "space cleanup skipped: ego-browser is not on the PATH"}
+    try:
+        r = subprocess.run(["ego-browser", "nodejs"], input=ALL_SPACES_SCRIPT,
+                           text=True, capture_output=True, timeout=300)
+    except Exception as e:                       # timeout, OSError: never fatal
+        return {"note": f"space cleanup failed: {str(e)[:120]}"}
+    for line in reversed(((r.stdout or "") + "\n" + (r.stderr or "")).splitlines()):
+        m = re.search(r"EGOSPACES (\{.*\})\s*$", line)
+        if m:
+            try:
+                return json.loads(m.group(1))
+            except ValueError:
+                break
+    tail = ((r.stderr or r.stdout or "").strip().splitlines() or [""])[-1]
+    return {"note": f"space cleanup gave no result (exit {r.returncode}): {tail[:120]}"}
+
+
 def cmd_x_merge(args):
     """Put the X run's brief under the article brief, in code.
 
     The X write agent already produced a verified, show-ready section, so this
     copies it rather than feeding its picks to another writer. The X run's own
     brief.md is read and never written.
+
+    It is also the last X command of a run, when every reader has long since
+    returned, so it closes whatever "x read" task spaces those readers left
+    open (close_x_read_spaces). A lane still running or in progress is left
+    alone: its readers may be live.
     """
     run_dir = run_dir_of(args)
     brief = run_dir / "brief.md"
@@ -3543,8 +3681,14 @@ def cmd_x_merge(args):
     state = x_state(run_dir)
     status = state.get("status")
 
+    spaces = {}
+    if status in ("completed", "failed", "merged") and state.get("run_dir"):
+        spaces = close_x_read_spaces(Path(state["run_dir"]))
+        log_event(run_dir, "x_spaces_closed", json.dumps(spaces, ensure_ascii=False))
+
     if status == "merged":
-        return x_out(state, merged=False, note="this run's X section is already in")
+        return x_out(state, merged=False, spaces=spaces,
+                     note="this run's X section is already in")
 
     text = brief.read_text(encoding="utf-8")
     section, picks, subjects, tweets = "", 0, 0, 0
@@ -3592,7 +3736,7 @@ def cmd_x_merge(args):
               f"{picks} picks from {subjects} subjects, {tweets} tweets read"
               if status == "completed" else f"nothing to merge: {status}")
     return x_out(state, merged=status == "completed", x_picks=picks,
-                 x_subjects=subjects, x_tweets_read=tweets)
+                 x_subjects=subjects, x_tweets_read=tweets, spaces=spaces)
 
 
 def x_audit_bit(run_dir: Path) -> str:
@@ -3778,6 +3922,10 @@ def cmd_audit_line(args):
 
 def cmd_close(args):
     run_dir = run_dir_of(args)
+    # Every agent has returned by now, so every ego space is a leftover.
+    spaces = close_all_ego_spaces()
+    log_event(run_dir, "ego_spaces_closed", json.dumps(spaces, ensure_ascii=False))
+    print("ego spaces: " + json.dumps(spaces, ensure_ascii=False), file=sys.stderr)
     d = load_run(run_dir)
     d["completed_utc"] = iso(utc_now())
     d["status"] = "completed"

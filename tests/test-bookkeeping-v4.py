@@ -25,7 +25,7 @@ FAILURES = []
 def run(*args, expect=None, env=None):
     r = subprocess.run([sys.executable, str(SCRIPT)] + [str(a) for a in args],
                        capture_output=True, text=True, cwd=ROOT,
-                       env={**os.environ, **env} if env else None)
+                       env={**os.environ, "YBS_SKIP_SPACE_CLEANUP": "1", **(env or {})})
     if expect is not None and r.returncode != expect:
         FAILURES.append(f"{' '.join(str(a) for a in args[:2])}: exit {r.returncode}, "
                         f"expected {expect}\n    {r.stderr.strip()[:200]}")

@@ -8,11 +8,14 @@ after the scroll: how two lists become one pile, who keeps the `list` field,
 and what the head of tweets.json says.
 """
 
+import io
 import json
+import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -182,6 +185,87 @@ class TestConvergenceCountsLists(unittest.TestCase):
                                          "2026-09-06T12:00:00Z")
         self.assertEqual(scored[0]["lists"], 2)
         self.assertTrue(scored[0]["cross_list"])
+
+
+class TestTabsAreClosed(unittest.TestCase):
+    """No list tab outlives the run: openOrReuseTab reuses a tab by its URL, so
+    a tab left open is the one the next run reads in. The browser is mocked:
+    scrape() stands in for a list read, run_js_json for the close round."""
+
+    def run_main(self, scrape):
+        calls = []
+
+        def fake_scrape(account, url, *a, list_name="", **k):
+            calls.append(f"{list_name}: read")
+            return scrape(account, url, *a, list_name=list_name, **k)
+
+        def fake_run_js_json(script, timeout=60, step=""):
+            calls.append(step)
+            return {"ok": True}
+
+        settings = {"x_account": "@someone", "x_window_hours": "24",
+                    "x_stop_after_old": "5", "x_tweets_min": "1"}
+        with tempfile.TemporaryDirectory() as d, \
+                mock.patch.object(x_scrape, "read_settings", return_value=settings), \
+                mock.patch.object(x_scrape, "read_x_lists", return_value=[ONE, TWO]), \
+                mock.patch.object(x_scrape, "scrape", side_effect=fake_scrape), \
+                mock.patch.object(x_scrape, "run_js_json", side_effect=fake_run_js_json), \
+                mock.patch.object(sys, "argv", ["x_scrape.py", "--run-dir", d,
+                                                "--settings", __file__]), \
+                mock.patch("sys.stdout", new_callable=io.StringIO) as out:
+            with self.assertRaises(SystemExit) as ended:
+                x_scrape.main()
+        return ended.exception.code, calls, out.getvalue()
+
+    def test_every_list_tab_is_closed_the_last_one_too(self):
+        def scrape(account, url, *a, list_name="", **k):
+            return [tweet(url[-3:], list_name)], "page"
+        code, calls, _ = self.run_main(scrape)
+        self.assertEqual(code, 0)
+        self.assertEqual(calls, ["List one: read", "List one: closing the tab",
+                                 "List two: read", "List two: closing the tab"])
+
+    def test_a_list_that_fails_still_closes_its_tab(self):
+        def scrape(account, url, *a, list_name="", **k):
+            if list_name == TWO["name"]:
+                raise SystemExit(7)
+            return [tweet("1", list_name)], "page"
+        code, calls, _ = self.run_main(scrape)
+        self.assertEqual(code, 7, "the list's own exit code survives the close")
+        self.assertEqual(calls, ["List one: read", "List one: closing the tab",
+                                 "List two: read", "List two: closing the tab"])
+
+    def test_a_close_that_fails_does_not_hide_why_the_list_failed(self):
+        def scrape(account, url, *a, list_name="", **k):
+            raise SystemExit(7)
+
+        def failing_close(script, timeout=60, step=""):
+            raise SystemExit(2)
+        settings ={"x_account": "@someone", "x_window_hours": "24",
+                    "x_stop_after_old": "5", "x_tweets_min": "1"}
+        with tempfile.TemporaryDirectory() as d, \
+                mock.patch.object(x_scrape, "read_settings", return_value=settings), \
+                mock.patch.object(x_scrape, "read_x_lists", return_value=[ONE, TWO]), \
+                mock.patch.object(x_scrape, "scrape", side_effect=scrape), \
+                mock.patch.object(x_scrape, "run_js_json", side_effect=failing_close), \
+                mock.patch.object(sys, "argv", ["x_scrape.py", "--run-dir", d,
+                                                "--settings", __file__]), \
+                mock.patch("sys.stdout", new_callable=io.StringIO) as stdout:
+            with self.assertRaises(SystemExit) as ended:
+                x_scrape.main()
+            out = stdout.getvalue()
+        self.assertEqual(ended.exception.code, 7)
+        self.assertIn("could not close the tab for List one", out)
+
+    def test_a_timeout_says_which_step_hung(self):
+        def hang(*a, **k):
+            raise subprocess.TimeoutExpired(cmd="ego-browser", timeout=60)
+        with mock.patch.object(x_scrape.subprocess, "run", side_effect=hang), \
+                mock.patch("sys.stderr", new_callable=io.StringIO) as err:
+            with self.assertRaises(SystemExit):
+                x_scrape.run_js("1", step="Economists: opening the list")
+        self.assertIn("ego-browser nodejs timed out (Economists: opening the list)",
+                      err.getvalue())
 
 
 if __name__ == "__main__":

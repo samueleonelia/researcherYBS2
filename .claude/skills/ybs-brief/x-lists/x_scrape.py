@@ -95,8 +95,11 @@ def parse_iso(s: str):
         return None
 
 
-def run_js(script: str, timeout: int = 60) -> str:
-    """One ego-browser nodejs round trip. cliLog output lands on stderr."""
+def run_js(script: str, timeout: int = 60, step: str = "") -> str:
+    """One ego-browser nodejs round trip. cliLog output lands on stderr.
+
+    `step` names what the round was doing, so a timeout says where it hung."""
+    where = f" ({step})" if step else ""
     try:
         r = subprocess.run(
             ["ego-browser", "nodejs"],
@@ -108,20 +111,21 @@ def run_js(script: str, timeout: int = 60) -> str:
     except FileNotFoundError:
         die("ego-browser is not installed / not on PATH")
     except subprocess.TimeoutExpired:
-        die("ego-browser nodejs timed out")
+        die(f"ego-browser nodejs timed out{where}")
     if r.returncode != 0:
-        die(f"ego-browser nodejs exited {r.returncode}: {r.stderr.strip()[:2000]}")
+        die(f"ego-browser nodejs exited {r.returncode}{where}: {r.stderr.strip()[:2000]}")
     return r.stderr.strip()
 
 
-def run_js_json(script: str, timeout: int = 60):
-    out = run_js(script, timeout=timeout)
+def run_js_json(script: str, timeout: int = 60, step: str = ""):
+    out = run_js(script, timeout=timeout, step=step)
+    where = f" ({step})" if step else ""
     if not out:
-        die("ego-browser nodejs produced no output")
+        die(f"ego-browser nodejs produced no output{where}")
     try:
         return json.loads(out)
     except json.JSONDecodeError:
-        die(f"could not parse ego-browser output as JSON: {out[:2000]}")
+        die(f"could not parse ego-browser output as JSON{where}: {out[:2000]}")
 
 
 # ------------------------------------------------------------- browser JS
@@ -236,9 +240,12 @@ if (handle !== {json.dumps("ACCOUNT_PLACEHOLDER")}) {{
 def build_close_script() -> str:
     """Close the tab this list was read in.
 
-    Between two lists the browser must start clean: the next list opens its own
-    tab, so a scroll round can never land on the tab of the list before it, and
-    a run does not leave a pile of tabs behind."""
+    Run after every list, the last one too, and after a list that failed. The
+    next list opens its own tab, so a scroll round can never land on the tab of
+    the list before it. And no list tab outlives the run: openOrReuseTab reuses
+    a tab by its URL, so a tab left open would be the one the next run reads
+    in. On 2026-10-05 the Economists tab, left open after the last list, froze
+    overnight, and every run the next day hung on it."""
     return f"""
 const task = await useOrCreateTaskSpace({json.dumps(TASK_SPACE_NAME)});
 try {{ await closeTab(); }} catch (e) {{ }}
@@ -441,7 +448,7 @@ def scrape(account: str, list_url: str, window_hours: int, stop_after_old: int,
     script = build_first_round_script()
     script = script.replace(json.dumps("ACCOUNT_PLACEHOLDER"), json.dumps(account))
     script = script.replace(json.dumps("URL_PLACEHOLDER"), json.dumps(list_url))
-    result = run_js_json(script)
+    result = run_js_json(script, step=f"{list_name or list_url}: opening the list")
 
     if not result.get("ok"):
         reason = result.get("reason", "unknown")
@@ -465,7 +472,8 @@ def scrape(account: str, list_url: str, window_hours: int, stop_after_old: int,
 
         rounds += 1
         seen_at_iso = iso(utc_now())
-        result = run_js_json(build_scroll_round_script())
+        result = run_js_json(build_scroll_round_script(),
+                             step=f"{list_name or list_url}: scroll round {rounds}")
         if not result.get("ok"):
             die(f"scroll round {rounds} failed: {result}")
         round_text = result.get("pageText", "")
@@ -571,20 +579,28 @@ def main():
     sources_path = Path(args.sources).resolve() if args.sources else default_sources_path()
     lists = read_x_lists(sources_path)
 
+    def close_tab(row):
+        # Not fatal: a tab that will not close costs a tab, not the run.
+        try:
+            run_js_json(build_close_script(), step=f"{row['name']}: closing the tab")
+        except SystemExit:
+            print(f"x_scrape: could not close the tab for {row['name']}", flush=True)
+
     scraped, pages = [], []
     for row in lists:
         print(f"x_scrape: reading {row['name']} ({row['url']})", flush=True)
-        tweets, page_text = scrape(account, row["url"], window_hours,
-                                    stop_after_old, list_name=row["name"])
+        try:
+            tweets, page_text = scrape(account, row["url"], window_hours,
+                                        stop_after_old, list_name=row["name"])
+        except SystemExit:
+            # The list failed, perhaps on a frozen tab. Close it on the way
+            # out, so the next run opens a fresh tab instead of reusing it.
+            close_tab(row)
+            raise
         print(f"x_scrape: {row['name']}: {len(tweets)} tweets in window", flush=True)
         scraped.append((row, tweets))
         pages.append((row, page_text))
-        if row is not lists[-1]:
-            # Not fatal: a tab that will not close costs a tab, not the run.
-            try:
-                run_js_json(build_close_script())
-            except SystemExit:
-                print(f"x_scrape: could not close the tab for {row['name']}", flush=True)
+        close_tab(row)
 
     tweets, counts = merge_lists(scraped)
 

@@ -30,7 +30,7 @@ class TestLoadRealSettings(unittest.TestCase):
             self.assertIsInstance(self.settings[key], int, f"{key} should be an int")
 
     def test_fixed_values_present(self):
-        self.assertEqual(self.settings["x_account"], "@EgoismoEfficace")
+        self.assertEqual(self.settings["x_account"], "@yaronbrook")
 
     def test_agents_active_max_is_retired(self):
         """The X agents go through the orchestrator's one pool since

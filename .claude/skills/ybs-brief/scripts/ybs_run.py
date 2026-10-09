@@ -3673,6 +3673,10 @@ def cmd_x_merge(args):
     returned, so it closes whatever "x read" task spaces those readers left
     open (close_x_read_spaces). A lane still running or in progress is left
     alone: its readers may be live.
+
+    The merge comes first and the sweep after. The sweep can take minutes, and
+    a command that runs past the Bash tool's limit is killed where it stands:
+    with the sweep first, a kill lost the X section along with it.
     """
     run_dir = run_dir_of(args)
     brief = run_dir / "brief.md"
@@ -3681,13 +3685,16 @@ def cmd_x_merge(args):
     state = x_state(run_dir)
     status = state.get("status")
 
-    spaces = {}
-    if status in ("completed", "failed", "merged") and state.get("run_dir"):
-        spaces = close_x_read_spaces(Path(state["run_dir"]))
-        log_event(run_dir, "x_spaces_closed", json.dumps(spaces, ensure_ascii=False))
+    def sweep() -> dict:
+        """Close the readers' leftover spaces, once the brief is safe on disk."""
+        if status in ("completed", "failed", "merged") and state.get("run_dir"):
+            found = close_x_read_spaces(Path(state["run_dir"]))
+            log_event(run_dir, "x_spaces_closed", json.dumps(found, ensure_ascii=False))
+            return found
+        return {}
 
     if status == "merged":
-        return x_out(state, merged=False, spaces=spaces,
+        return x_out(state, merged=False, spaces=sweep(),
                      note="this run's X section is already in")
 
     text = brief.read_text(encoding="utf-8")
@@ -3735,6 +3742,7 @@ def cmd_x_merge(args):
     log_event(run_dir, "x_merged",
               f"{picks} picks from {subjects} subjects, {tweets} tweets read"
               if status == "completed" else f"nothing to merge: {status}")
+    spaces = sweep()
     return x_out(state, merged=status == "completed", x_picks=picks,
                  x_subjects=subjects, x_tweets_read=tweets, spaces=spaces)
 
@@ -3921,11 +3929,18 @@ def cmd_audit_line(args):
 
 
 def cmd_close(args):
+    """Mark the run finished, write run-log.md, then sweep the ego spaces.
+
+    The order matters. The sweep can take minutes, and a command that runs
+    past the Bash tool's limit is killed where it stands. When the sweep came
+    first, a kill left a brief that was written in full but never marked
+    completed: morning-check then saw a morning still running, and the
+    afternoon and evening waited on it until it went stale. So the run is
+    finished on disk before the sweep starts, and the sweep's result is added
+    to run.json as an event afterwards. run-log.md is written before it and
+    does not carry that one event.
+    """
     run_dir = run_dir_of(args)
-    # Every agent has returned by now, so every ego space is a leftover.
-    spaces = close_all_ego_spaces()
-    log_event(run_dir, "ego_spaces_closed", json.dumps(spaces, ensure_ascii=False))
-    print("ego spaces: " + json.dumps(spaces, ensure_ascii=False), file=sys.stderr)
     d = load_run(run_dir)
     d["completed_utc"] = iso(utc_now())
     d["status"] = "completed"
@@ -3942,6 +3957,10 @@ def cmd_close(args):
               for e in d.get("events", [])] or ["- none"]
     lines += ["", d["audit_line"], ""]
     (run_dir / "run-log.md").write_text("\n".join(lines), encoding="utf-8")
+    # Every agent has returned by now, so every ego space is a leftover.
+    spaces = close_all_ego_spaces()
+    log_event(run_dir, "ego_spaces_closed", json.dumps(spaces, ensure_ascii=False))
+    print("ego spaces: " + json.dumps(spaces, ensure_ascii=False), file=sys.stderr)
     print(d["audit_line"])
     return 0
 

@@ -501,6 +501,12 @@ only through this pipeline, so anything still open when a run is over is a
 leftover. It logs the result as an `ego_spaces_closed` event and prints it to
 stderr (`closed`, `left`, `failed`); `YBS_SKIP_SPACE_CLEANUP=1` turns it off for
 a day he is using Ego himself. Do not close spaces by hand.
+
+Give the call that runs `x-merge` and `close` the Bash tool's
+`timeout: 600000`. A sweep can take minutes. Each command saves its own work
+first (the X section, the finished run) and sweeps after, so a sweep cut short
+loses nothing but the sweep.
+
 Report the audit line and the path to `brief.md` to the user. Nothing else.
 
 ---

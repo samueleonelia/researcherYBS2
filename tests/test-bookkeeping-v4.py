@@ -2816,6 +2816,7 @@ def test_x_merge(tmp):
         out, _ = run("x-merge", "--run", rd, expect=0)
         text = (rd / "brief.md").read_text()
         check("says what it merged", out["merged"] and out["status"] == "merged", str(out))
+        check("and what its sweep found", "spaces" in out, str(out))
         check("the X title becomes a section of the brief",
               "\n## What the list is moving on\n" in text, text[-900:])
         check("its sections drop a level", "\n### TRENDING\n" in text
@@ -2848,6 +2849,87 @@ def test_x_merge(tmp):
     finally:
         drop_x(xdir)
         shutil.rmtree(rd, ignore_errors=True)
+
+
+def slow_ego(tmp):
+    """An env whose `ego-browser` hangs, the way a sweep of fifty spaces does.
+
+    The cleanup switch is off here (an empty value), so the command really
+    reaches its sweep; the fake only sleeps, and the test kills it.
+    """
+    bin_dir = Path(tmp) / "slow-ego-bin"
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    fake = bin_dir / "ego-browser"
+    fake.write_text("#!/bin/sh\ncat >/dev/null\nsleep 60\n")
+    fake.chmod(0o755)
+    return {**os.environ, "YBS_SKIP_SPACE_CLEANUP": "",
+            "PATH": f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}"}
+
+
+def killed_mid_sweep(args, env, saved, wait=15):
+    """Start a command, wait until `saved()` says its work is on disk, then
+    kill it mid-sweep. True when the work was saved while it still ran."""
+    import signal
+    p = subprocess.Popen([sys.executable, str(SCRIPT)] + [str(a) for a in args],
+                         cwd=ROOT, env=env, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, start_new_session=True)
+    ok = False
+    try:
+        deadline = time.monotonic() + wait
+        while time.monotonic() < deadline:
+            if saved():
+                ok = p.poll() is None
+                break
+            time.sleep(0.2)
+    finally:
+        try:
+            os.killpg(p.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        p.wait()
+    return ok
+
+
+def test_saved_before_sweep(tmp):
+    """`x-merge` and `close` sweep ego spaces, which can take minutes, and a
+    command past the Bash tool's limit is killed where it stands. Each must
+    have saved its own work before the sweep starts, so a kill mid-sweep
+    loses nothing else."""
+    print("\nx-merge and close save their work before the sweep")
+    env = slow_ego(tmp)
+
+    rd = merged_run(tmp, X_BRIEF)
+    xdir = x_dirs_of(rd)
+    try:
+        def merged():
+            x = (json.loads((rd / "run.json").read_text()).get("x") or {})
+            return (x.get("status") == "merged"
+                    and "## What the list" in (rd / "brief.md").read_text())
+        check("x-merge has the X section in the brief while its sweep still runs",
+              killed_mid_sweep(["x-merge", "--run", rd], env, merged))
+        check("and it is still there after the kill", merged())
+    finally:
+        drop_x(xdir)
+        shutil.rmtree(rd, ignore_errors=True)
+
+    runs = Path(tempfile.mkdtemp(prefix="ybs-runs-"))
+    try:
+        out, _ = run("start", "--slot", "morning", expect=0,
+                     env={"YBS_RUNS_DIR": str(runs)})
+        rd = Path(out["run_dir"])
+
+        def closed():
+            data = json.loads((rd / "run.json").read_text())
+            return (data.get("status") == "completed" and bool(data.get("audit_line"))
+                    and (rd / "run-log.md").exists())
+        check("close marks the run completed while its sweep still runs",
+              killed_mid_sweep(["close", "--run", rd],
+                               {**env, "YBS_RUNS_DIR": str(runs)}, closed))
+        check("and morning-check reads it as completed after the kill",
+              run("morning-check", expect=0,
+                  env={"YBS_RUNS_DIR": str(runs)})[1].stdout.strip() == "completed")
+    finally:
+        shutil.rmtree(runs, ignore_errors=True)
 
 
 def test_x_merge_shapes(tmp):
@@ -3391,6 +3473,7 @@ def main():
         test_x_timeout(tmp)
         test_x_merge(tmp)
         test_x_merge_shapes(tmp)
+        test_saved_before_sweep(tmp)
         test_x_afternoon(tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)

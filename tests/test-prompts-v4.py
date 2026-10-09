@@ -271,6 +271,36 @@ def test_daily_skills():
           re.search(r"^\| `running <minutes>` or `queued` \| .*run the same command again",
                     daily, re.M) is not None)
 
+    def section(text, heading):
+        """From a heading line that starts with `heading` to the next heading
+        of the same level or higher."""
+        level = len(heading) - len(heading.lstrip("#"))
+        m = re.search(r"^" + re.escape(heading) + r".*$", text, re.M)
+        if not m:
+            return ""
+        rest = text[m.end():]
+        nxt = re.search(r"^#{1,%d} " % level, rest, re.M)
+        return rest[:nxt.start()] if nxt else rest
+
+    step1 = section(daily, "## Step 1 ")
+    step1b = section(daily, "## Step 1b")
+    check("the lock has its own step, which step 1's skip cannot reach",
+          "daily-lock take" in step1b and "daily-lock" not in step1
+          and "`morning` and `shows`" in step1b, step1b[:200])
+    check("step 1b comes before the job",
+          0 < daily.find("## Step 1b") < daily.find("## Step 2"))
+    no_send = re.search(r"\*\*No Gmail send tool:\*\*(.*?)\n\n", daily, re.S)
+    check("the no-send-tool stop still goes through step 4, which frees the lock",
+          no_send is not None and "then step 4" in no_send.group(1), str(no_send))
+    check("so does the own-address-not-found stop",
+          re.search(r"own address not found\"`\s+when a run folder exists, then step 4",
+                    daily) is not None)
+    check("and the failure email",
+          section(daily, "### The failure email").rstrip().endswith("Then step 4."))
+    check("step 4 frees the lock for every slot but test, whatever happened",
+          "Every slot but `test`: free the lock, whatever happened before"
+          in section(daily, "## Step 4"))
+
     for name in ("ybs-brief", "ybs-shows"):
         text = (skills / name / "SKILL.md").read_text()
         check(f"{name} still never sends anything",

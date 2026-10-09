@@ -17,8 +17,9 @@ The word after `/ybs-daily` is the slot: `morning`, `afternoon`, `evening`,
 `shows` or `test`. Any other word: stop and say so.
 
 `test` is the run `/autopilot` schedules once, to prove this Mac can send
-with nobody at the keyboard. It does step 0 (Gmail only), skips steps 1 and 2,
-and in step 3 sends the test email. It never runs a brief.
+with nobody at the keyboard. It does step 0 (Gmail only), skips steps 1, 1b
+and 2, and in step 3 sends the test email. It never runs a brief and never
+touches the lock.
 
 Every command here runs from the project folder, the one holding
 `sources.md`. If the session is somewhere else, change into it first.
@@ -45,7 +46,7 @@ does:
 Run the job anyway, so the brief is at least on disk. Then, instead of
 step 3, record it in the run when there is one,
 `event --run <run_dir> --type email_failed --detail "no Gmail send tool"`,
-say so in your final line and stop.
+then step 4. Its final line says so.
 
 **No Drive tools:** go on. The email goes out without the link (step 3).
 
@@ -71,19 +72,20 @@ prints one answer:
 
 | It prints | What you do |
 |---|---|
-| `completed` | go to the lock below |
+| `completed` | go to step 1b |
 | `running <minutes>` or `queued` | the morning is working, or has started and waits its turn: run the same command again, and again, until the answer changes |
 | `running afternoon <minutes>` or `queued afternoon` | the evening only: the morning is in and the afternoon is still to come. Run the same command again, the same way |
-| `stale <minutes>` | the morning started too long ago to still be working: it failed. Send the failure email with the reason `no morning brief today (the morning run stopped)` and stop |
-| `none` | no morning run today. Send the failure email with the reason `no morning brief today` and stop |
+| `stale <minutes>` | the morning started too long ago to still be working: it failed. Send the failure email with the reason `no morning brief today (the morning run stopped)` |
+| `none` | no morning run today. Send the failure email with the reason `no morning brief today` |
 
 The command applies the ceiling itself, so a morning that crashed turns into
 `stale` on its own, and an afternoon that crashed is no longer waited for.
 Never add a wait of your own, never run `sleep`.
 
-### The lock: one job at a time
+## Step 1b — the lock: one job at a time
 
-Every slot but `test`. The jobs are hours apart, but a Mac that slept or an
+Every slot but `test`, and that includes `morning` and `shows`: step 1's skip
+does not apply here. The jobs are hours apart, but a Mac that slept or an
 app that was closed fires every missed job at once when it wakes. They would
 share one browser, and a brief's last step closes every browser space, so the
 first to finish would close the other's pages. Take the lock before the job:
@@ -97,8 +99,8 @@ Give it the Bash tool's `timeout: 600000`. `taken`: go to step 2.
 and again, until it says `taken`. It always ends: a lock left by a job that
 died counts as free after two hours.
 
-From here on, every way this run ends goes through step 4, which frees the
-lock.
+Every way this run ends, before the lock or after it, goes through step 4,
+which frees the lock.
 
 ## Step 2 — run the job
 
@@ -174,7 +176,7 @@ at and why as the reason. Then step 4.
    `SENT`. No sent mail at all: use the `owner` the Drive create tool returned
    in step 3 (or step 2's folder). Neither: send nothing, record
    `event --run <run_dir> --type email_failed --detail "own address not found"`
-   and stop. That address is the only recipient.
+   when a run folder exists, then step 4. That address is the only recipient.
 
 6. Send. Call the Gmail send tool once: `to` = [that address], `subject` from
    step 4's output, `htmlBody` = its `html`. No `body`, no `cc`, no `bcc`, no
@@ -183,7 +185,7 @@ at and why as the reason. Then step 4.
 
 7. If the send fails, record it with
    `event --run <run_dir> --type email_failed --detail "<what the tool said>"`.
-   Do not try another way.
+   Do not try another way. Then step 4.
 
 ### `test`
 
@@ -194,6 +196,9 @@ python3 .claude/skills/ybs-brief/scripts/ybs_run.py email --test
 Then the address as in step 3.5 (from the sent mail; there is no Drive file
 here), and the send tool once, with `to`, its `subject` and `htmlBody` = its
 `html`. Then step 4.
+
+A test has no run folder, so it records no event: where a step says to
+record one, skip that part and say it in your final line instead.
 
 ### The failure email
 
@@ -208,10 +213,13 @@ address as in step 3.5, then the send tool once, with `to`, the `subject` and
 `htmlBody` = the `html` it printed. When a run folder exists, also record
 `event --run <run_dir> --type daily_failed --detail "<reason>"`.
 With no send tool (step 0), the reason goes in your final line instead.
+Then step 4.
 
 ## Step 4 — free the lock, then report
 
-If you took the lock, free it, whatever happened before:
+Every slot but `test`: free the lock, whatever happened before, even if this
+run stopped before it took the lock. It never frees another job's lock, and
+it clears this slot's place in the queue:
 
 ```bash
 python3 .claude/skills/ybs-brief/scripts/ybs_run.py daily-lock free --slot <slot>

@@ -264,6 +264,12 @@ def test_daily_skills():
     check("every flag /ybs-daily passes is one ybs_run.py takes", not unknown,
           f"missing {unknown}")
     check("/ybs-daily never sleeps on its own", "sleep " not in daily.replace("never run `sleep`", ""))
+    check("the afternoon waits for the morning, the evening for the afternoon too",
+          "ybs_run.py morning-check --wait" in daily
+          and "ybs_run.py morning-check --for evening --wait" in daily)
+    check("a queued answer means ask again, never a failure",
+          re.search(r"^\| `running <minutes>` or `queued` \| .*run the same command again",
+                    daily, re.M) is not None)
 
     for name in ("ybs-brief", "ybs-shows"):
         text = (skills / name / "SKILL.md").read_text()

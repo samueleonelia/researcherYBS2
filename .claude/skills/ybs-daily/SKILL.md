@@ -49,13 +49,21 @@ say so in your final line and stop.
 
 **No Drive tools:** go on. The email goes out without the link (step 3).
 
-## Step 1 — afternoon and evening: wait for the morning
+## Step 1 — afternoon and evening: wait for the earlier runs
 
-Both are built on today's morning brief. Skip this step for `morning` and
-`shows`.
+Both are built on today's morning brief, and the evening also pools the
+afternoon's. Skip this step for `morning` and `shows`.
+
+The afternoon:
 
 ```bash
 python3 .claude/skills/ybs-brief/scripts/ybs_run.py morning-check --wait
+```
+
+The evening:
+
+```bash
+python3 .claude/skills/ybs-brief/scripts/ybs_run.py morning-check --for evening --wait
 ```
 
 Give it the Bash tool's `timeout: 600000`. It waits a few minutes at most and
@@ -64,12 +72,14 @@ prints one answer:
 | It prints | What you do |
 |---|---|
 | `completed` | go to the lock below |
-| `running <minutes>` | run the same command again, and again, until the answer changes |
+| `running <minutes>` or `queued` | the morning is working, or has started and waits its turn: run the same command again, and again, until the answer changes |
+| `running afternoon <minutes>` or `queued afternoon` | the evening only: the morning is in and the afternoon is still to come. Run the same command again, the same way |
 | `stale <minutes>` | the morning started too long ago to still be working: it failed. Send the failure email with the reason `no morning brief today (the morning run stopped)` and stop |
 | `none` | no morning run today. Send the failure email with the reason `no morning brief today` and stop |
 
 The command applies the ceiling itself, so a morning that crashed turns into
-`stale` on its own. Never add a wait of your own, never run `sleep`.
+`stale` on its own, and an afternoon that crashed is no longer waited for.
+Never add a wait of your own, never run `sleep`.
 
 ### The lock: one job at a time
 

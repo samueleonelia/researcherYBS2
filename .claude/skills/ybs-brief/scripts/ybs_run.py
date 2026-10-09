@@ -32,9 +32,13 @@ Commands
   event --run DIR ...      record something that happened (failure, retry, ...)
   audit-line --run DIR     build the audit line from run.json (never from a model)
   close --run DIR          write run-log.md and mark the run finished
-  morning-check [--date D] print completed, none, running <minutes> or stale
-                           <minutes> for that day's morning run, one plain line;
-                           --wait keeps asking while it is running
+  morning-check [--date D] print completed, none, queued, running <minutes> or
+                           stale <minutes> for that day's morning run, one plain
+                           line; --for evening also waits for the afternoon;
+                           --wait keeps asking while running, queued or none
+  daily-lock take|free --slot S
+                           one scheduled job at a time: taken, busy <slot>
+                           <minutes>, freed or not held
   email RUN_DIR            print a finished brief's email as JSON: subject, HTML
                            and its Google Drive title; --link URL or --no-link
                            adds the line about the Drive copy
@@ -3973,31 +3977,44 @@ def cmd_close(args):
 # So the answer carries the minutes since that morning started, and past
 # MORNING_WAIT_MINUTES_MAX it says stale instead, which the caller treats as a
 # failed morning and reports by email rather than waiting for ever.
+#
+# A Mac that wakes fires every missed job at once, and the morning may then be
+# waiting for the daily lock with no run.json yet. That is `queued`, not none:
+# a queue marker the waiter keeps fresh, or the lock held by the morning, says
+# it is on its way. The evening asks with --for evening and also waits for an
+# afternoon that is running or queued, so the two never run out of order.
 
 MORNING_POLL_SECONDS = 30       # how often --wait looks at the morning's run.json again
 # How long one --wait call may wait. It stays under the Bash tool's 10-minute
 # ceiling, the way screen_timeout_seconds does, so a call is never killed from
 # outside; the skill calls again for as long as the answer is running.
 MORNING_WAIT_CALL_SECONDS = 540
-# Minutes after its start that a morning still running counts as failed. A
-# morning takes about three quarters of an hour; this leaves room for a slow
-# one and still gets the failure email out the same hour. It is a property of
-# the schedule /ybs-daily runs, not of the brief, so it lives with this
-# command rather than in settings.md.
-MORNING_WAIT_MINUTES_MAX = 60
+# Minutes after its start that a brief still running counts as failed. A
+# morning takes about three quarters of an hour and one has taken 62 minutes;
+# this leaves room for a slow one and still gets the failure email out within
+# the hour after. The evening holds an afternoon still running to the same
+# ceiling. It is a property of the schedule /ybs-daily runs, not of the brief,
+# so it lives with this command rather than in settings.md.
+MORNING_WAIT_MINUTES_MAX = 75
 
 
-def morning_state(local_date: str) -> str:
-    """completed, none, running <minutes> or stale <minutes>, for one date.
+def slot_state(local_date: str, slot: str) -> str:
+    """completed, running <minutes>, stale <minutes>, queued or none, for one
+    date and slot.
 
-    A completed morning wins over any run still marked running: a crashed
-    first attempt followed by a good second one is a morning that arrived.
-    With several still running, the latest started is the one that counts.
+    A completed run wins over any run still marked running: a crashed first
+    attempt followed by a good second one is a brief that arrived. With
+    several still running, the latest started is the one that counts. With
+    no run at all, a fresh queue marker or the daily lock held by this slot
+    means its job has fired and is waiting its turn, which is `queued`.
     """
-    if day_runs(local_date, "morning", "completed"):
+    if day_runs(local_date, slot, "completed"):
         return "completed"
-    running = day_runs(local_date, "morning", "running")
+    running = day_runs(local_date, slot, "running")
     if not running:
+        lock = daily_lock_state()
+        if daily_queue_fresh(slot) or (lock is not None and lock[0] == slot):
+            return "queued"
         return "none"
     started_utc, _, d, _ = running[-1]
     started = parse_iso(started_utc)
@@ -4010,13 +4027,47 @@ def morning_state(local_date: str) -> str:
     return f"{word} {minutes}"
 
 
+def morning_state(local_date: str) -> str:
+    """What the afternoon asks: the morning's slot_state."""
+    return slot_state(local_date, "morning")
+
+
+def evening_state(local_date: str) -> str:
+    """What the evening asks: the morning first, then the afternoon.
+
+    The evening pools what both earlier runs kept, so once the morning has
+    arrived it also waits for an afternoon that is running (`running
+    afternoon <minutes>`) or has fired and is waiting its turn (`queued
+    afternoon`). An afternoon that never fired, or went stale, is not waited
+    for: the evening goes out without it, which it always could.
+    """
+    morning = morning_state(local_date)
+    if morning != "completed":
+        return morning
+    afternoon = slot_state(local_date, "afternoon")
+    if afternoon.startswith("running "):
+        return "running afternoon " + afternoon.split()[1]
+    if afternoon == "queued":
+        return "queued afternoon"
+    return "completed"
+
+
+def morning_check_waits(state: str) -> bool:
+    """The answers --wait keeps asking past. `none` is one of them: a morning
+    session that fired a few seconds after this one has written nothing yet."""
+    return state == "none" or state.startswith(("running ", "queued"))
+
+
 def cmd_morning_check(args):
     """One line on the day's morning run, for a shell loop to read.
 
     Plain text, not JSON, because the caller compares a word. `--wait` keeps
-    asking until the answer is no longer running, for one call's worth of
-    time at most; `--wait-seconds` is for the tests, which cannot wait nine
-    minutes to see a wait end.
+    asking while the answer is running, queued or none, for one call's worth
+    of time at most, and marks the asking slot as queued meanwhile, so the
+    evening can see an afternoon that is still waiting for the morning.
+    `none` is printed only after a whole call of none, which is the grace for
+    a morning that starts a few seconds later. `--wait-seconds` is for the
+    tests, which cannot wait nine minutes to see a wait end.
     """
     if args.date:
         try:
@@ -4024,16 +4075,26 @@ def cmd_morning_check(args):
         except ValueError:
             die(f"--date wants YYYY-MM-DD, got {args.date!r}")
     local_date = args.date or datetime.now().strftime("%Y-%m-%d")
-    state = morning_state(local_date)
+    state_of = evening_state if args.for_slot == "evening" else morning_state
+    state = state_of(local_date)
     if args.wait:
+        daily_queue_touch(args.for_slot)
         limit = args.wait_seconds or MORNING_WAIT_CALL_SECONDS
         # A real call looks every 30 seconds; a test's few seconds are cut
         # into a few looks of their own, or one look would use them all.
         step = min(MORNING_POLL_SECONDS, limit / 6)
         deadline = time.monotonic() + limit
-        while state.startswith("running ") and time.monotonic() < deadline:
+        seen = state                                  # the last answer that was not none
+        while morning_check_waits(state) and time.monotonic() < deadline:
             time.sleep(max(0.0, min(step, deadline - time.monotonic())))
-            state = morning_state(local_date)
+            daily_queue_touch(args.for_slot)
+            state = state_of(local_date)
+            if state != "none":
+                seen = state
+        if state == "none" and seen != "none":
+            # Something was on its way during this call and is gone now. One
+            # more call settles it; none is said only after a whole call of it.
+            state = seen
     print(state)
     return 0
 
@@ -4105,11 +4166,57 @@ def daily_lock_take(slot: str) -> bool:
     return True
 
 
+# Minutes a queue marker counts after it was last touched. A waiter touches
+# it on every look and calls again at least every nine minutes
+# (MORNING_WAIT_CALL_SECONDS), so a live waiter's marker is never this old; an
+# older one was left by a session that has gone.
+DAILY_QUEUE_FRESH_MINUTES = 15
+
+
+def daily_queue_path(slot: str) -> Path:
+    return runs_root() / f".daily-queue-{slot}.json"
+
+
+def daily_queue_fresh(slot: str) -> bool:
+    """True when this slot's job has fired and is waiting its turn: its queue
+    marker was touched within DAILY_QUEUE_FRESH_MINUTES."""
+    path = daily_queue_path(slot)
+    held = load_json(path)
+    touched = parse_iso(held.get("touched_utc")) if isinstance(held, dict) else None
+    if touched is None:
+        try:
+            touched = datetime.fromtimestamp(path.stat().st_mtime, timezone.utc)
+        except FileNotFoundError:
+            return False
+    return (utc_now() - touched).total_seconds() < DAILY_QUEUE_FRESH_MINUTES * 60
+
+
+def daily_queue_touch(slot: str):
+    """Say this slot is waiting: write its marker, or refresh it. queued_utc
+    keeps the first time of an unbroken wait; touched_utc is now."""
+    path = daily_queue_path(slot)
+    now = iso(utc_now())
+    held = load_json(path) if daily_queue_fresh(slot) else None
+    queued = held.get("queued_utc") if isinstance(held, dict) else None
+    write_json(path, {"slot": slot, "queued_utc": queued or now, "touched_utc": now})
+
+
+def daily_queue_clear(slot: str):
+    daily_queue_path(slot).unlink(missing_ok=True)
+
+
 def cmd_daily_lock(args):
     """One line for /ybs-daily: `taken`, `busy <slot> <minutes>`, `freed` or
     `not held`. `take --wait` keeps trying for one call's worth of time, the
-    way morning-check --wait does, and the skill calls again while busy."""
+    way morning-check --wait does, and the skill calls again while busy.
+
+    While it waits it keeps this slot's queue marker fresh, so morning-check
+    can tell a morning stuck behind the 02:00 shows from one that never
+    fired. Taking the lock clears the marker; so does `free`, which /ybs-daily
+    runs at the end whatever happened, so a job that failed before the lock
+    leaves no marker behind."""
     if args.action == "free":
+        daily_queue_clear(args.slot)
         state = daily_lock_state()
         if state and state[0] == args.slot:
             daily_lock_path().unlink(missing_ok=True)
@@ -4122,9 +4229,12 @@ def cmd_daily_lock(args):
     deadline = time.monotonic() + limit
     while True:
         if daily_lock_take(args.slot):
+            daily_queue_clear(args.slot)
             print("taken")
             return 0
         state = daily_lock_state()
+        if args.wait:
+            daily_queue_touch(args.slot)
         if not args.wait or time.monotonic() >= deadline:
             break
         time.sleep(max(0.0, min(step, deadline - time.monotonic())))
@@ -4487,9 +4597,13 @@ def main():
     p = sub.add_parser("morning-check")
     p.add_argument("--date", metavar="YYYY-MM-DD",
                    help="the local date to ask about; without it, today")
+    p.add_argument("--for", dest="for_slot", choices=["afternoon", "evening"],
+                   default="afternoon",
+                   help="the slot asking; the evening also waits for an "
+                        "afternoon that is running or queued")
     p.add_argument("--wait", action="store_true",
-                   help="keep asking while the morning is running, for one "
-                        "call's worth of time at most")
+                   help="keep asking while the answer is running, queued or "
+                        "none, for one call's worth of time at most")
     # Hidden: a test cannot wait nine minutes to see a wait end.
     p.add_argument("--wait-seconds", type=int, default=0, help=argparse.SUPPRESS)
     p.set_defaults(fn=cmd_morning_check)

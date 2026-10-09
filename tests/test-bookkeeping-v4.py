@@ -3161,6 +3161,147 @@ def test_morning_check():
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def test_catch_up_order():
+    """A Mac that wakes fires every missed job at once. The morning then waits
+    for the daily lock with no run.json yet, and the afternoon must see it as
+    on its way (`queued`), not as missing. The evening must also wait for an
+    afternoon that is running or queued, so the two go out in order.
+
+    `daily-lock take --wait` keeps a queue marker fresh while it waits, and
+    morning-check reads it; a marker counts only while it is fresh. `--wait`
+    keeps asking through none, and says none only after a whole call of it.
+    Everything runs inside a runs folder of its own, named by YBS_RUNS_DIR.
+    """
+    print("\nmorning-check and daily-lock: a Mac that wakes fires every job at once")
+    tmp = Path(tempfile.mkdtemp(prefix="ybs-runs-"))
+    env = {"YBS_RUNS_DIR": str(tmp)}
+    marker = tmp / ".daily-queue-morning.json"
+    lock = tmp / ".daily-lock.json"
+
+    def say(*args):
+        return run(*args, expect=0, env=env)[1].stdout.strip()
+
+    def age(path, minutes):
+        """Make a marker look as if it was last touched that long ago."""
+        data = json.loads(path.read_text())
+        data["touched_utc"] = now_iso(-minutes / 60)
+        data["queued_utc"] = now_iso(-minutes / 60)
+        path.write_text(json.dumps(data))
+        old = time.time() - minutes * 60
+        os.utime(path, (old, old))
+
+    try:
+        # B1: the queue marker
+        say("daily-lock", "take", "--slot", "shows")
+        out = say("daily-lock", "take", "--slot", "morning", "--wait", "--wait-seconds", 1)
+        held = json.loads(marker.read_text()) if marker.exists() else {}
+        check("a job waiting for the lock leaves a queue marker",
+              out.startswith("busy shows ") and held.get("slot") == "morning"
+              and held.get("queued_utc") and held.get("touched_utc"), f"{out} {held}")
+        age(marker, 10)
+        first = json.loads(marker.read_text())["queued_utc"]
+        say("daily-lock", "take", "--slot", "morning", "--wait", "--wait-seconds", 1)
+        held = json.loads(marker.read_text())
+        check("the next call refreshes it and keeps when the wait began",
+              held["queued_utc"] == first and held["touched_utc"] > first, str(held))
+        out = say("daily-lock", "take", "--slot", "morning")
+        check("a take without --wait leaves no marker of its own",
+              out.startswith("busy shows ") and held == json.loads(marker.read_text()))
+
+        # B2: queued
+        a = say("morning-check")
+        check("a morning waiting behind the lock is queued, not none", a == "queued", a)
+        age(marker, 20)
+        a = say("morning-check")
+        check("a marker not touched for 20 minutes no longer counts", a == "none", a)
+        marker.write_text(json.dumps({"slot": "morning", "queued_utc": now_iso(),
+                                      "touched_utc": now_iso()}))
+        say("daily-lock", "free", "--slot", "shows")
+        out = say("daily-lock", "take", "--slot", "morning", "--wait", "--wait-seconds", 1)
+        check("taking the lock clears the marker", out == "taken" and not marker.exists(),
+              out)
+        a = say("morning-check")
+        check("a morning that holds the lock, with no run yet, is queued", a == "queued", a)
+        say("daily-lock", "free", "--slot", "morning")
+        check("and freed, it is none again", say("morning-check") == "none")
+        build_morning(tmp, "2026-x_morning_050000", now_iso(-70 / 60), status="running")
+        a = say("morning-check")
+        check("a morning running for 70 minutes is still running (a real one took 62)",
+              a.startswith("running "), a)
+        shutil.rmtree(tmp / "2026-x_morning_050000")
+
+        # B3: --wait through none and queued
+        t0 = time.monotonic()
+        a = say("morning-check", "--wait", "--wait-seconds", 2)
+        took = time.monotonic() - t0
+        check("--wait with no morning at all says none only after its whole call",
+              a == "none" and took >= 1.8, f"{a!r} after {took:.1f}s")
+        check("and marks the afternoon as queued meanwhile",
+              (tmp / ".daily-queue-afternoon.json").exists())
+        say("daily-lock", "free", "--slot", "afternoon")
+        check("which free clears, so a job that failed early leaves none behind",
+              not (tmp / ".daily-queue-afternoon.json").exists())
+
+        timer = threading.Timer(1.0, lambda: build_morning(
+            tmp, "2026-x_morning_051500", now_iso()))
+        timer.start()
+        t0 = time.monotonic()
+        a = say("morning-check", "--wait", "--wait-seconds", 4)
+        took = time.monotonic() - t0
+        timer.join()
+        check("--wait keeps asking through none and answers when the morning arrives",
+              a == "completed" and took < 4, f"{a!r} after {took:.1f}s")
+        shutil.rmtree(tmp / "2026-x_morning_051500")
+
+        marker.write_text(json.dumps({"slot": "morning", "queued_utc": now_iso(),
+                                      "touched_utc": now_iso()}))
+        timer = threading.Timer(1.0, lambda: marker.unlink())
+        timer.start()
+        a = say("morning-check", "--wait", "--wait-seconds", 3)
+        timer.join()
+        check("a morning queued and then gone in the same call is not yet none",
+              a == "queued", a)
+
+        # B4: the evening waits for the afternoon
+        for f in tmp.glob(".daily-*"):
+            f.unlink()
+        a = say("morning-check", "--for", "evening")
+        check("the evening with no morning says none, as the afternoon does", a == "none", a)
+        build_morning(tmp, "2026-x_morning_053000", now_iso(-8))
+        a = say("morning-check", "--for", "evening")
+        check("the evening with the morning in and no afternoon goes on", a == "completed", a)
+        aft = build_afternoon(tmp, "2026-x_afternoon_130000", now_iso(-10 / 60),
+                              status="running")
+        a = say("morning-check", "--for", "evening")
+        check("the evening waits for an afternoon still running, with its minutes",
+              re.fullmatch(r"running afternoon (9|10|11)", a) is not None, a)
+        check("the afternoon's own question is unchanged by it",
+              say("morning-check") == "completed")
+        t0 = time.monotonic()
+        a = say("morning-check", "--for", "evening", "--wait", "--wait-seconds", 2)
+        check("--wait keeps asking while the afternoon runs",
+              a.startswith("running afternoon ") and time.monotonic() - t0 >= 1.8, a)
+        shutil.rmtree(aft)
+        build_afternoon(tmp, "2026-x_afternoon_120000", now_iso(-80 / 60), status="running")
+        a = say("morning-check", "--for", "evening")
+        check("an afternoon past the ceiling is not waited for", a == "completed", a)
+        (tmp / ".daily-queue-afternoon.json").write_text(json.dumps(
+            {"slot": "afternoon", "queued_utc": now_iso(), "touched_utc": now_iso()}))
+        shutil.rmtree(tmp / "2026-x_afternoon_120000")
+        a = say("morning-check", "--for", "evening")
+        check("the evening waits for an afternoon that is queued", a == "queued afternoon", a)
+        (tmp / ".daily-queue-afternoon.json").unlink()
+        say("daily-lock", "take", "--slot", "afternoon")
+        a = say("morning-check", "--for", "evening")
+        check("or that holds the lock", a == "queued afternoon", a)
+        say("daily-lock", "free", "--slot", "afternoon")
+        build_afternoon(tmp, "2026-x_afternoon_131500", now_iso(-1 / 60))
+        a = say("morning-check", "--for", "evening")
+        check("an afternoon that arrived lets the evening go", a == "completed", a)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 EMAIL_BRIEF = """**Date:** 3 October 2026 at 10:00
 
 ## What leads
@@ -3470,6 +3611,7 @@ def main():
         test_audit_evening()
         test_audit_and_close(rd)
         test_morning_check()
+        test_catch_up_order()
         test_daily_lock()
         test_email()
         test_email_failed()

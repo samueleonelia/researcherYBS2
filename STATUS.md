@@ -1,12 +1,12 @@
 # STATUS: researcherYBS2
 
-_Updated: 2026-10-09 · Automatic briefs: /autopilot and /ybs-daily_
+_Updated: 2026-10-09 · Yaron's patches 02-07 in main; one scheduled job at a time_
 
 <!-- Rewrite this file in place. Never append. History belongs in DEVLOG.md. Keep under 60 lines. -->
 
 **What this is:** A Claude Code skill (`/ybs-brief`) that builds a news brief for Yaron Brook from six sources plus two X lists, `/ybs-shows` which keeps his show profile current, and `/autopilot` + `/ybs-daily` which run both on a schedule on his Mac and email him each brief's Google Drive link.
 
-**Right now:** `main`, tagged `v4.5-autopilot`, pushed: the automatic briefs are what `/update` downloads. Built and tested on Samuele's Mac (Drive upload of a real brief, short email arriving unread, a scheduled delivery run and a scheduled failure email, `update.sh` + `setup.sh` rehearsed on a copy of Yaron's version). Not yet run on Yaron's Mac.
+**Right now:** `main`, tagged `v4.6-yaron-patches`, pushed. On top of the automatic briefs (`v4.5-autopilot`): Yaron's patches 02-07 (X list tabs and reader spaces closed, 0-link screens retried, every ego space closed at `close`), `settings.md` now ships `x_account: @yaronbrook`, and `/ybs-daily` takes a lock so jobs fired together by a waking Mac run one at a time. `update.sh` rehearsed on a copy of v4.5. Nothing yet run on Yaron's Mac.
 
 ## Feature areas
 | Area | State | Note |
@@ -28,7 +28,7 @@ _Updated: 2026-10-09 · Automatic briefs: /autopilot and /ybs-daily_
 | Test suite | ⚠️ partial | 4 old failures, see bugs; `/setup` names them instead of counting; `run-all.sh` stops at the first failing file |
 | Git remote | ✅ working | github.com/samueleonelia/researcherYBS2 (private) |
 | Install (`/setup`) and update (`/update`) | ✅ working | `/update` keeps briefs/, shows/, preferences.md, and `.claude/settings.local.json` |
-| Automatic briefs (`/autopilot`, `/ybs-daily`) | ✅ tested here | 4 daily tasks (shows 02:00, morning 05:30, afternoon 13:00, evening 19:00); brief to Drive `YBS briefs`, email = time + link + plug; auto mode as the folder default; never run on Yaron's Mac yet |
+| Automatic briefs (`/autopilot`, `/ybs-daily`) | ✅ tested here | `daily-lock`: one job at a time; 4 daily tasks (shows 02:00, morning 05:30, afternoon 13:00, evening 19:00); brief to Drive `YBS briefs`, email = time + link + plug; auto mode as the folder default; never run on Yaron's Mac yet |
 
 ## Next up
 1. Yaron: connect Gmail + Google Drive, then `/update`, `/setup`, `/autopilot`; check the test email arrives unread
@@ -38,12 +38,13 @@ _Updated: 2026-10-09 · Automatic briefs: /autopilot and /ybs-daily_
 5. Fix the old test failures and make `run-all.sh` run every file
 
 ## Known bugs
-- `picks-sync` does not refuse more than 15 picks (2 tests fail)
+- On Samuele's Mac, X runs need `x_account` set back to his own handle locally: `main` ships Yaron's
+- `picks-sync` trims an over-ceiling list (by design, per Yaron's Claude); its 2 tests still expect a refusal and should be updated
 - `SKILL.md` states one number of its own instead of a `{{settings.*}}` placeholder (1 test fails)
 - A beat story picked over a passed-over topic story is not caught (1 test fails)
 - Guardian session in ego-browser is not logged in: sign-in wall on paid reads, undated links
 - `tests/run-all.sh` stops at the first failing file, so two files never run
 
 ## Blocked on you
-- Send Yaron the setup steps (Phase 4 in the DEVLOG 10-09 entry)
+- Send Yaron the setup steps, and tell him the patches are in `main` (his `fixes-for-samuele` folder can go)
 - Say when to run the afternoon live

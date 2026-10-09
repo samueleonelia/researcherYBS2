@@ -917,3 +917,40 @@ archive and crashed on mine once `/ybs-shows` rotated the profile.
 - Yaron: connect Gmail + Google Drive (same Google account), `/update`,
   `/setup`, `/autopilot`, check the test email; Mac plugged in with
   "Prevent automatic sleeping" on, Claude app left open.
+
+## 2026-10-09 · Yaron's patches 02-07, and one scheduled job at a time
+
+**What happened**
+- Yaron's Claude sent seven patches made on his Mac (zip via a Spark share
+  link, README included). Applied on branch `yaron-patches`, merged to `main`,
+  tag `v4.6-yaron-patches`.
+
+**Decisions**
+- 01 (English captions) skipped: already in `main` as `transcript_language`.
+- 02-07 applied as sent: x_scrape closes every list tab (also after a failure);
+  x-merge closes agent-owned "x read" spaces with `completeTaskSpace` by id;
+  a 0-link screen is `empty` and gets its one retry; the X reader prompt makes
+  closing its space the mandatory last round; `close` sweeps every ego space
+  (Yaron uses ego only for the briefs), `YBS_SKIP_SPACE_CLEANUP=1` turns it off
+  and the test helper sets it.
+- `settings.md` ships `x_account: @yaronbrook`. `update.sh` replaces
+  settings.md (his copy goes to `.backup`), so shipping Samuele's
+  `@EgoismoEfficace` switched Yaron's X lane to the wrong account on every
+  update. Samuele's Mac needs its own handle back locally to run X.
+- Patch 07 plus the schedule: a Mac that slept fires every missed job at once,
+  and the first to `close` would sweep the other's spaces. `/ybs-daily` now
+  takes `ybs_run.py daily-lock take --slot S --wait` before its job and frees
+  it in step 4. One file in the runs folder, O_EXCL, stale after 120 min.
+- One SKILL.md date ("2026-10-08") reworded: the prompt test read its "10" as
+  a setting stated in prose.
+
+**Verified**
+- Every suite: only the known failures (bookkeeping 3, prompts 1); x-lists and
+  shows green; build --check clean; 7 new daily-lock checks.
+- `update.sh` on a copy of v4.5 (with his `@yaronbrook` settings.md): no
+  `.backup` made, settings.local.json and briefs/ kept, new code in place.
+
+**Open**
+- Yaron's note: the 3 bookkeeping failures are `picks-sync` trimming instead
+  of refusing; the tests look out of date, not the code.
+- His unexplained "user has taken control of this task space" stops on 10-09.

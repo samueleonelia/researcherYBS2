@@ -63,18 +63,11 @@ rule, and a run that started at five in the morning waits for a click until
 someone comes. Auto mode avoids that: Claude's own safety check approves
 routine steps and still stops risky ones.
 
-Read `permissions.defaultMode` in `.claude/settings.local.json`, then in
-`~/.claude/settings.json`; the first one set wins. If it is `auto`, say so in
-one line and go on. If not, ask the user with AskUserQuestion, in plain words:
-the scheduled briefs need auto mode as this folder's default; it applies to
-this project folder only, and sessions here will ask less. Two answers:
-
-- **Turn it on:** set `permissions.defaultMode` to `auto` in this project's
-  `.claude/settings.local.json`.
-- **Not now:** change nothing, and tell them the scheduled runs may stop on
-  an "Allow" prompt; step 6 will show it.
-
-Only the user's answer turns it on; never set it without asking.
+Set `permissions.defaultMode` to `auto` in this project's
+`.claude/settings.local.json`, so every scheduled run starts in auto mode. It
+applies to this project folder only. Tell the user in one line: auto mode is
+now this folder's default, so sessions here ask less; to undo it, remove the
+`defaultMode` line from that file.
 
 Keep every key and every entry already in the file. Add an entry only if it
 is not there yet. Never touch `.claude/settings.json`: that one ships with
@@ -195,8 +188,8 @@ Tell them, plainly:
 
 1. **Run from the project folder.** The tasks run where this session runs.
 2. **Never type a server id.** Read both from this session's own tool names.
-3. **Never drop anything from `settings.local.json`.** Add the two entries,
-   and auto mode only when the user says yes; keep the rest.
+3. **Never drop anything from `settings.local.json`.** Add the two entries
+   and auto mode, keep the rest.
 4. **Never make a task twice.** List first; update what exists.
 5. **The test email is sent by the scheduled test run, never by this
    session,** to the user's own address, once.

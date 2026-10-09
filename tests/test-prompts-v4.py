@@ -275,9 +275,8 @@ def test_daily_skills():
           sorted(set(ids)) == sorted(f"ybs-daily-{s}" for s in
                                      ("shows", "morning", "afternoon", "evening", "test")),
           str(ids))
-    check("/autopilot turns auto mode on for this project only, and only on the user's yes",
-          "`permissions.defaultMode` to `auto`" in auto
-          and "never set it without asking" in auto)
+    check("/autopilot makes auto mode this project's default, and says how to undo it",
+          "`permissions.defaultMode` to `auto`" in auto and "to undo it" in auto)
     check("the test email is sent by a scheduled run, never by /autopilot itself",
           "Never send the test email from this session" in auto)
     folders = {d.name for d in skills.iterdir() if d.is_dir()}

@@ -4019,6 +4019,90 @@ def cmd_morning_check(args):
     return 0
 
 
+# ---------------------------------------------------------------- daily lock
+#
+# The scheduled jobs are hours apart, but a Mac that slept or a Claude app that
+# was closed fires every missed job at once when it wakes. Two jobs at once
+# share one ego browser, and `close` sweeps every ego space at the end of a run,
+# so the first to finish would close the other's pages. /ybs-daily therefore
+# takes this lock before its job and frees it after, and a second job waits.
+#
+# The lock is one file in the runs folder, made with O_EXCL so two jobs taking
+# it in the same instant cannot both win. A job that died without freeing it
+# leaves a lock that goes stale after DAILY_LOCK_MINUTES_MAX, so a crash costs
+# the next job a wait, never the whole schedule.
+
+DAILY_LOCK_NAME = ".daily-lock.json"
+# Minutes after which a lock is taken to belong to a job that died. A brief
+# takes about three quarters of an hour and has taken an hour; a show refresh
+# is shorter. Two hours covers both with room, and still lets a morning that
+# waited behind a dead 02:00 lock go out the same morning.
+DAILY_LOCK_MINUTES_MAX = 120
+
+
+def daily_lock_path() -> Path:
+    return runs_root() / DAILY_LOCK_NAME
+
+
+def daily_lock_state():
+    """The lock as it stands: None when free or stale, else (slot, minutes held)."""
+    path = daily_lock_path()
+    try:
+        held = json.loads(path.read_text(encoding="utf-8"))
+        taken = datetime.fromisoformat(held["taken_utc"].replace("Z", "+00:00"))
+    except FileNotFoundError:
+        return None
+    except (ValueError, KeyError, TypeError, AttributeError):
+        return None                                   # unreadable: as good as stale
+    minutes = int((utc_now() - taken).total_seconds() // 60)
+    if minutes >= DAILY_LOCK_MINUTES_MAX:
+        return None
+    return held.get("slot", "?"), minutes
+
+
+def daily_lock_take(slot: str) -> bool:
+    """Take the lock for this job; False when another job holds it."""
+    path = daily_lock_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if daily_lock_state() is None:
+        path.unlink(missing_ok=True)                  # free, or stale: clear it
+    try:
+        fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        return False
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        json.dump({"slot": slot, "taken_utc": iso(utc_now())}, f)
+    return True
+
+
+def cmd_daily_lock(args):
+    """One line for /ybs-daily: `taken`, `busy <slot> <minutes>`, `freed` or
+    `not held`. `take --wait` keeps trying for one call's worth of time, the
+    way morning-check --wait does, and the skill calls again while busy."""
+    if args.action == "free":
+        state = daily_lock_state()
+        if state and state[0] == args.slot:
+            daily_lock_path().unlink(missing_ok=True)
+            print("freed")
+        else:
+            print("not held")                         # never frees another job's lock
+        return 0
+    limit = args.wait_seconds or MORNING_WAIT_CALL_SECONDS
+    step = min(MORNING_POLL_SECONDS, limit / 6)
+    deadline = time.monotonic() + limit
+    while True:
+        if daily_lock_take(args.slot):
+            print("taken")
+            return 0
+        state = daily_lock_state()
+        if not args.wait or time.monotonic() >= deadline:
+            break
+        time.sleep(max(0.0, min(step, deadline - time.monotonic())))
+    slot, minutes = state if state else ("?", 0)
+    print(f"busy {slot} {minutes}")
+    return 0
+
+
 # ---------------------------------------------------------------- email
 #
 # The scheduled runs mail their result, and something has to turn brief.md
@@ -4379,6 +4463,16 @@ def main():
     # Hidden: a test cannot wait nine minutes to see a wait end.
     p.add_argument("--wait-seconds", type=int, default=0, help=argparse.SUPPRESS)
     p.set_defaults(fn=cmd_morning_check)
+
+    p = sub.add_parser("daily-lock")
+    p.add_argument("action", choices=["take", "free"])
+    p.add_argument("--slot", required=True,
+                   choices=["morning", "afternoon", "evening", "shows", "test"])
+    p.add_argument("--wait", action="store_true",
+                   help="with take: keep trying while another job holds the lock, "
+                        "for one call's worth of time at most")
+    p.add_argument("--wait-seconds", type=int, default=0, help=argparse.SUPPRESS)
+    p.set_defaults(fn=cmd_daily_lock)
 
     p = sub.add_parser("email")
     p.add_argument("run", nargs="?", metavar="RUN_DIR",

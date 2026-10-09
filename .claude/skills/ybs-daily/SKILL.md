@@ -63,13 +63,32 @@ prints one answer:
 
 | It prints | What you do |
 |---|---|
-| `completed` | go to step 2 |
+| `completed` | go to the lock below |
 | `running <minutes>` | run the same command again, and again, until the answer changes |
 | `stale <minutes>` | the morning started too long ago to still be working: it failed. Send the failure email with the reason `no morning brief today (the morning run stopped)` and stop |
 | `none` | no morning run today. Send the failure email with the reason `no morning brief today` and stop |
 
 The command applies the ceiling itself, so a morning that crashed turns into
 `stale` on its own. Never add a wait of your own, never run `sleep`.
+
+### The lock: one job at a time
+
+Every slot but `test`. The jobs are hours apart, but a Mac that slept or an
+app that was closed fires every missed job at once when it wakes. They would
+share one browser, and a brief's last step closes every browser space, so the
+first to finish would close the other's pages. Take the lock before the job:
+
+```bash
+python3 .claude/skills/ybs-brief/scripts/ybs_run.py daily-lock take --slot <slot> --wait
+```
+
+Give it the Bash tool's `timeout: 600000`. `taken`: go to step 2.
+`busy <slot> <minutes>`: another job is running; run the same command again,
+and again, until it says `taken`. It always ends: a lock left by a job that
+died counts as free after two hours.
+
+From here on, every way this run ends goes through step 4, which frees the
+lock.
 
 ## Step 2 — run the job
 
@@ -180,9 +199,15 @@ address as in step 3.5, then the send tool once, with `to`, the `subject` and
 `event --run <run_dir> --type daily_failed --detail "<reason>"`.
 With no send tool (step 0), the reason goes in your final line instead.
 
-## Step 4 — report
+## Step 4 — free the lock, then report
 
-One line, nothing else. What was sent, to which address, with the Drive link
+If you took the lock, free it, whatever happened before:
+
+```bash
+python3 .claude/skills/ybs-brief/scripts/ybs_run.py daily-lock free --slot <slot>
+```
+
+Then one line, nothing else. What was sent, to which address, with the Drive link
 when there is one. Or: that nothing was sent, and why.
 
 ---

@@ -3100,6 +3100,39 @@ Audit: 6 of 6 sources screened.
 """
 
 
+def test_daily_lock():
+    """/ybs-daily takes `daily-lock` before its job and frees it after, so two
+    scheduled jobs fired together by a Mac waking up never share the browser.
+    A second job is told busy, a stale lock is taken over, and a job never
+    frees a lock it does not hold. Runs in a runs folder of its own."""
+    print("\ndaily-lock: one scheduled job at a time")
+    tmp = Path(tempfile.mkdtemp(prefix="ybs-runs-"))
+    env = {"YBS_RUNS_DIR": str(tmp)}
+    try:
+        out = run("daily-lock", "take", "--slot", "shows", env=env)[1].stdout.strip()
+        check("a free lock is taken", out == "taken", out)
+        out = run("daily-lock", "take", "--slot", "morning", env=env)[1].stdout.strip()
+        check("a second job is told busy, with who holds it",
+              out.startswith("busy shows "), out)
+        t0 = time.monotonic()
+        out = run("daily-lock", "take", "--slot", "morning", "--wait",
+                  "--wait-seconds", "2", env=env)[1].stdout.strip()
+        check("--wait gives up after its call's time while still busy",
+              out.startswith("busy shows ") and time.monotonic() - t0 < 10, out)
+        out = run("daily-lock", "free", "--slot", "morning", env=env)[1].stdout.strip()
+        check("a job never frees another job's lock", out == "not held", out)
+        out = run("daily-lock", "free", "--slot", "shows", env=env)[1].stdout.strip()
+        check("the holder frees it", out == "freed", out)
+        out = run("daily-lock", "take", "--slot", "morning", env=env)[1].stdout.strip()
+        check("then the next job takes it", out == "taken", out)
+        lock = tmp / ".daily-lock.json"
+        lock.write_text(json.dumps({"slot": "shows", "taken_utc": now_iso(-3)}))
+        out = run("daily-lock", "take", "--slot", "afternoon", env=env)[1].stdout.strip()
+        check("a lock older than the ceiling is stale and taken over", out == "taken", out)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def test_email():
     """`email RUN_DIR` turns a finished brief.md into the email the scheduled
     run sends, in code, so no model retypes a brief.
@@ -3344,6 +3377,7 @@ def main():
         test_audit_evening()
         test_audit_and_close(rd)
         test_morning_check()
+        test_daily_lock()
         test_email()
         test_email_failed()
     finally:

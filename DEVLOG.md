@@ -954,3 +954,32 @@ archive and crashed on mine once `/ybs-shows` rotated the profile.
 - Yaron's note: the 3 bookkeeping failures are `picks-sync` trimming instead
   of refusing; the tests look out of date, not the code.
 - His unexplained "user has taken control of this task space" stops on 10-09.
+
+## 2026-10-09 · Review fixes (v4.7-review-fixes)
+
+**What happened**
+- A fresh reviewer read everything since 97161eb and found 7 defects; a
+  builder fixed them on `review-fixes`, merged to `main`.
+
+**Decisions**
+- A: a `/ybs-shows` run that ends with `check` current or still `fetch-only`
+  is a success: no more false "Shows refresh failed" mail on quiet nights.
+- B: catch-up order. `daily-lock take --wait` and `morning-check --wait` keep a
+  queue marker per slot (fresh 15 min); a queued morning reads `queued`;
+  `none` only after a whole call of none; ceiling 75 min (a brief took 62);
+  `morning-check --for evening` waits for a running or queued afternoon.
+- C: `close` and `x-merge` save their work before sweeping ego spaces, and
+  SKILL.md gives them `timeout: 600000`.
+- D: the lock is its own Step 1b; every stop path goes through step 4.
+- E: autopilot allows four tools by name (send_message, search_threads,
+  create_file, search_files), not whole servers: no forward/trash/share for
+  agents reading untrusted pages.
+- F: an unreadable lock counts as busy until its mtime is past the ceiling.
+- G: README: no brief by hand while a scheduled one runs.
+
+**Verified**
+- Every suite: only the 4 known failures; new checks for each fix, the
+  save-before-sweep one confirmed failing on the old code.
+
+**Next**
+- Rehearsal as Yaron on Samuele's Mac in `../rehearsalYaron`.

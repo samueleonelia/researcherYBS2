@@ -1,12 +1,12 @@
 # STATUS: researcherYBS2
 
-_Updated: 2026-10-09 · Yaron's patches 02-07 in main; one scheduled job at a time_
+_Updated: 2026-10-09 · Review fixes in main; rehearsal as Yaron pending_
 
 <!-- Rewrite this file in place. Never append. History belongs in DEVLOG.md. Keep under 60 lines. -->
 
 **What this is:** A Claude Code skill (`/ybs-brief`) that builds a news brief for Yaron Brook from six sources plus two X lists, `/ybs-shows` which keeps his show profile current, and `/autopilot` + `/ybs-daily` which run both on a schedule on his Mac and email him each brief's Google Drive link.
 
-**Right now:** `main`, tagged `v4.6-yaron-patches`, pushed. On top of the automatic briefs (`v4.5-autopilot`): Yaron's patches 02-07 (X list tabs and reader spaces closed, 0-link screens retried, every ego space closed at `close`), `settings.md` now ships `x_account: @yaronbrook`, and `/ybs-daily` takes a lock so jobs fired together by a waking Mac run one at a time. `update.sh` rehearsed on a copy of v4.5. Nothing yet run on Yaron's Mac.
+**Right now:** `main`, tagged `v4.7-review-fixes`, pushed (on top of `v4.6-yaron-patches`: a fresh review's 7 defects fixed). Next is a rehearsal as Yaron in `../rehearsalYaron` (fresh GitHub zip, X account set to Samuele's). On top of the automatic briefs (`v4.5-autopilot`): Yaron's patches 02-07 (X list tabs and reader spaces closed, 0-link screens retried, every ego space closed at `close`), `settings.md` now ships `x_account: @yaronbrook`, and `/ybs-daily` takes a lock so jobs fired together by a waking Mac run one at a time. `update.sh` rehearsed on a copy of v4.5. Nothing yet run on Yaron's Mac.
 
 ## Feature areas
 | Area | State | Note |

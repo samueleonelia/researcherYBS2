@@ -121,6 +121,10 @@ stop; here that report is for you. Go on to step 3.
 Where a skill says "stop and tell the user", there is no user: that is a
 failure. Take its own words as the reason and send the failure email.
 
+The normal ends of `/ybs-shows` are not failures. Its step 2 stops the run
+when `check` says the profile is current (`"next": "stop"`), or still says
+`fetch-only` after its one fetch. Both are a finished run: go on to step 3.
+
 For a brief, the run folder is the `run_dir` that `start` printed in its
 step 1. The brief is `<run_dir>/brief.md`.
 
@@ -128,9 +132,17 @@ step 1. The brief is `<run_dir>/brief.md`.
 
 ### `shows`
 
-Nothing to deliver. A run that finished with `profile-sync` passing sends
-nothing. One that did not sends the failure email, with the step it stopped
-at and why as the reason. Then step 4.
+Nothing to deliver. A run that ended in one of these three ways worked, and
+sends nothing:
+
+- `profile-sync` passed (its step 5): the profile was rebuilt.
+- `check` said current, `"next": "stop"` (its step 2): the profile already
+  matches the newest shows.
+- `check` still said `fetch-only` after its one fetch of the waiting shows
+  (its step 2): they are waiting for YouTube's captions.
+
+Any other end is a real problem: send the failure email, with the step it
+stopped at and why as the reason. Then step 4.
 
 ### `morning`, `afternoon`, `evening`
 

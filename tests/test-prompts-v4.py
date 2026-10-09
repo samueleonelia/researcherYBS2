@@ -301,6 +301,17 @@ def test_daily_skills():
           "Every slot but `test`: free the lock, whatever happened before"
           in section(daily, "## Step 4"))
 
+    shows = (skills / "ybs-shows" / "SKILL.md").read_text()
+    delivered = section(daily, "### `shows`")
+    check("/ybs-shows still ends on current and on fetch-only, as /ybs-daily says",
+          '"next": "stop"' in shows and '"next": "fetch-only"' in shows
+          and "stop there and report it" in shows)
+    check("a shows run that found nothing new is a success, never a failure email",
+          all(w in delivered for w in ("`profile-sync` passed", '`"next": "stop"`',
+                                       "`fetch-only`")), delivered[:300])
+    check("and the stop-and-tell rule leaves those normal ends alone",
+          "The normal ends of `/ybs-shows` are not failures" in section(daily, "## Step 2"))
+
     for name in ("ybs-brief", "ybs-shows"):
         text = (skills / name / "SKILL.md").read_text()
         check(f"{name} still never sends anything",

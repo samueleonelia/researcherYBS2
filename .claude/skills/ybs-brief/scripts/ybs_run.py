@@ -3109,6 +3109,12 @@ def cmd_picks_sync(args):
 # the only number here is how long step 10 keeps driving it.
 
 X_POLL_SECONDS = 2          # how often x-next --closing looks at a scrape still running
+# How long one `x-next --closing` call may wait for a scrape. It stays under
+# the Bash tool's 10-minute ceiling, the way MORNING_WAIT_CALL_SECONDS does: a
+# call cut off from outside never returns, and the brief then went out with
+# its placeholder still in it. Past this the call answers `scraping`, and the
+# skill calls again.
+X_CLOSING_CALL_SECONDS = 540
 X_KILL_GRACE_SECONDS = 5    # between SIGTERM and SIGKILL on a timeout
 X_LOG_MARK = "=== x-start"   # one launch's output starts below this line
 
@@ -3342,11 +3348,14 @@ def cmd_x_start(args):
     return x_out(data["x"], launched=True)
 
 
-def x_lane_step(run_dir: Path, state: dict):
+def x_lane_step(run_dir: Path, state: dict, restart_clock: bool = False):
     """Ask `x_run.py next` what the lane needs, and fold its answer into
     run.json. Returns (state, answer). The script's stdout is its one JSON
     object, on its last line; anything on stderr is its progress, and its
-    last `ERROR:` line is the reason when it could not answer."""
+    last `ERROR:` line is the reason when it could not answer.
+
+    `restart_clock` is for a run with no article half (see cmd_x_next): a
+    lane that moves on to a new phase or attempt restarts the closing clock."""
     x_dir = Path(state["run_dir"])
     cmd = [sys.executable, str(x_script()), "next", "--run-dir", str(x_dir),
            "--settings", str(project_root() / "settings.md")]
@@ -3382,6 +3391,8 @@ def x_lane_step(run_dir: Path, state: dict):
     else:
         changed = (x.get("phase"), x.get("attempt")) != (phase, attempt)
         x["phase"], x["attempt"] = phase, attempt
+        if changed and restart_clock and x.get("closing_utc"):
+            x["closing_utc"] = iso(utc_now())
         data["x"] = x
         save_run(run_dir, data)
         if changed:
@@ -3395,32 +3406,59 @@ def cmd_x_next(args):
 
     Never blocks, with one exception: `--closing` (step 10) waits for a scrape
     still running, the way x-wait used to, because there is no article step
-    left to do meanwhile. `--closing` also starts the `x_wait_minutes_max`
-    clock on its first call; when the clock runs out the lane is failed and
-    the brief goes out without it. `--timeout-seconds` is for the tests, which
-    run the real settings table and so cannot inject a shorter wait.
+    left to do meanwhile. One call waits at most X_CLOSING_CALL_SECONDS and
+    then answers `scraping`, so the Bash tool never cuts it off; the skill
+    calls again. `--closing` also starts the `x_wait_minutes_max` clock on
+    its first call; when the clock runs out the lane is failed and the brief
+    goes out without it.
+
+    A run with no article half reaches step 10 seconds after it starts, with
+    the scrape still going and the whole lane still ahead, so the clock means
+    something else there. The scrape is held to the ceiling from its own
+    start; the clock starts when the scrape ends, and restarts each time the
+    lane moves on to a new phase. It bounds a lane that has stalled, never a
+    healthy one, which on such a run is all the brief there is.
+
+    `--timeout-seconds` and `--call-seconds` are for the tests, which run the
+    real settings table and so cannot inject a shorter wait.
     """
     run_dir = run_dir_of(args)
     limit = args.timeout_seconds or X_WAIT_MINUTES * 60
-    if args.closing:
+    call_limit = args.call_seconds or X_CLOSING_CALL_SECONDS
+    x_only = not run_articles(load_run(run_dir))
+
+    def start_clock(st):
+        """Stamp the clock's start once, and only when it may start."""
+        if not args.closing or st.get("status") in X_SETTLED \
+                or st.get("closing_utc") or st.get("status") == "none":
+            return st
+        if x_only and st.get("status") == "running":
+            return st                 # an X-only run's clock waits for the scrape
         data = load_run(run_dir)
-        x = data.get("x")
-        if x and x.get("status") not in X_SETTLED \
-                and not x.get("closing_utc"):
-            x["closing_utc"] = iso(utc_now())
-            data["x"] = x
-            save_run(run_dir, data)
-    state = x_state(run_dir)
+        data["x"]["closing_utc"] = iso(utc_now())
+        save_run(run_dir, data)
+        return data["x"]
+
+    def since(stamp) -> float:
+        return (utc_now() - parse_iso(stamp)).total_seconds()
 
     def over(st):
-        stamp = st.get("closing_utc")
-        return bool(args.closing and stamp
-                    and (utc_now() - parse_iso(stamp)).total_seconds() > limit)
+        if not args.closing:
+            return False
+        if st.get("closing_utc"):
+            return since(st["closing_utc"]) > limit
+        # An X-only run's scrape, before its clock starts, is held to the same
+        # ceiling from its own launch: a hung scrape is still killed.
+        return bool(x_only and st.get("status") == "running"
+                    and st.get("started_utc") and since(st["started_utc"]) > limit)
 
+    state = start_clock(x_state(run_dir))
+    called = time.monotonic()
     if state.get("status") == "running" and args.closing:
-        while state.get("status") == "running" and not over(state):
+        while (state.get("status") == "running" and not over(state)
+               and time.monotonic() - called < call_limit):
             time.sleep(X_POLL_SECONDS)
-            state = x_state(run_dir)
+            state = start_clock(x_state(run_dir))
 
     status = state.get("status")
     if status in ("running", "lane") and over(state):
@@ -3452,11 +3490,14 @@ def cmd_x_next(args):
     if status == "failed":
         return x_out(x_note_failure(run_dir, state), phase="failed", launch=[])
     if status == "running":
-        return x_out(state, phase="scraping", launch=[])
+        extra = ({"note": "the scrape is still running; call x-next --closing again"}
+                 if args.closing else {})
+        return x_out(state, phase="scraping", launch=[], **extra)
     if status == "completed":
         return x_out(state, phase="done", launch=[])
 
-    state, answer = x_lane_step(run_dir, state)
+    state, answer = x_lane_step(run_dir, state,
+                                restart_clock=bool(args.closing and x_only))
     return x_out(state, phase=answer.get("phase"), attempt=answer.get("attempt"),
                  launch=answer.get("launch") or [], notes=answer.get("notes") or [])
 
@@ -4746,6 +4787,7 @@ def main():
     # Hidden: the tests read the same settings.md the run does, so a short wait
     # can only come from here.
     p.add_argument("--timeout-seconds", type=int, default=0, help=argparse.SUPPRESS)
+    p.add_argument("--call-seconds", type=int, default=0, help=argparse.SUPPRESS)
     p.set_defaults(fn=cmd_x_next)
 
     with_run(sub.add_parser("write-stitch")).set_defaults(fn=cmd_write_stitch)

@@ -3254,6 +3254,118 @@ def test_x_only_runs(tmp):
         shutil.rmtree(files, ignore_errors=True)
 
 
+def parse(stamp):
+    """A run.json time, `2026-10-10T09:00:00Z`, as a datetime."""
+    return datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+
+
+def x_record(rd):
+    return json.loads((rd / "run.json").read_text())["x"]
+
+
+def test_x_closing_cap(tmp):
+    """One `x-next --closing` call never outwaits the Bash tool. A scrape that
+    runs past one call's wait gets `scraping`, and the skill calls again; a
+    call cut off from outside would have left the placeholder in the brief.
+
+    A run with no article half reaches its closing step seconds after it
+    starts, so its clock waits for the scrape to end and restarts each time
+    the lane moves on: a healthy X-only lane is never cut, a stalled one is,
+    and a scrape that hangs is still killed, counted from its own start."""
+    print("\nx-next --closing: one call's cap, and the X-only clock")
+    runs = Path(tempfile.mkdtemp(prefix="ybs-runs-"))
+    files = Path(tempfile.mkdtemp(prefix="ybs-sources-"))
+    xdirs = []
+    try:
+        # A run with articles: the cap answers `scraping`, the clock has started.
+        env = {"YBS_RUNS_DIR": str(runs), **stub(tmp, "slow.py", brief=X_BRIEF, sleep=5)}
+        out, _ = run("start", "--slot", "morning", expect=0, env=env)
+        rd = Path(out["run_dir"])
+        run("x-start", "--run", rd, expect=0, env=env)
+        xdirs.append(x_dirs_of(rd))
+        t0 = time.monotonic()
+        out, _ = run("x-next", "--run", rd, "--closing", "--call-seconds", 1,
+                     expect=0, env=env)
+        waited = time.monotonic() - t0
+        check("a scrape longer than one call's wait gets `scraping`, not a hang",
+              out["phase"] == "scraping" and out["status"] == "running"
+              and "call x-next --closing again" in out.get("note", "")
+              and waited < 4, f"{out} after {waited:.1f}s")
+        check("with articles, the clock started on that first call",
+              bool(x_record(rd).get("closing_utc")), str(x_record(rd)))
+        out, _ = run("x-next", "--run", rd, "--closing", expect=0, env=env)
+        check("and the next call waits the scrape out", out["phase"] == "done", str(out))
+
+        # An X-only run: the scrape is longer than the cap and than the
+        # clock, and still nothing is cut.
+        time.sleep(1.1)
+        env = {"YBS_RUNS_DIR": str(runs), **sources_file(files, X_ONLY),
+               **stub(tmp, "slow-x.py", brief=X_BRIEF, sleep=3)}
+        out, _ = run("start", "--slot", "morning", expect=0, env=env)
+        rd = Path(out["run_dir"])
+        run("x-start", "--run", rd, expect=0, env=env)
+        xdirs.append(x_dirs_of(rd))
+        answers = []
+        for _ in range(12):
+            out, _ = run("x-next", "--run", rd, "--closing", "--call-seconds", 1,
+                         "--timeout-seconds", 5, expect=0, env=env)
+            answers.append(out["phase"])
+            if answers[0] == "scraping" and len(answers) == 1:
+                check("an X-only run's clock does not start while it scrapes",
+                      not x_record(rd).get("closing_utc"), str(x_record(rd)))
+            if out["phase"] != "scraping":
+                break
+        x = x_record(rd)
+        check("several capped calls, then done: a healthy X-only scrape is not cut",
+              answers[0] == "scraping" and answers[-1] == "done", str(answers))
+        check("and its clock started when the scrape ended",
+              x.get("closing_utc") and (parse(x["closing_utc"]) - parse(x["started_utc"]))
+              .total_seconds() >= 2, str(x))
+
+        # The lane moving on restarts an X-only run's clock; a run with articles
+        # keeps the clock it started.
+        for name, text, restarted in (("X-only", X_ONLY, True), ("with articles", None, False)):
+            time.sleep(1.1)
+            env = {"YBS_RUNS_DIR": str(runs),
+                   **(sources_file(files, text) if text else {}),
+                   **stub(tmp, f"lane-{restarted}.py", links=True, next_answer=READ_LAUNCH)}
+            out, _ = run("start", "--slot", "morning", expect=0, env=env)
+            rd = Path(out["run_dir"])
+            run("x-start", "--run", rd, expect=0, env=env)
+            xdirs.append(x_dirs_of(rd))
+            settle(rd, env)
+            state = json.loads((rd / "run.json").read_text())
+            old = (datetime.now(timezone.utc) - timedelta(seconds=100)).strftime(
+                "%Y-%m-%dT%H:%M:%SZ")
+            # The clock started a while ago, at the lane's previous phase.
+            state["x"].update({"closing_utc": old, "phase": "scrape", "attempt": None})
+            write(rd / "run.json", state)
+            out, _ = run("x-next", "--run", rd, "--closing", "--timeout-seconds", 200,
+                         expect=0, env=env)
+            now = x_record(rd).get("closing_utc")
+            check(f"{name}: the lane's next phase "
+                  f"{'restarts' if restarted else 'keeps'} the clock",
+                  out["phase"] == "read" and (now != old) == restarted, f"{out} {now}")
+
+        # An X-only scrape that hangs is still killed, counted from its start.
+        time.sleep(1.1)
+        env = {"YBS_RUNS_DIR": str(runs), **sources_file(files, X_ONLY),
+               **stub(tmp, "hang-x.py", sleep=60)}
+        out, _ = run("start", "--slot", "morning", expect=0, env=env)
+        rd = Path(out["run_dir"])
+        run("x-start", "--run", rd, expect=0, env=env)
+        xdirs.append(x_dirs_of(rd))
+        out, _ = run("x-next", "--run", rd, "--closing", "--timeout-seconds", 2,
+                     "--call-seconds", 30, expect=0, env=env)
+        check("an X-only scrape that hangs is failed on time",
+              out["status"] == "failed" and "timeout" in (out.get("reason") or ""),
+              str(out))
+    finally:
+        drop_x(*xdirs)
+        shutil.rmtree(runs, ignore_errors=True)
+        shutil.rmtree(files, ignore_errors=True)
+
+
 def test_news_only_run():
     """sources.md lists news sites and no X list. The X half is off from the
     start: x-start launches nothing, x-next has nothing to drive, and x-merge
@@ -3972,6 +4084,7 @@ def main():
         test_saved_before_sweep(tmp)
         test_x_afternoon(tmp)
         test_x_only_runs(tmp)
+        test_x_closing_cap(tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print()

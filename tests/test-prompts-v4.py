@@ -695,6 +695,16 @@ def test_sources_halves_in_skills():
     check("step 10 stitches at once with no writer, and drives X only when on",
           "`halves.articles` is\nfalse" in step10 and "when `halves.x` is true" in step10,
           step10[:300])
+    check("step 10 says a capped --closing call answering `scraping` is called again",
+          "`phase: scraping` means the call waited" in step10
+          and "run it again at\nonce" in step10, step10[:600])
+    check("and that an X-only run's clock waits for the scrape and restarts as "
+          "the lane moves on",
+          "waits for the scrape to end and restarts each time the lane moves on"
+          in re.sub(r"\s+", " ", halves), halves[:800])
+    src_cap = re.search(r"^X_CLOSING_CALL_SECONDS = (\d+)", src, re.M)
+    check("one --closing call's wait stays under the Bash tool's 600 s ceiling",
+          src_cap is not None and int(src_cap.group(1)) < 600, str(src_cap))
     check("a hard rule says a half with nothing listed is never a failure",
           re.search(r"^\d+\. \*\*A half runs only when `sources.md` lists something",
                     brief, re.M) is not None)

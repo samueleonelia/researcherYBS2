@@ -145,7 +145,10 @@ failure. `start` settles it once for the whole run and prints it as `halves`:
   and no writer. Go from step 1 straight to the last step, where
   `write-stitch` writes the date line alone and the brief is the X section.
   `articles_off` says why: no news site is listed, or the brief this run
-  builds on had none, so there is no story to update or to pool.
+  builds on had none, so there is no story to update or to pool. The whole
+  X lane then runs inside the last step's `x-next --closing` calls, and its
+  clock waits for the scrape to end and restarts each time the lane moves on:
+  the X section is the brief, so only a lane that has stalled is cut.
 - `x: false`: no list is named. Never run `x-start`, and skip every X
   checkpoint and `x-next --closing`. `x-merge` still runs: it takes the
   placeholder out, and the audit line says no X list is listed.
@@ -200,9 +203,9 @@ python3 .claude/skills/ybs-brief/scripts/ybs_run.py x-start --run <run_dir>
 Only when `halves.x` is true. This scrapes and filters the X lists in a
 process of their own, working while you screen and triage. `skipped` means
 this copy has no X pipeline, or no browser to run it in: the brief goes on
-without that section. Either way X is
-not touched again until step 6, where the X lane starts launching its agents
-through you.
+without that section. Either way X is not touched again until step 6, where
+the X lane starts launching its agents through you, or until the last step
+when `halves.articles` is false.
 
 ## Step 2 — screen every source
 
@@ -505,11 +508,14 @@ python3 .claude/skills/ybs-brief/scripts/ybs_run.py x-next --run <run_dir> --clo
 ```
 
 Launch what it prints, wait for the returns, run it again with `--closing`,
-until it prints `done` or `failed`. `--closing` starts the `x_wait_minutes_max`
-clock on its first call; when the clock runs out the lane is failed and the
-brief goes out without it. Give every `--closing` call the Bash tool's
-`timeout: 600000`, its highest: while the scrape is still running this is the
-one call that waits, and the wait is deliberately shorter than that. Whatever
+until it prints `done` or `failed`. `phase: scraping` means the call waited
+as long as one call may and the scrape is still running: run it again at
+once. `--closing` starts the `x_wait_minutes_max` clock on its first call
+(with `halves.articles` false, when the scrape ends, as said under the two
+halves); when the clock runs out the lane is failed and the brief goes out
+without it. Give every `--closing` call the Bash tool's `timeout: 600000`,
+its highest: while the scrape is still running this is the one call that
+waits, and one call's wait is deliberately shorter than that. Whatever
 it ends on, the next commands run: a lane that failed or ran out of time is a
 fact the audit line carries, never a reason to hold the brief.
 

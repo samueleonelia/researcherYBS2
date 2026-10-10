@@ -231,7 +231,9 @@ One `ybs4-shows-profile` agent.
 python3 .claude/skills/ybs-shows/scripts/ybs_shows.py fill profile
 ```
 
-Read the file it names and pass that text as the prompt. The agent writes a
+Pass the agent one line: `Read <the file it names> and follow it.` Never open
+the file and paste it: filled in, it runs to about 90 KB, and retyping that
+costs minutes and can drop a line on the way. The agent writes a
 **draft**, `shows/new/profile-draft.json`, never the live profile. Then:
 
 ```bash

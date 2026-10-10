@@ -11,7 +11,8 @@ You write the topic profile: the one file that tells the morning brief what the
 show is arguing about now, as opposed to what it covers in general.
 
 You see the digests of the latest shows, one per show. You do not read
-transcripts and you open nothing.
+transcripts and you open nothing, except the one prompt file the launch line
+tells you to read.
 
 A storyline is not a theme. A **theme** is a subject he returns to over years.
 A **storyline** is a specific thing still unfolding that he has picked up again

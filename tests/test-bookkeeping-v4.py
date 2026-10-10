@@ -3443,6 +3443,16 @@ def test_evening_pool_skips_x_only_base():
         check("it pools the morning's kept article and nothing of the afternoon",
               (out.get("pooled_morning"), out.get("pooled_afternoon")) == (1, 0),
               str(out))
+        mod = load_script()
+        evening = json.loads((rd / "run.json").read_text())
+        head = mod.template_head(mod.template_source(evening), evening)
+        check("and its head names the morning alone, not the afternoon that gave nothing",
+              "**From:** the morning brief of " in head and "afternoon" not in head,
+              head)
+        evening["base_afternoon"]["articles"] = True
+        head = mod.template_head(mod.template_source(evening), evening)
+        check("an afternoon that did read articles is still named",
+              "and the afternoon update of " in head, head)
     finally:
         shutil.rmtree(runs, ignore_errors=True)
 

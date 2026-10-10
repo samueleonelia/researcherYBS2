@@ -1313,13 +1313,18 @@ def head_vars(run: dict) -> dict:
     if slot == "afternoon":
         return {"BASE_TIME": (run.get("base") or {}).get("time") or "-"}
     if slot == "evening":
-        pool = f"the morning brief of {(run.get('base') or {}).get('time') or '-'}"
-        after = (run.get("base_afternoon") or {}).get("time")
-        if after:
-            # An evening with no afternoon behind it is still a report, and its
-            # head says so by naming only the brief it really pooled.
-            pool += f" and the afternoon update of {after}"
-        return {"POOL_LINE": pool}
+        # The head names only the briefs it really pooled. An evening with no
+        # afternoon behind it is still a report, and so is one whose afternoon
+        # read no article (sources.md had no news site then): that afternoon
+        # gave the pool nothing, so naming it would claim a source it is not.
+        morning = run.get("base") or {}
+        after = run.get("base_afternoon") or {}
+        pooled = []
+        if morning.get("articles", True):
+            pooled.append(f"the morning brief of {morning.get('time') or '-'}")
+        if after.get("time") and after.get("articles", True):
+            pooled.append(f"the afternoon update of {after['time']}")
+        return {"POOL_LINE": " and ".join(pooled) or "-"}
     return {}
 
 

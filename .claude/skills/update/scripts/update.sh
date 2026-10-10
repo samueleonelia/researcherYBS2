@@ -6,6 +6,89 @@
 #
 # Written for the bash Apple ships (3.2). Nothing here needs a password.
 
+# An older update.sh that is still running when it copies this file over itself
+# goes on reading at the byte where it stopped. Every older version is under
+# 7 KB, so the lines of spaces below cover that point: the old process reads
+# only blanks, then the line after them sees its own main() still defined and
+# exits quietly instead of running a second update or printing a syntax error.
+# A fresh run has no main() yet and goes straight past. Keep the spaces.
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+declare -F main >/dev/null 2>&1 && exit 0
+
 # YBS_UPDATE_ZIP overrides where the zip comes from, and only the tests set it
 # (a file:// address of a zip they built), so the copy-over can be checked
 # without the network.

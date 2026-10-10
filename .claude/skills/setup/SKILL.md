@@ -1,6 +1,6 @@
 ---
 name: setup
-description: Install the two outside tools the morning brief needs (yt-dlp and Node) into the user's own folder, then check that this project can run: the tools, the agent files, the news sources, the show archive and the tests. Use when setting this project up on a new Mac, when a run says a tool is missing, or when the user types /setup. Needs no password, installs nothing system-wide, and changes no file in this project.
+description: Install the two outside tools the morning brief needs (yt-dlp and Node) into the user's own folder, then check that this project can run: the tools, the agent files, that sources.md is there, the show archive and the tests. Use when setting this project up on a new Mac, when a run says a tool is missing, or when the user types /setup. Needs no password, installs nothing system-wide, and changes no file in this project.
 argument-hint: ""
 ---
 

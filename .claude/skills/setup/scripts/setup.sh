@@ -186,12 +186,28 @@ step_project() {
     say "  PROBLEM  the agent files are stale; ask Claude to run build"
     bad=$((bad + 1))
   fi
-  n=$(python3 "$root/.claude/skills/ybs-brief/scripts/ybs_run.py" sources 2>/dev/null \
-      | grep -c '"front_page"')
-  if [ "$n" -gt 0 ]; then
-    say "  ok       $n news sources listed in sources.md"
+  # sources.md is the user's to edit: any line may go, a whole half, or all of
+  # it, and a half with nothing listed is simply skipped. So the only thing
+  # checked is that the file is there. What it lists is said as information,
+  # never as a problem.
+  if [ -f "$root/sources.md" ]; then
+    halves=$(python3 "$root/.claude/skills/ybs-brief/scripts/ybs_run.py" halves 2>/dev/null)
+    news=$(printf '%s' "$halves" | sed -n 's/.*"news": *\([0-9][0-9]*\).*/\1/p')
+    xl=$(printf '%s' "$halves" | sed -n 's/.*"x": *\([0-9][0-9]*\).*/\1/p')
+    if [ -z "$news" ] || [ -z "$xl" ]; then
+      say "  ok       sources.md is there"
+    elif [ "$news" -eq 0 ] && [ "$xl" -eq 0 ]; then
+      say "  ok       sources.md: empty, no search will run"
+    else
+      sites="news sites"; [ "$news" -eq 1 ] && sites="news site"
+      lists="X lists"; [ "$xl" -eq 1 ] && lists="X list"
+      [ "$news" -eq 0 ] && news="no"
+      [ "$xl" -eq 0 ] && xl="no"
+      say "  ok       sources.md: $news $sites, $xl $lists"
+    fi
   else
-    say "  PROBLEM  no news sources could be read from sources.md"
+    say "  MISSING  sources.md, the list of what to search"
+    SOURCES_MISSING=1
     bad=$((bad + 1))
   fi
   if python3 "$root/.claude/skills/ybs-shows/scripts/ybs_shows.py" start >/dev/null 2>&1; then
@@ -297,7 +313,9 @@ main() {
 
   step_checklist
   missing=$?
+  SOURCES_MISSING=0
   step_project "$root"
+  missing=$((missing + SOURCES_MISSING))
   step_tests "$root"
 
   say ""
@@ -319,4 +337,8 @@ main() {
   fi
 }
 
-main "$@"
+# Run when executed, not when sourced: the tests source this file to call one
+# step on a scratch copy of the project, and must not install anything.
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  main "$@"
+fi

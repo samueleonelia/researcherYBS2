@@ -725,6 +725,50 @@ def test_sources_halves_in_skills():
           "An empty `sources.md` is\n   not a failure" in daily)
 
 
+def test_setup_sources_line():
+    """/setup checks that sources.md is there and nothing more. What it lists
+    is the user's choice, so it is shown as information on an `ok` line,
+    whatever is left in it; only a file that is gone is MISSING. Run on a
+    scratch copy of the project, one shape of the file at a time, with the
+    test's own YBS_SOURCES_FILE taken away so the copy's file is the one read."""
+    print("\n/setup: sources.md is checked for being there, nothing else")
+    tmp = Path(tempfile.mkdtemp(prefix="ybs-setup-"))
+    env = {k: v for k, v in os.environ.items() if k != "YBS_SOURCES_FILE"}
+    setup = ROOT / ".claude" / "skills" / "setup" / "scripts" / "setup.sh"
+    try:
+        shutil.copytree(ROOT / ".claude", tmp / ".claude",
+                        ignore=shutil.ignore_patterns("__pycache__", "worktrees",
+                                                      "settings.local.json"))
+        shutil.copy(ROOT / "settings.md", tmp / "settings.md")
+        shapes = (
+            ("the shipped list", (ROOT / "tests" / "fixtures" / "sources.md").read_text(),
+             "  ok       sources.md: 6 news sites, 2 X lists"),
+            ("a trimmed list", "# Sources\n\n1. Reason - https://reason.com/\n\n"
+             "## X lists\n\n1. FP - https://x.com/i/lists/1\n",
+             "  ok       sources.md: 1 news site, 1 X list"),
+            ("X lists only", "## X lists\n\n1. A - https://x.com/i/lists/1\n"
+             "2. B - https://x.com/i/lists/2\n",
+             "  ok       sources.md: no news sites, 2 X lists"),
+            ("news sites only", "1. Reason - https://reason.com/\n"
+             "2. BBC - https://www.bbc.com/news/\n",
+             "  ok       sources.md: 2 news sites, no X lists"),
+            ("an empty file", "", "  ok       sources.md: empty, no search will run"),
+            ("no file", None, "  MISSING  sources.md, the list of what to search"))
+        for name, text, want in shapes:
+            f = tmp / "sources.md"
+            if text is None:
+                f.unlink(missing_ok=True)
+            else:
+                f.write_text(text, encoding="utf-8")
+            r = subprocess.run(["bash", "-c", 'source "$1"; step_project "$2"',
+                                "_", str(setup), str(tmp)],
+                               capture_output=True, text=True, env=env)
+            lines = [l for l in r.stdout.splitlines() if "sources.md" in l]
+            check(f"{name}: {' '.join(want.split())}", lines == [want], str(lines))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def main():
     print("prompt/code agreement")
     test_placeholders()
@@ -738,6 +782,7 @@ def main():
     test_agents_match_skill()
     test_daily_skills()
     test_sources_halves_in_skills()
+    test_setup_sources_line()
     test_examples_are_valid_json()
 
     run_dir = fresh_run()

@@ -75,7 +75,10 @@ Three files are yours to edit:
 - `preferences.md` — what you want from the brief, in your own words
 - `sources.md` — which news sites are read, and which X lists (at the bottom,
   under "X lists" — one line each, a name and a link, add or delete a line and
-  that is the change)
+  that is the change). Any line may be removed. A half with no lines is
+  skipped: no news sites means the brief is the X section alone, no X lists
+  means it has no X section. An empty file means no search runs and nothing
+  is sent.
 - `settings.md` — every number, all three jobs: how many stories reach the
   brief under "The article brief", the X section's own numbers under "The X
   list", and the shows' numbers under "The shows". Every model each step runs
@@ -112,6 +115,8 @@ Type `/update`, then `/setup`. Your briefs in `briefs/` and your show archive in
 - **A dialog about "command line developer tools"** — click Install, wait, `/setup` again.
 - **`ego-browser MISSING`** — open ego lite and finish its first-run setup, then `/setup`.
 - **`yt-dlp` or `node MISSING`** — the download failed. Check the internet, `/setup` again.
+- **`sources.md MISSING`** — the file was deleted or renamed. Put it back (an empty
+  file is fine: it just means nothing is searched), then `/setup` again.
 - **Tools say ok but a run cannot find them** — quit and reopen the Claude app.
 - **A YouTube sign-in or bot-check error** — sign in to youtube.com inside ego lite.
 - **A run stops saying the usage limit is reached** — that is the Claude plan, not this

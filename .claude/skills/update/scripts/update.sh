@@ -164,4 +164,6 @@ main() {
   say "Now run /setup once: a new version may need a tool you do not have yet."
 }
 
-main "$@"
+# One line, so bash never reads past it: this script replaces its own file
+# while it runs, and a separate `exit` line would be read from the new file.
+main "$@"; exit $?

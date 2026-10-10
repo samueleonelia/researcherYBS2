@@ -660,6 +660,44 @@ def test_pick_example_passes_picks_sync(run_dir):
           all("WORTH" in p for p in probs), str(probs)[:200])
 
 
+def test_sources_halves_in_skills():
+    """sources.md is the user's to edit, and the skill that runs a brief must
+    say what happens when he empties it, or one half of it. The words that
+    stop a run are code's: the skills quote them, so they are checked against
+    the one constant that holds them."""
+    print("\nsources.md: an empty file, and one half only")
+    brief = (SKILL / "SKILL.md").read_text()
+    src = SCRIPT.read_text()
+    m = re.search(r'^NOTHING_TO_SEARCH = "([^"]+)"', src, re.M)
+    words = m.group(1) if m else None
+    check("the stop has one home in code", words == "sources.md lists nothing to search",
+          str(words))
+
+    step0 = brief[brief.find("## Step 0"):brief.find("## Step 1")]
+    check("/ybs-brief asks `halves` in step 0, before `start` makes a folder",
+          "ybs_run.py halves" in step0 and "ybs_run.py sources" not in step0, step0[:200])
+    check("and both at 0 stops there, in code's words",
+          words and words in step0 and "before `start`" in step0, step0[:400])
+    halves = brief[brief.find("### The two halves"):brief.find("## Step 0")]
+    check("/ybs-brief says an article half that is off skips to step 10",
+          "`articles: false`" in halves and "straight to the last step" in halves
+          and "the brief is the X section" in halves, halves[:300])
+    check("and that an X half that is off never runs x-start, but x-merge still runs",
+          "`x: false`" in halves and "Never run `x-start`" in halves
+          and "`x-merge` still runs" in halves, halves[:600])
+    check("step 1 runs x-start only when the X half is on",
+          "Only when `halves.x` is true" in brief[brief.find("## Step 1"):brief.find("## Step 2")])
+    check("step 2 sends an article-less run to step 10",
+          "`halves.articles` false, skip steps 2 to 9" in brief)
+    step10 = brief[brief.find("## Step 10"):brief.find("## Hard rules")]
+    check("step 10 stitches at once with no writer, and drives X only when on",
+          "`halves.articles` is\nfalse" in step10 and "when `halves.x` is true" in step10,
+          step10[:300])
+    check("a hard rule says a half with nothing listed is never a failure",
+          re.search(r"^\d+\. \*\*A half runs only when `sources.md` lists something",
+                    brief, re.M) is not None)
+
+
 def main():
     print("prompt/code agreement")
     test_placeholders()
@@ -672,6 +710,7 @@ def main():
     test_agent_files_are_generated()
     test_agents_match_skill()
     test_daily_skills()
+    test_sources_halves_in_skills()
     test_examples_are_valid_json()
 
     run_dir = fresh_run()

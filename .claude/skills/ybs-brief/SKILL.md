@@ -133,6 +133,24 @@ gets one relaunch: `x-start --run <run_dir> --retry`. A failure inside the lane
 is final: each phase already had its second attempt, and the audit line
 carries the reason.
 
+### The two halves
+
+A run has two halves: the articles, from the news sites in `sources.md`, and
+the X lane, from the lists under its `## X lists` heading. That file is the
+user's: he may delete any line of it, a whole half, or everything. **Each half
+runs only when it has something listed**, and a half that is off is never a
+failure. `start` settles it once for the whole run and prints it as `halves`:
+
+- `articles: false`: no screen, no triage, no read, no pick, no counterpoint
+  and no writer. Go from step 1 straight to the last step, where
+  `write-stitch` writes the date line alone and the brief is the X section.
+  `articles_off` says why: no news site is listed, or the brief this run
+  builds on had none, so there is no story to update or to pool.
+- `x: false`: no list is named. Never run `x-start`, and skip every X
+  checkpoint and `x-next --closing`. `x-merge` still runs: it takes the
+  placeholder out, and the audit line says no X list is listed.
+- Both off never reaches `start`: step 0 stops first.
+
 ---
 
 ## Step 0 — preflight
@@ -141,12 +159,15 @@ carries the reason.
 ego-browser --version
 python3 .claude/skills/ybs-brief/scripts/ybs_run.py settings
 python3 .claude/skills/ybs-brief/scripts/ybs_run.py build
-python3 .claude/skills/ybs-brief/scripts/ybs_run.py sources
+python3 .claude/skills/ybs-brief/scripts/ybs_run.py halves
 ```
 
-If `sources` lists no news source, or a line has no link, stop and say which
-line. `x_lists` in the same output is the X half's own list of lists, from
-`sources.md`'s `## X lists` section; it is never screened by an agent.
+`halves` prints how many news sites (`news`) and X lists (`x`) `sources.md`
+lists. Both 0: stop here, before `start`, say
+`sources.md lists nothing to search`, and end. No run folder is made and
+nothing is wrong. Either one at 0 only turns that half off (see the two
+halves, above). An X list is never screened by an agent: only the X lane
+reads one.
 If `ego-browser` is missing, stop: nothing here works without it.
 
 ## Step 1 — start the run
@@ -157,12 +178,15 @@ python3 .claude/skills/ybs-brief/scripts/ybs_run.py start --slot <slot>
 
 The slot is the word the user typed, `morning`, `afternoon` or `evening`.
 
-It prints `run_dir`, the window, the sources and the profile's date. Every later
-command takes `--run <run_dir>`. The window is local midnight to now.
+It prints `run_dir`, the window, the sources, the profile's date and `halves`,
+the two halves this run does. Every later command takes `--run <run_dir>`. The
+window is local midnight to now.
 
 For `afternoon` it also names the morning run it updates, under `base`. It
 refuses when today has no completed morning run: then stop and say so, because
-an update with nothing to update is not a brief.
+an update with nothing to update is not a brief. A morning that was the X
+section alone is a completed morning: the afternoon follows it, with its own
+article half off.
 
 For `evening` it names the morning run and, when there is one, the afternoon run
 it pools from; it refuses when today has no completed morning run.
@@ -173,13 +197,16 @@ If it says there is no topic profile, stop and tell the user to run `/ybs-shows`
 python3 .claude/skills/ybs-brief/scripts/ybs_run.py x-start --run <run_dir>
 ```
 
-This scrapes and filters the X lists in a process of their own, working while
-you screen and triage. `skipped` means this copy has no X pipeline, or no
-browser to run it in: the brief goes on without that section. Either way X is
+Only when `halves.x` is true. This scrapes and filters the X lists in a
+process of their own, working while you screen and triage. `skipped` means
+this copy has no X pipeline, or no browser to run it in: the brief goes on
+without that section. Either way X is
 not touched again until step 6, where the X lane starts launching its agents
 through you.
 
 ## Step 2 — screen every source
+
+**With `halves.articles` false, skip steps 2 to 9**: go to the last step.
 
 **For `evening` there is no screen.** Run `pool-sync --run <run_dir>` and go to
 step 3; launch no screener.
@@ -456,7 +483,8 @@ Read <path> and follow it. Reply with your section in markdown, and nothing else
 ```
 
 Write each reply to `<run_dir>/brief-<section>.md`, the description saying
-which is which. When all have returned:
+which is which. When all have returned, or at once when `halves.articles` is
+false (then there is no writer):
 
 ```bash
 python3 .claude/skills/ybs-brief/scripts/ybs_run.py write-stitch --run <run_dir>
@@ -470,7 +498,7 @@ writer, quoting the problem, rewrite its file, and stitch again; a section
 rejected twice is recorded with `event --type write_failed --detail
 "<section>"` and the run stops, because a brief is never written by hand.
 
-Then drive the X lane to its end:
+Then, when `halves.x` is true, drive the X lane to its end:
 
 ```bash
 python3 .claude/skills/ybs-brief/scripts/ybs_run.py x-next --run <run_dir> --closing
@@ -551,3 +579,6 @@ Report the audit line and the path to `brief.md` to the user. Nothing else.
     result file, and never write the X section yourself. One relaunch of the
     scrape is the ceiling, and `x-start --retry` is where it happens; inside
     the lane, `x-next` decides every retry.
+14. **A half runs only when `sources.md` lists something for it.** A half
+    with nothing listed is off, never a failure, and with nothing listed at
+    all no run starts. Never add a source to make a half run.

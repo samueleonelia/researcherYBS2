@@ -295,7 +295,7 @@ SCHEMA = {
         "brief": "<x_run_dir>/brief.md",
         "record": ("run.json 'x': run_dir, pid, log, started_utc, status, "
                    "retries, reason, phase, attempt, closing_utc"),
-        "status": "running | lane | completed | failed | skipped | merged",
+        "status": "running | lane | completed | failed | skipped | not_listed | merged",
         "lane": ("x-next prints the launches; every X agent's prompt is "
                  "`Read <path> and follow it.`"),
         "prompts": ("<x_run_dir>/prompts/read-p<pass>-b<k>.md | cluster-a<n>.md | "
@@ -1891,6 +1891,22 @@ def cmd_halves(args):
     return 0
 
 
+# What a run says when sources.md lists nothing at all. `start` refuses with
+# it, and the skills say it in the same words: it is the user's choice, not a
+# failure, so nothing is searched and nothing is sent.
+NOTHING_TO_SEARCH = "sources.md lists nothing to search"
+
+# Why a half is off, in the words the audit line and the brief carry.
+NO_NEWS_SITES = "sources.md lists no news sites"
+NO_X_LISTS = "sources.md lists no X lists"
+
+
+def run_articles(run: dict) -> bool:
+    """Does this run have an article half? `start` decides it once and writes
+    it under `halves`. A run from before that key existed always had one."""
+    return (run.get("halves") or {}).get("articles", True)
+
+
 # ---------------------------------------------------------------- start
 
 def runs_root() -> Path:
@@ -1913,7 +1929,7 @@ def base_record(run_dir: Path, run: dict) -> dict:
     tpl = (skill_dir() / "templates" / f"{run.get('slot')}.md").read_text(encoding="utf-8")
     return {"run_id": run.get("run_id"), "run_dir": str(run_dir),
             "window_end_utc": run.get("window_end_utc"),
-            "time": template_time(tpl)}
+            "time": template_time(tpl), "articles": run_articles(run)}
 
 
 def day_runs(local_date: str, slot: str, status: str = None) -> list:
@@ -1984,6 +2000,12 @@ def cmd_start(args):
     sources, notices = read_sources()
     for n in notices:
         print(n, file=sys.stderr)
+    x_lists = read_x_lists()
+    # An empty sources.md is the user's choice. Nothing is searched, and no
+    # folder is made: a run folder is what morning-check reads as a brief on
+    # its way, and this one would never arrive.
+    if not sources and not x_lists:
+        die(NOTHING_TO_SEARCH)
     now, local = utc_now(), datetime.now()
     local_date = local.strftime("%Y-%m-%d")
     # The afternoon updates one named brief and the evening pools two, so the
@@ -1999,6 +2021,25 @@ def cmd_start(args):
         base = find_base(args.base, local_date)
     if args.slot == "evening":
         base_afternoon = find_base(None, local_date, "afternoon", optional=True)
+
+    # Which halves this run does, settled here once for the whole run. Each
+    # runs only when it has something listed. The article half of a later run
+    # also needs articles in the runs it is built on: an update of a morning
+    # that had no news sites has no story to update, and an evening pools
+    # nothing from runs that read none. The X half needs only its lists.
+    articles_off = None if sources else NO_NEWS_SITES
+    if not articles_off and args.slot == "afternoon" and not base["articles"]:
+        articles_off = ("the morning brief this updates had no news sites, "
+                        "so there is no story to update")
+    if not articles_off and args.slot == "evening" and not any(
+            b and b["articles"] for b in (base, base_afternoon)):
+        articles_off = ("the briefs this report pools had no news sites, "
+                        "so there is no article to pool")
+    if articles_off and not x_lists:
+        die(f"nothing to do: {articles_off}, and {NO_X_LISTS}")
+    halves = {"articles": not articles_off, "x": bool(x_lists),
+              "articles_off": articles_off,
+              "x_off": None if x_lists else NO_X_LISTS}
 
     # "Today" means since local midnight on this machine, not the last 24 hours.
     midnight_utc = local.replace(hour=0, minute=0, second=0,
@@ -2024,10 +2065,17 @@ def cmd_start(args):
                                 "status": "pending",
                                 "listed": 0, "in_window": 0, "undated": 0,
                                 "kept": 0, "retries": 0}
-                    for s in sources},
+                    for s in (sources if halves["articles"] else [])},
+        "halves": halves,
         "counts": {},
         "events": [],
     }
+    if not x_lists:
+        # Settled now, so x-start launches nothing, x-merge takes the
+        # placeholder out and the audit line says why, with no failure counted.
+        data["x"] = {"status": "not_listed", "reason": NO_X_LISTS, "retries": 0,
+                     "run_dir": None, "pid": None, "log": None,
+                     "started_utc": iso(now)}
     if base:
         data["base"] = base
     if args.slot == "evening":
@@ -2047,6 +2095,7 @@ def cmd_start(args):
                       "window_end_utc": data["window_end_utc"],
                       "base": base,
                       "base_afternoon": base_afternoon,
+                      "halves": halves,
                       "sources": list(data["sources"])}, indent=2))
     return 0
 
@@ -2078,6 +2127,8 @@ def cmd_screen_sync(args):
     data = load_run(run_dir)
     if data.get("slot") == "evening":
         die(EVENING_NO_SCREEN)
+    if not run_articles(data):
+        die(f"this run has no article half: {data['halves']['articles_off']}")
     if (run_dir / "triage" / "todo.json").exists():
         die("triage ids are already frozen; re-syncing would renumber them")
 
@@ -2231,6 +2282,8 @@ def cmd_pool_sync(args):
     if slot != "evening":
         die(f"pool-sync is the evening's step 2; this run is slot {slot!r}, "
             f"and it screens its own sources: run screen-sync")
+    if not run_articles(data):
+        die(f"this run has no article half: {data['halves']['articles_off']}")
     if (run_dir / "triage" / "todo.json").exists():
         die("triage ids are already frozen; re-syncing would renumber them")
 
@@ -2239,6 +2292,10 @@ def cmd_pool_sync(args):
     for base_slot, base in (("morning", data.get("base")),
                             ("afternoon", data.get("base_afternoon"))):
         if not base:
+            continue
+        if not base.get("articles", True):
+            # A run that had no news sites kept nothing, so there is nothing
+            # of it to pool; its brief was the X section alone.
             continue
         base_dir = Path(base["run_dir"])
         if not (base_dir / "triage" / "verdicts.json").exists():
@@ -3145,20 +3202,27 @@ def x_reason(log: Path) -> str:
     return (errors[-1] if errors else lines[-1]).strip()[:300]
 
 
+# The X statuses nothing changes any more. `not_listed` is a run whose
+# sources.md names no X list: the half is off, which is not a failure.
+X_SETTLED = ("skipped", "not_listed", "failed", "merged")
+
+
 def x_state(run_dir: Path) -> dict:
     """The one status test, used by x-start, x-next and x-merge.
 
     `running` while the scrape process is alive. Once it is gone: `completed`
     when the X run has its brief, `lane` when the scrape left `links.md` and
     the agent phases are still to run (x-next drives them), `failed` when
-    neither is there. `skipped`, `failed` and `merged` are settled facts and
-    are never recomputed: a lane failure is written by x-next and stays.
+    neither is there. `skipped`, `not_listed`, `failed` and `merged` are
+    settled facts and are never recomputed: a lane failure is written by
+    x-next and stays, and `not_listed` is written by `start` when sources.md
+    names no X list.
     """
     data = load_run(run_dir)
     x = data.get("x")
     if not x:
         return {"status": "none"}
-    if x.get("status") in ("skipped", "failed", "merged"):
+    if x.get("status") in X_SETTLED:
         return x
     before = x.get("status")
     if x_alive(x.get("pid"), x.get("started_utc")):
@@ -3211,6 +3275,9 @@ def cmd_x_start(args):
     if status == "skipped":
         return x_out(state, launched=False,
                      note="X was skipped for this run; nothing was launched")
+    if status == "not_listed":
+        return x_out(state, launched=False,
+                     note=f"{NO_X_LISTS}; nothing was launched")
     if status == "failed":
         if not args.retry:
             return x_out(state, launched=False,
@@ -3338,7 +3405,7 @@ def cmd_x_next(args):
     if args.closing:
         data = load_run(run_dir)
         x = data.get("x")
-        if x and x.get("status") not in ("skipped", "failed", "merged") \
+        if x and x.get("status") not in X_SETTLED \
                 and not x.get("closing_utc"):
             x["closing_utc"] = iso(utc_now())
             data["x"] = x
@@ -3380,7 +3447,7 @@ def cmd_x_next(args):
         save_run(run_dir, data)
         return x_out(x_note_failure(run_dir, state), phase="failed", launch=[])
 
-    if status in ("none", "skipped", "merged"):
+    if status in ("none", "skipped", "not_listed", "merged"):
         return x_out(state, phase=status, launch=[])
     if status == "failed":
         return x_out(x_note_failure(run_dir, state), phase="failed", launch=[])
@@ -3507,6 +3574,22 @@ def cmd_write_stitch(args):
     run_dir = run_dir_of(args)
     run = load_run(run_dir)
     raw = template_source(run)
+    if not run_articles(run):
+        # No article half, so no section file and no writer. The brief is the
+        # date line and the two lines code fills: x-merge puts the X section
+        # where its placeholder is, and audit-line says why there is no more.
+        # The template's other head lines name the brief this one updates or
+        # pools, and an X section updates nothing, so only the date stays.
+        why = run["halves"].get("articles_off")
+        brief = run_dir / "brief.md"
+        brief.write_text("\n\n".join([template_head(raw, run).splitlines()[0],
+                                      SCHEMA["x"]["placeholder"], "{{AUDIT_LINE}}"])
+                         + "\n", encoding="utf-8")
+        log_event(run_dir, "brief_stitched", f"no article half: {why}")
+        print(json.dumps({"ok": True, "brief": str(brief), "sections": [],
+                          "ignored": [], "articles": False, "note": why},
+                         indent=2, ensure_ascii=False))
+        return 0
     headings = template_headings(raw, run)
     picks = (load_json(run_dir / "picks" / "picks.json") or {}).get("picks") or []
     if not picks:
@@ -3719,6 +3802,10 @@ def close_all_ego_spaces() -> dict:
     return {"note": f"space cleanup gave no result (exit {r.returncode}): {tail[:120]}"}
 
 
+# The one line of a brief whose only half, the X lists, gave no section.
+X_ONLY_NOTHING = "No X section this time ({reason}), and no news site is read."
+
+
 def cmd_x_merge(args):
     """Put the X run's brief under the article brief, in code.
 
@@ -3767,10 +3854,17 @@ def cmd_x_merge(args):
             picks, subjects = int(m.group(1)), int(m.group(2))
         notes = Path(state["run_dir"]) / "notes"
         tweets = len([f for f in notes.iterdir() if f.is_file()]) if notes.is_dir() else 0
-    elif status not in ("failed", "skipped"):
+    elif status not in ("failed", "skipped", "not_listed"):
         # running, or no X run at all: nothing to merge and nothing to clear.
         return x_out(state, merged=False,
                      note=f"the X run is {status}; nothing was merged")
+
+    # A run with no article half is the X section and nothing else. When X
+    # gave nothing either, the brief would be a date and an audit line, so it
+    # says in one plain sentence why it is empty rather than arriving blank.
+    if not section and not run_articles(load_run(run_dir)):
+        section = X_ONLY_NOTHING.format(
+            reason=state.get("reason") or f"the X run is {status}")
 
     # Placement, the way audit-line places its own line: the placeholder if the
     # write agent kept it, else above the audit line, else at the end.
@@ -3816,6 +3910,8 @@ def x_audit_bit(run_dir: Path) -> str:
         return (f"X: {c.get('x_picks', 0)} picks from "
                 f"{c.get('x_subjects', 0)} subjects, "
                 f"{c.get('x_tweets_read', 0)} tweets read")
+    if status == "not_listed":
+        return f"X: not read, {NO_X_LISTS}"
     if status in ("failed", "skipped"):
         return f"X: none ({status}: {x.get('reason', 'no reason recorded')})"
     return f"X: {status}"
@@ -3890,6 +3986,17 @@ def build_audit_line(run_dir: Path) -> str:
     sources_bit = (f"{c.get('sources_ok', 0)} of {len(d.get('sources', {}))} "
                    f"sources screened")
     slot = d.get("slot")
+
+    if not run_articles(d):
+        # No article half: no front page, no triage, no read, no pick. Every
+        # count of those would be a row of zeros that reads like a failure, so
+        # the line says why the half is off, then what X did, and nothing else.
+        bits = [f"no articles ({d['halves'].get('articles_off')})"]
+        x_bit = x_audit_bit(run_dir)
+        if x_bit:
+            bits.append(x_bit)
+        bits += [f"{retries} retries", f"{len(failures)} failures"]
+        return audit_opening(d) + " · ".join(bits) + "."
 
     if slot == "afternoon":
         # An update counts different things, because different things are the

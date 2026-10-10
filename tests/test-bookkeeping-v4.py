@@ -3093,6 +3093,248 @@ def test_x_afternoon(tmp):
         shutil.rmtree(runs, ignore_errors=True)
 
 
+def finish(rd, env):
+    """Step 10 after the writers: merge X, write the audit line, close. Returns
+    the finished brief and what `email` printed for it."""
+    run("x-merge", "--run", rd, expect=0, env=env)
+    run("audit-line", "--run", rd, "--append", expect=0, env=env)
+    run("close", "--run", rd, expect=0, env=env)
+    mail, r = run("email", rd, expect=0, env=env)
+    return (rd / "brief.md").read_text(), mail
+
+
+def test_nothing_listed():
+    """An empty sources.md is the user's choice: nothing is searched, and no
+    run folder is made, since morning-check would read one as a brief on its
+    way. A later run whose own article half has nothing to build on, and whose
+    X half has no list, is refused the same way, before its folder exists."""
+    print("\nstart: sources.md lists nothing")
+    runs = Path(tempfile.mkdtemp(prefix="ybs-runs-"))
+    files = Path(tempfile.mkdtemp(prefix="ybs-sources-"))
+    try:
+        for slot in ("morning", "afternoon", "evening"):
+            _, r = run("start", "--slot", slot, expect=2,
+                       env={"YBS_RUNS_DIR": str(runs), **sources_file(files, NOTHING)})
+            check(f"a {slot} run refuses with 'sources.md lists nothing to search'",
+                  "sources.md lists nothing to search" in r.stderr,
+                  r.stderr.strip()[:160])
+        check("and no run folder is made", not list(runs.iterdir()),
+              str(list(runs.iterdir())))
+
+        # News sites listed, but the morning had none, and no X list: an update
+        # with no story to update and no X section has nothing to do.
+        m = build_morning(runs, "2026-x_morning_100000", now_iso(-6))
+        state = json.loads((m / "run.json").read_text())
+        state["halves"] = {"articles": False, "x": True,
+                           "articles_off": "sources.md lists no news sites",
+                           "x_off": None}
+        write(m / "run.json", state)
+        _, r = run("start", "--slot", "afternoon", expect=2,
+                   env={"YBS_RUNS_DIR": str(runs), **sources_file(files, NEWS_ONLY)})
+        check("an update of a morning with no news, and no X list, is refused",
+              "nothing to do" in r.stderr and "no story to update" in r.stderr
+              and "no X lists" in r.stderr, r.stderr.strip()[:200])
+        check("and makes no folder either", [d.name for d in runs.iterdir()]
+              == ["2026-x_morning_100000"], str(list(runs.iterdir())))
+    finally:
+        shutil.rmtree(runs, ignore_errors=True)
+        shutil.rmtree(files, ignore_errors=True)
+
+
+def test_x_only_runs(tmp):
+    """sources.md lists X lists and no news site. The article half never runs:
+    no screen, no writer, and the brief is the date line and the X section. It
+    still closes, still passes `email`, and so the afternoon and the evening
+    can follow it, X-only too, even once news sites are listed again."""
+    print("\nan X-only brief: morning, afternoon, evening")
+    runs = Path(tempfile.mkdtemp(prefix="ybs-runs-"))
+    files = Path(tempfile.mkdtemp(prefix="ybs-sources-"))
+    xdirs = []
+    try:
+        env = {"YBS_RUNS_DIR": str(runs), **sources_file(files, X_ONLY),
+               **stub(tmp, "x-only.py", brief=X_BRIEF, notes=2)}
+        out, _ = run("start", "--slot", "morning", expect=0, env=env)
+        rd = Path(out["run_dir"])
+        check("start says the article half is off, and why",
+              out["halves"]["articles"] is False and out["halves"]["x"] is True
+              and out["halves"]["articles_off"] == "sources.md lists no news sites"
+              and out["sources"] == [], str(out.get("halves")))
+        _, r = run("screen-sync", "--run", rd, expect=2, env=env)
+        check("screen-sync refuses a run with no article half",
+              "no article half" in r.stderr, r.stderr.strip()[:160])
+
+        out, _ = run("x-start", "--run", rd, expect=0, env=env)
+        xdirs.append(x_dirs_of(rd))
+        check("the X half starts as it always does", out["launched"] is True, str(out))
+        settle(rd, env)
+        out, _ = run("x-next", "--run", rd, "--closing", expect=0, env=env)
+        check("and its lane ends done", out["phase"] == "done", str(out))
+
+        out, _ = run("write-stitch", "--run", rd, expect=0, env=env)
+        text = (rd / "brief.md").read_text()
+        check("write-stitch needs no picks and no section file",
+              out["ok"] and out["articles"] is False and out["sections"] == [], str(out))
+        check("the stitched brief is the date line and the two placeholders",
+              text.splitlines()[0].startswith("**Date:** ")
+              and "{{X_SECTION}}" in text and "{{AUDIT_LINE}}" in text
+              and "## " not in text, text[:300])
+
+        text, mail = finish(rd, env)
+        check("the finished brief is the X section under the date",
+              text.splitlines()[0].startswith("**Date:** ")
+              and "## What the list is moving on" in text
+              and "{{" not in text, text[:400])
+        audit = [l for l in text.splitlines() if l.startswith("Audit: ")]
+        check("its audit line says why there are no articles, then what X did",
+              audit and "no articles (sources.md lists no news sites)" in audit[0]
+              and "X: 2 picks from 7 subjects, 2 tweets read" in audit[0]
+              and "0 failures" in audit[0] and "screened" not in audit[0],
+              str(audit))
+        check("email takes it as a finished brief",
+              isinstance(mail, dict) and mail["subject"].startswith("YBS morning brief"),
+              str(mail)[:200])
+        _, r = run("morning-check", expect=0, env=env)
+        check("so the morning counts as arrived", r.stdout.strip() == "completed",
+              r.stdout.strip())
+
+        # The afternoon follows it. With news sites listed again by then, the
+        # update still has no morning story to update, so it is X-only too.
+        time.sleep(1.1)
+        env2 = {"YBS_RUNS_DIR": str(runs),
+                **stub(tmp, "x-only-pm.py", brief=X_BRIEF_EMPTY, notes=0)}
+        out, _ = run("start", "--slot", "afternoon", expect=0, env=env2)
+        pm = Path(out["run_dir"])
+        check("an afternoon after an X-only morning starts, X-only",
+              out["base"]["run_id"] == rd.name and out["halves"]["articles"] is False
+              and "no story to update" in out["halves"]["articles_off"],
+              str(out.get("halves")))
+        run("x-start", "--run", pm, expect=0, env=env2)
+        xdirs.append(x_dirs_of(pm))
+        settle(pm, env2)
+        run("write-stitch", "--run", pm, expect=0, env=env2)
+        text, mail = finish(pm, env2)
+        check("its brief has the date and no line naming a morning brief",
+              text.splitlines()[0].startswith("**Date:** ")
+              and "**Updates:**" not in text and "{{" not in text, text[:300])
+        check("and its audit line opens as an update's",
+              f"Audit (afternoon, updates {rd.name}): no articles (" in text, text[-300:])
+        check("email takes it too", isinstance(mail, dict), str(mail)[:200])
+
+        # The evening pools two runs that read no article: X-only as well, and
+        # pool-sync, asked anyway, says why rather than dying on a base.
+        time.sleep(1.1)
+        env3 = {"YBS_RUNS_DIR": str(runs),
+                **stub(tmp, "x-only-eve.py", tail=["ERROR: X is signed out"])}
+        out, _ = run("start", "--slot", "evening", expect=0, env=env3)
+        eve = Path(out["run_dir"])
+        check("an evening after two X-only runs starts, X-only",
+              out["halves"]["articles"] is False
+              and "no article to pool" in out["halves"]["articles_off"],
+              str(out.get("halves")))
+        _, r = run("pool-sync", "--run", eve, expect=2, env=env3)
+        check("pool-sync refuses it by name", "no article half" in r.stderr,
+              r.stderr.strip()[:160])
+        run("x-start", "--run", eve, expect=0, env=env3)
+        xdirs.append(x_dirs_of(eve))
+        out = settle(eve, env3)
+        check("its X half fails here", out["status"] == "failed", str(out))
+        run("write-stitch", "--run", eve, expect=0, env=env3)
+        text, mail = finish(eve, env3)
+        check("a brief with neither half says so in one line, not blank",
+              "No X section this time (ERROR: X is signed out)" in text
+              and "{{" not in text, text[:400])
+        check("its audit line carries the X failure",
+              "X: none (failed: ERROR: X is signed out)" in text
+              and "1 failures" in text, text[-300:])
+        check("and email still takes it: the failure is in the brief",
+              isinstance(mail, dict), str(mail)[:200])
+    finally:
+        drop_x(*xdirs)
+        shutil.rmtree(runs, ignore_errors=True)
+        shutil.rmtree(files, ignore_errors=True)
+
+
+def test_news_only_run():
+    """sources.md lists news sites and no X list. The X half is off from the
+    start: x-start launches nothing, x-next has nothing to drive, and x-merge
+    takes the placeholder out. The audit line says no list was listed, and
+    nothing counts as a failure or a retry."""
+    print("\nan articles-only brief: no X list")
+    runs = Path(tempfile.mkdtemp(prefix="ybs-runs-"))
+    files = Path(tempfile.mkdtemp(prefix="ybs-sources-"))
+    try:
+        env = {"YBS_RUNS_DIR": str(runs), **sources_file(files, NEWS_ONLY)}
+        out, _ = run("start", "--slot", "morning", expect=0, env=env)
+        rd = Path(out["run_dir"])
+        check("start says the X half is off", out["halves"]["x"] is False
+              and out["halves"]["articles"] is True
+              and out["sources"] == ["Reason", "BBC"], str(out))
+        check("and settles it in run.json",
+              json.loads((rd / "run.json").read_text())["x"]["status"] == "not_listed")
+        out, _ = run("x-start", "--run", rd, expect=0, env=env)
+        check("x-start launches nothing, and says why",
+              out["launched"] is False and "no X lists" in out["note"]
+              and out["x_run_dir"] is None, str(out))
+        out, _ = run("x-next", "--run", rd, expect=0, env=env)
+        check("x-next has nothing to launch",
+              out["phase"] == "not_listed" and out["launch"] == [], str(out))
+        t0 = time.time()
+        out, _ = run("x-next", "--run", rd, "--closing", expect=0, env=env)
+        check("and --closing does not wait", out["phase"] == "not_listed"
+              and time.time() - t0 < 10, str(out))
+
+        # The article sections are stitched as on any day; this test is about
+        # the X half, so the stitched brief is written the way stitch leaves it.
+        (rd / "brief.md").write_text(
+            "**Date:** 9 September 2026 at 10:00\n\n## What leads\n\n"
+            "### 1. A story.\n\ntext\n\n{{X_SECTION}}\n\n{{AUDIT_LINE}}\n")
+        text, mail = finish(rd, env)
+        check("x-merge takes the placeholder out and adds no X section",
+              "{{" not in text and "What the list" not in text
+              and "## What leads" in text, text)
+        audit = [l for l in text.splitlines() if l.startswith("Audit: ")]
+        check("the audit line says no X list was listed, not that X failed",
+              audit and "X: not read, sources.md lists no X lists" in audit[0]
+              and "0 retries" in audit[0] and "0 failures" in audit[0], str(audit))
+        check("no X event counts as a failure",
+              not [e for e in json.loads((rd / "run.json").read_text())["events"]
+                   if e["type"].startswith("x_") and "fail" in e["type"]])
+        check("email takes the brief", isinstance(mail, dict), str(mail)[:200])
+    finally:
+        shutil.rmtree(runs, ignore_errors=True)
+        shutil.rmtree(files, ignore_errors=True)
+
+
+def test_evening_pool_skips_x_only_base():
+    """An evening pools what the day's runs kept. An afternoon that read no
+    article (its sources.md had no news site then) kept nothing: the pool
+    takes the morning's and passes over it, rather than dying for want of
+    its triage file."""
+    print("\npool-sync: an X-only base adds nothing")
+    runs = Path(tempfile.mkdtemp(prefix="ybs-runs-"))
+    env = {"YBS_RUNS_DIR": str(runs)}
+    try:
+        build_morning(runs, "2026-x_morning_100000", now_iso(-6),
+                      links=["https://www.theguardian.com/x/one",
+                             "https://www.theguardian.com/x/two"], kept=["a001"])
+        pm = build_afternoon(runs, "2026-x_afternoon_160000", now_iso(-2))
+        state = json.loads((pm / "run.json").read_text())
+        state["halves"] = {"articles": False, "x": True,
+                           "articles_off": "sources.md lists no news sites",
+                           "x_off": None}
+        write(pm / "run.json", state)
+        out, _ = run("start", "--slot", "evening", expect=0, env=env)
+        rd = Path(out["run_dir"])
+        check("the evening still has its article half",
+              out["halves"]["articles"] is True, str(out.get("halves")))
+        out, _ = run("pool-sync", "--run", rd, expect=0, env=env)
+        check("it pools the morning's kept article and nothing of the afternoon",
+              (out.get("pooled_morning"), out.get("pooled_afternoon")) == (1, 0),
+              str(out))
+    finally:
+        shutil.rmtree(runs, ignore_errors=True)
+
+
 def test_morning_check():
     """The scheduled afternoon and evening runs ask `morning-check` before they
     start, and a shell loop reads its one line.
@@ -3675,6 +3917,9 @@ def main():
         test_sources_halves()
         test_sources_third_part()
         test_source_halves_cases()
+        test_nothing_listed()
+        test_news_only_run()
+        test_evening_pool_skips_x_only_base()
         test_screen_sync(rd)
         test_afternoon_base()
         test_evening_bases()
@@ -3726,6 +3971,7 @@ def main():
         test_x_merge_shapes(tmp)
         test_saved_before_sweep(tmp)
         test_x_afternoon(tmp)
+        test_x_only_runs(tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print()

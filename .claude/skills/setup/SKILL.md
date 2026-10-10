@@ -35,8 +35,9 @@ Three answers need a word from you:
   user to click Install in that dialog, wait for it, then run `/setup` again.
 - **A line says MISSING.** Say which one and what it means, from the README's
   troubleshooting list. Do not try to install it another way.
-- **The tests report a number other than 4.** Say so plainly and tell the user
-  not to run a brief until Samuele has looked at it.
+- **Any test fails.** Every test passes in the version Samuele ships, so a
+  failure is new. Say so plainly and tell the user not to run a brief until
+  Samuele has looked at it.
 
 ## Rules
 

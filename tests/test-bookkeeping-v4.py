@@ -1355,11 +1355,26 @@ def test_picks(rd):
     check("two picks and one honest drop is a valid brief",
           out["picks"] == 2 and out["by_tag"]["LEAD"] == 1, str(out))
 
+    # Sixteen stories, each with its note, so the reply passes every check and
+    # reaches the trim. The extra notes go again afterwards, and the two-pick
+    # reply above is synced back, so the rest of the run sees what it saw before.
+    extra = [f"a{i:03d}" for i in range(1, 17) if f"a{i:03d}" not in ("a001", "a003", "a004")]
+    for aid in extra:
+        (rd / "notes" / f"{aid}.md").write_text(f"HEADLINE: {aid}\n")
     over = {"picks": [{"id": f"a{i:03d}", "tag": "BODY"} for i in range(1, 17)],
             "dropped": []}
     write(rd / "picks" / "picks.json", over)
-    out, _ = run("picks-sync", "--run", rd, expect=1)
-    check("refuses more than 15 picks", has(out, "16 picks"))
+    out, _ = run("picks-sync", "--run", rd, expect=0)
+    check("more than 15 picks are trimmed to 15, not refused",
+          isinstance(out, dict) and out["picks"] == 15 and len(out["trimmed"]) == 1,
+          str(out)[:200])
+    for aid in extra:
+        (rd / "notes" / f"{aid}.md").unlink()
+    write(rd / "picks" / "picks.json", {
+        "picks": [{"id": "a001", "tag": "LEAD"}, {"id": "a003", "tag": "WORTH"}],
+        "dropped": [{"id": "a004", "reason_type": "duplicate",
+                     "reason": "same event as a001"}]})
+    run("picks-sync", "--run", rd, expect=0)
 
     lead_heavy = {"picks": [{"id": f"a{i:03d}", "tag": "LEAD"} for i in range(1, 7)],
                   "dropped": []}
@@ -1813,9 +1828,11 @@ def test_pick_groups():
             "picks": [{"id": "a002", "tag": "BODY"}],
             "dropped": [{"id": "a001", "reason_type": "relevance",
                          "reason": "not his morning"}]})
-        out, _ = run("picks-sync", "--run", rd, expect=1)
-        check("a beat story picked over a passed-over topic story is caught",
-              has(out, "dropped for relevance"), str(out.get("problems")))
+        out, _ = run("picks-sync", "--run", rd, expect=0)
+        check("a beat story picked over a topic story dropped for relevance is "
+              "warned about, never refused",
+              any("dropped for relevance" in w for w in out.get("warnings", [])),
+              str(out.get("warnings")))
 
         write(rd / "picks" / "picks.json", {
             "picks": [{"id": "a002", "tag": "BODY"}],

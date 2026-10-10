@@ -214,10 +214,8 @@ step_project() {
 # A test file prints "  - <name> <detail>" for each failure; a line is known if
 # it starts with one of these names. Names, not a count: a count goes stale
 # the moment one is fixed, and cannot tell a fixed one from a new one.
-KNOWN_FAILURES="refuses more than 15 picks
-picks-sync --run: exit 0, expected 1
-a beat story picked over a passed-over topic story is caught
-SKILL.md states no setting of its own"
+# Empty since 2026-10-10: every test passes, so any failure is new.
+KNOWN_FAILURES=""
 
 step_tests() {
   root="$1"
@@ -265,7 +263,9 @@ $line"; fi
 $k";; esac
   done
   IFS="$old_ifs"
-  if [ -z "$new" ]; then
+  if [ -z "$new" ] && [ -z "$seen" ]; then
+    say "  All tests pass."
+  elif [ -z "$new" ]; then
     say "  Only known failures. Nothing new is broken."
   else
     say "  NEW failures, not on Samuele's list. Tell him before running a brief:"

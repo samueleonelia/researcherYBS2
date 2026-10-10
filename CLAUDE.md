@@ -23,7 +23,7 @@ None configured for this folder in `~/.claude.json`. The brief work runs through
 
 ## Rules
 - Currently on `main`, tag `v4.6-yaron-patches`, pushed. Treat `main` as the version `/update` distributes to Yaron — verify tests before pushing.
-- Known test failures are pre-existing and named in STATUS.md/DEVLOG.md (`picks-sync` >15 refusal, `SKILL.md`'s hard-coded number, a beat-vs-topic check); `/setup` reports only a *new* failure as something to flag.
+- Every test passes (since 2026-10-10); `/setup` treats any failure as new and tells the user to wait for Samuele.
 - `/update` must never overwrite `preferences.md`, `briefs/`, or `shows/`.
 
 ## Remember

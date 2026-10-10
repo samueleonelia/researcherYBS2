@@ -46,8 +46,8 @@ data already in it, writes it to `<run_dir>/prompts/`, and prints the path.
 **Pass the path, not the text.** Every single-call agent (`screen`, `cluster`,
 `pick`, `write`) and the counterpoint agent can read, so the prompt you pass is
 one line: `Read <path> and follow it.` You never open the file yourself: nothing
-is retyped, no figure can change on the way, and a 50 KB prompt costs you no
-time. Never assemble a prompt by hand, and never paste a fragment into one.
+is retyped, no figure can change on the way, and a prompt of many kilobytes
+costs you no time. Never assemble a prompt by hand, and never paste a fragment into one.
 
 `fill` exits 1 and names any placeholder it could not fill. That is the one
 failure an agent cannot report, because it does not know what it was meant to

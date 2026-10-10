@@ -2892,6 +2892,22 @@ def cmd_picks_sync(args):
     for aid in sorted(notes - seen - set(dropped) - trimmed_before):
         problems.append(f"{aid}: neither picked nor dropped")
 
+    # pick.md tells the agent the group already settled relevance: a topic
+    # story may drop on its evidence, never for relevance, while a beat story
+    # takes a place. This is a warning, not a problem: a problem sends the reply
+    # back for a rerun, and on a scheduled run a second slip would cost the
+    # whole brief over one story's order. The run log keeps it for review.
+    warnings = []
+    beat_picked = sorted(aid for aid in seen if groups.get(aid) == "beat-read")
+    if beat_picked:
+        for d in p.get("dropped", []):
+            aid = d.get("id")
+            if (groups.get(aid) == "topic-read"
+                    and (d.get("reason_type") or "").strip().lower() == "relevance"):
+                warnings.append(f"{aid}: a topic-read story dropped for relevance "
+                                f"while {', '.join(beat_picked)} (beat-read) was "
+                                f"picked; the group already settled relevance")
+
     # A reply over the ceiling is trimmed, never failed — but only a reply that
     # passed every check above, so a rejected reply reaches the rerun intact.
     trimmed_now = []
@@ -2978,11 +2994,14 @@ def cmd_picks_sync(args):
                        "body": counts["BODY"]})
     data["counts"].update(record)
     save_run(run_dir, data)
+    for w in warnings:
+        log_event(run_dir, "picks_warning", w)
     print(json.dumps({"picks": len(p["picks"]), "by_tag": counts, "mix": mix,
                       "dropped": len(dropped),
                       "trimmed": sorted(t["id"] for t in p.get("trimmed", [])),
                       "leads": [i["id"] for i in p["picks"]
                                 if (i.get("tag") or "").upper() == "LEAD"],
+                      "warnings": warnings,
                       "problems": problems[:20]}, indent=2, ensure_ascii=False))
     return 1 if problems else 0
 

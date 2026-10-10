@@ -12,6 +12,9 @@ Commands
   build [--check]          render .claude/agents/ybs4-*.md from the templates
   fill NAME --run DIR      render one single-call prompt, run data included
   sources                  print the sources listed in sources.md as JSON
+  halves                   print {"news": n, "x": m}: how many news sites and X
+                           lists sources.md lists. A half at 0 is skipped; both
+                           at 0 means there is nothing to search
   start --slot SLOT        create the run folder, compute the time window; an
                            afternoon run also finds the morning it updates, and
                            an evening run the two runs it pools
@@ -1791,6 +1794,11 @@ def read_sources(f: Path = None) -> tuple:
     the X half of the run and are read by `read_x_lists` instead. A front page
     is screened by an agent; an X list is scrolled by `x-lists/x_scrape.py`,
     and mixing the two would send a screener to x.com.
+
+    A file with no news line is not an error. The file is the user's, and he
+    may delete every site in it: the article half then has nothing to screen
+    and is skipped (`halves` says so before a run starts). Only a missing
+    file dies, because that is a broken project, not a choice.
     """
     f = Path(f) if f else sources_path()
     if not f.exists():
@@ -1822,8 +1830,6 @@ def read_sources(f: Path = None) -> tuple:
             "slug": slugify(name),
             "front_page": url,
         })
-    if not rows:
-        die("sources.md lists no sources (each line needs a name and a link)")
     return rows, notices
 
 
@@ -1865,6 +1871,23 @@ def cmd_sources(args):
     print(json.dumps({"sources": rows,
                        "x_lists": read_x_lists()},
                       indent=2, ensure_ascii=False))
+    return 0
+
+
+def source_halves() -> dict:
+    """How many news sites and how many X lists sources.md lists.
+
+    The one question every skill asks before a run: a half with nothing listed
+    is skipped, and with both at 0 there is nothing to search at all, so no
+    run is started and nothing is sent. Counts rather than yes/no, so the
+    answer can be shown to the user as it is.
+    """
+    rows, _ = read_sources()
+    return {"news": len(rows), "x": len(read_x_lists())}
+
+
+def cmd_halves(args):
+    print(json.dumps(source_halves()))
     return 0
 
 
@@ -4576,6 +4599,7 @@ def main():
     p.set_defaults(fn=cmd_fill)
 
     sub.add_parser("sources").set_defaults(fn=cmd_sources)
+    sub.add_parser("halves").set_defaults(fn=cmd_halves)
 
     p = sub.add_parser("start")
     p.add_argument("--slot", default="morning", choices=list(WRITE_SECTIONS))

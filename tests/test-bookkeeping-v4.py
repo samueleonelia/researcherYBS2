@@ -3599,6 +3599,55 @@ def test_sources_third_part():
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+# Three shapes a user's sources.md may take once he has deleted lines from it.
+# Every one is his choice, and none is an error.
+NEWS_ONLY = ("# Sources\n\n1. Reason - https://reason.com/\n"
+             "2. BBC - https://www.bbc.com/news/\n\n## X lists\n\nNone for now.\n")
+X_ONLY = ("# Sources\n\nNo news site for now.\n\n## X lists\n\n"
+          "1. FP - https://x.com/i/lists/2091834809903407159\n")
+NOTHING = "# Sources\n\n## X lists\n"
+
+
+def sources_file(where, text):
+    """A scratch sources.md, and the env that points every command at it."""
+    f = Path(where) / "sources.md"
+    f.write_text(text, encoding="utf-8")
+    return {"YBS_SOURCES_FILE": str(f)}
+
+
+def test_source_halves_cases():
+    """sources.md is the user's file. He may delete any line, a whole half or
+    everything, and none of it is an error: a half with nothing listed is
+    skipped, and `halves` is the one command that says which. Only a missing
+    file dies."""
+    print("\nhalves: any line of sources.md may go")
+    mod = load_script()
+    tmp = Path(tempfile.mkdtemp(prefix="ybs-sources-"))
+    try:
+        out, _ = run("halves", expect=0)
+        check("the shipped list: 6 news sites and 2 X lists",
+              out == {"news": 6, "x": 2}, str(out))
+        for name, text, want in (("news sites only", NEWS_ONLY, {"news": 2, "x": 0}),
+                                 ("X lists only", X_ONLY, {"news": 0, "x": 1}),
+                                 ("a file that lists nothing", NOTHING, {"news": 0, "x": 0}),
+                                 ("an empty file", "", {"news": 0, "x": 0})):
+            out, _ = run("halves", expect=0, env=sources_file(tmp, text))
+            check(f"{name}: {want}", out == want, str(out))
+            rows, notices = mod.read_sources(tmp / "sources.md")
+            check(f"{name}: read_sources returns its {want['news']} news sites, "
+                  f"no error", len(rows) == want["news"] and not notices,
+                  str(rows))
+            out, _ = run("sources", expect=0, env=sources_file(tmp, text))
+            check(f"{name}: `sources` lists it without dying",
+                  len(out["sources"]) == want["news"]
+                  and len(out["x_lists"]) == want["x"], str(out))
+        _, r = run("halves", expect=2,
+                   env={"YBS_SOURCES_FILE": str(tmp / "no-such-file.md")})
+        check("only a missing file dies", "not found" in r.stderr, r.stderr.strip()[:160])
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def test_settings_halves():
     """One settings.md holds both halves of the run. This script must read the
     article brief's `## Numbers` and `## Models` and nothing else: the X list
@@ -3625,6 +3674,7 @@ def main():
         test_settings_halves()
         test_sources_halves()
         test_sources_third_part()
+        test_source_halves_cases()
         test_screen_sync(rd)
         test_afternoon_base()
         test_evening_bases()

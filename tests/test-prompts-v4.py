@@ -661,12 +661,14 @@ def test_pick_example_passes_picks_sync(run_dir):
 
 
 def test_sources_halves_in_skills():
-    """sources.md is the user's to edit, and the skill that runs a brief must
+    """sources.md is the user's to edit, and both skills that run a brief must
     say what happens when he empties it, or one half of it. The words that
     stop a run are code's: the skills quote them, so they are checked against
     the one constant that holds them."""
     print("\nsources.md: an empty file, and one half only")
+    skills = ROOT / ".claude" / "skills"
     brief = (SKILL / "SKILL.md").read_text()
+    daily = (skills / "ybs-daily" / "SKILL.md").read_text()
     src = SCRIPT.read_text()
     m = re.search(r'^NOTHING_TO_SEARCH = "([^"]+)"', src, re.M)
     words = m.group(1) if m else None
@@ -696,6 +698,31 @@ def test_sources_halves_in_skills():
     check("a hard rule says a half with nothing listed is never a failure",
           re.search(r"^\d+\. \*\*A half runs only when `sources.md` lists something",
                     brief, re.M) is not None)
+
+    def section(text, heading):
+        m = re.search(r"^" + re.escape(heading) + r".*$", text, re.M)
+        if not m:
+            return ""
+        rest = text[m.end():]
+        nxt = re.search(r"^## ", rest, re.M)
+        return rest[:nxt.start()] if nxt else rest
+
+    step0b = section(daily, "## Step 0b")
+    check("/ybs-daily asks `halves` in a step of its own",
+          "ybs_run.py halves" in step0b, step0b[:200])
+    check("before step 1's morning-check and before step 1b's lock",
+          0 < daily.find("## Step 0b") < daily.find("## Step 1 ")
+          < daily.find("## Step 1b"))
+    check("both at 0 sends nothing: no brief, no failure email, no lock",
+          "nothing is sent" in step0b and "no failure email" in step0b
+          and "Take no lock" in step0b, step0b[:500])
+    check("and reports one line", "`nothing to search: sources.md lists no sources`"
+          in step0b, step0b[:500])
+    check("test skips it", "skips steps 0b, 1,\n1b and 2" in daily)
+    check("/ybs-brief's own stop on an empty file is not a failure in step 2",
+          words and words in section(daily, "## Step 2"))
+    check("hard rule 7 names the empty file as no failure",
+          "An empty `sources.md` is\n   not a failure" in daily)
 
 
 def main():

@@ -194,6 +194,11 @@ article half off.
 For `evening` it names the morning run and, when there is one, the afternoon run
 it pools from; it refuses when today has no completed morning run.
 
+A later run can also find that `sources.md` lists nothing it can use: news
+sites, but no morning story to update or pool, and no X list. `start` then
+refuses with `nothing to do:` and the reason, before making a folder. Stop
+and say it: like an empty file, it is the user's choice, not a failure.
+
 If it says there is no topic profile, stop and tell the user to run `/ybs-shows`.
 
 ```bash

@@ -729,10 +729,20 @@ def test_sources_halves_in_skills():
     check("and reports one line", "`nothing to search: sources.md lists no sources`"
           in step0b, step0b[:500])
     check("test skips it", "skips steps 0b, 1,\n1b and 2" in daily)
+    step2 = section(daily, "## Step 2")
     check("/ybs-brief's own stop on an empty file is not a failure in step 2",
-          words and words in section(daily, "## Step 2"))
-    check("hard rule 7 names the empty file as no failure",
-          "An empty `sources.md` is\n   not a failure" in daily)
+          words and words in step2)
+    m = re.search(r'^NOTHING_TO_DO = "([^"]+)"', src, re.M)
+    todo = m.group(1) if m else None
+    check("start's other sources stop has one home in code",
+          todo == "nothing to do:" and 'die(f"{NOTHING_TO_DO} ' in src, str(todo))
+    check("/ybs-daily's step 2 sends nothing for that stop either",
+          todo and f"`{todo}`" in step2 and "No brief, no failure email" in step2
+          and "Go to step 4" in step2, step2[-900:])
+    check("/ybs-brief's step 1 says that stop is the user's choice",
+          todo and f"`{todo}`" in brief[brief.find("## Step 1"):brief.find("## Step 2")])
+    check("hard rule 7 names a sources stop as no failure",
+          "A stop caused by what\n   `sources.md` lists is not a failure" in daily)
 
 
 def test_setup_sources_line():

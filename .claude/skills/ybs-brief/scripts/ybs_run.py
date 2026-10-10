@@ -1895,6 +1895,11 @@ def cmd_halves(args):
 # it, and the skills say it in the same words: it is the user's choice, not a
 # failure, so nothing is searched and nothing is sent.
 NOTHING_TO_SEARCH = "sources.md lists nothing to search"
+# How `start` opens its refusal when sources.md lists something, but nothing
+# this run can use: news sites with no morning story to build on, and no X
+# list. The same kind of stop, the user's own choice, and /ybs-daily sends
+# nothing for it either; it matches on these words.
+NOTHING_TO_DO = "nothing to do:"
 
 # Why a half is off, in the words the audit line and the brief carry.
 NO_NEWS_SITES = "sources.md lists no news sites"
@@ -2036,7 +2041,7 @@ def cmd_start(args):
         articles_off = ("the briefs this report pools had no news sites, "
                         "so there is no article to pool")
     if articles_off and not x_lists:
-        die(f"nothing to do: {articles_off}, and {NO_X_LISTS}")
+        die(f"{NOTHING_TO_DO} {articles_off}, and {NO_X_LISTS}")
     halves = {"articles": not articles_off, "x": bool(x_lists),
               "articles_off": articles_off,
               "x_off": None if x_lists else NO_X_LISTS}

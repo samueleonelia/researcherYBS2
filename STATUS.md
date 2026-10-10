@@ -6,7 +6,7 @@ _Updated: 2026-10-10 · Second review fixes; every test passes_
 
 **What this is:** A Claude Code skill (`/ybs-brief`) that builds a news brief for Yaron Brook from six sources plus two X lists, `/ybs-shows` which keeps his show profile current, and `/autopilot` + `/ybs-daily` which run both on a schedule on his Mac and email him each brief's Google Drive link.
 
-**Right now:** `main`, tagged `v4.9-review2`, pushed (a second independent review verified v4.8 on 19 real runs and found a lock race and a /setup blind spot, both fixed). The rehearsal as Yaron passed on 10-10 in `../rehearsalYaron` (fresh GitHub zip): `/setup`, `/autopilot`, the scheduled test email, shows at 02:02 (no email, correct), morning at 05:43 with the Drive Doc and the email at 06:03. Every test passes. Waiting on Yaron's setup.
+**Right now:** `main`, tagged `v4.10-shows-prompt`, pushed (a second independent review verified v4.8 on 19 real runs and found a lock race and a /setup blind spot, both fixed). The rehearsal as Yaron passed on 10-10 in `../rehearsalYaron` (fresh GitHub zip): `/setup`, `/autopilot`, the scheduled test email, shows at 02:02 (no email, correct), morning at 05:43 with the Drive Doc and the email at 06:03. Every test passes. Waiting on Yaron's setup.
 
 ## Feature areas
 | Area | State | Note |

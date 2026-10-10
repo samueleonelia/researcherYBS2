@@ -1031,3 +1031,34 @@ list emptied. All suites, x-lists and `tests/run-all.sh` pass.
   launched the agent with "Read <path> and follow it" instead of pasting it.
   SKILL.md step 5 now says so, and the profile agent's template allows that
   one read. Same pattern /ybs-brief uses. Shows and prompt tests pass.
+
+## 2026-10-10 · sources.md is the user's file (v4.11-sources-optional)
+
+**Why**: trimming the rehearsal's sources.md made /setup cry "NEW failures":
+two test files read the user's own sources.md and expected the shipped six.
+Samuele's rule: editing sources.md must always be safe.
+
+**Decisions**
+- Tests read `tests/fixtures/sources.md` through `YBS_SOURCES_FILE` (set by
+  the tests only); /setup reports the file's counts as information and says
+  MISSING only when it is absent.
+- `ybs_run.py halves` -> {"news": n, "x": m}; `start` records the run's halves.
+  Empty: no run folder, no search, and /ybs-daily sends no email (Samuele's
+  choice). News-only: X `not_listed`, no X section, no failure. X-only: no
+  article half, the brief is the X section; afternoon/evening follow the same
+  rule and the evening pool skips a base with no articles.
+- A stop caused by the user's sources choice ("nothing to search", "nothing
+  to do:") is never a failure email.
+- `x-next --closing` returns `scraping` after 540 s per call (under the Bash
+  ceiling); an X-only run's x_wait clock starts at scrape end and restarts
+  per lane phase. Runs with articles keep the old clock.
+- /update keeps sources.md like preferences.md (shipped only when missing);
+  the project is recognised by the ybs-brief SKILL.md. Yaron's next /update
+  still runs his installed v4.10 script, which swaps sources.md once with a
+  `.backup`; the protection applies from the update after.
+
+**Verified by two reviews that wrote none of it**: 10 real runs old vs new,
+170+ outputs: briefs, audit lines, emails identical (one harmless
+`closing_utc` stamp difference on failed lanes). update.sh on copies of
+Yaron's v4.10 layout. All suites on full, trimmed, empty, X-only and
+news-only copies.

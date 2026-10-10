@@ -1,12 +1,12 @@
 # STATUS: researcherYBS2
 
-_Updated: 2026-10-10 · Second review fixes; every test passes_
+_Updated: 2026-10-10 · sources.md is the user's file: any half may be empty_
 
 <!-- Rewrite this file in place. Never append. History belongs in DEVLOG.md. Keep under 60 lines. -->
 
 **What this is:** A Claude Code skill (`/ybs-brief`) that builds a news brief for Yaron Brook from six sources plus two X lists, `/ybs-shows` which keeps his show profile current, and `/autopilot` + `/ybs-daily` which run both on a schedule on his Mac and email him each brief's Google Drive link.
 
-**Right now:** `main`, tagged `v4.10-shows-prompt`, pushed (a second independent review verified v4.8 on 19 real runs and found a lock race and a /setup blind spot, both fixed). The rehearsal as Yaron passed on 10-10 in `../rehearsalYaron` (fresh GitHub zip): `/setup`, `/autopilot`, the scheduled test email, shows at 02:02 (no email, correct), morning at 05:43 with the Drive Doc and the email at 06:03. Every test passes. Waiting on Yaron's setup.
+**Right now:** `main`, tagged `v4.11-sources-optional`, pushed. `sources.md` is the user's file: tests and `/setup` only check it exists, an empty file means no search and no email, a missing half is skipped (news-only: no X section; X-only: the brief is the X section), and `/update` never overwrites it (from the update after his next one: his installed v4.10 `/update` still swaps it once, keeping a `.backup`). Two independent reviews: the full case is unchanged on 10 real runs. Rehearsal folder: shows ran 12:02 on v4.10 (1 new show, English), morning 05:43 tomorrow with trimmed sources.
 
 ## Feature areas
 | Area | State | Note |
@@ -27,7 +27,8 @@ _Updated: 2026-10-10 · Second review fixes; every test passes_
 | Settings | ✅ working | one root `settings.md` |
 | Test suite | ✅ working | every test passes since 10-10; `/setup` treats any failure as new |
 | Git remote | ✅ working | github.com/samueleonelia/researcherYBS2 (private) |
-| Install (`/setup`) and update (`/update`) | ✅ working | `/update` keeps briefs/, shows/, preferences.md, and `.claude/settings.local.json` |
+| Install (`/setup`) and update (`/update`) | ✅ working | `/update` keeps briefs/, shows/, preferences.md, sources.md and `.claude/settings.local.json`; settings.md is replaced with a `.backup` |
+| Optional halves (`sources.md`) | ✅ reviewed | `halves` command; empty = nothing, news-only = no X, X-only = X brief; no email for a sources choice |
 | Automatic briefs (`/autopilot`, `/ybs-daily`) | ✅ rehearsed | `daily-lock`: one job at a time; 4 daily tasks (shows 02:00, morning 05:30, afternoon 13:00, evening 19:00); brief to Drive `YBS briefs`, email = time + link + plug; auto mode as the folder default; never run on Yaron's Mac yet |
 
 ## Next up

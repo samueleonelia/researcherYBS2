@@ -87,10 +87,10 @@ Three files are yours to edit:
 `preferences.md` is the one you will use. Write plain sentences, one per line,
 like "never lead with a celebrity story" or "keep the leads shorter". Every brief
 follows them. You can also just tell Claude: "add to my preferences, ..." and it
-writes the line for you. `/update` never overwrites this file.
+writes the line for you. `/update` never overwrites this file, nor `sources.md`.
 
-`/update` may replace them with a newer version. When it does, it keeps your copy
-beside it ending in `.backup` and says so.
+`/update` may replace `settings.md` with a newer version. When it does, it keeps
+your copy beside it ending in `.backup` and says so.
 
 ## What each folder is
 
@@ -105,8 +105,8 @@ beside it ending in `.backup` and says so.
 
 ## Getting the newest version
 
-Type `/update`, then `/setup`. Your briefs in `briefs/` and your show archive in
-`shows/` are never touched.
+Type `/update`, then `/setup`. Your briefs in `briefs/`, your show archive in
+`shows/`, `preferences.md` and `sources.md` are never touched.
 
 ## When something is wrong
 

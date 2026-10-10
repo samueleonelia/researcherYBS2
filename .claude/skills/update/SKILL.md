@@ -1,6 +1,6 @@
 ---
 name: update
-description: Update this project to the newest version published on GitHub, keeping the user's own briefs and show archive untouched and backing up the two files they are allowed to edit. Use when the user asks for the latest version, when Samuele says an update is ready, or when the user types /update. Downloads a zip, does not use git, and never sends anything anywhere.
+description: Update this project to the newest version published on GitHub, keeping the user's own briefs, show archive, preferences.md and sources.md untouched and backing up settings.md. Use when the user asks for the latest version, when Samuele says an update is ready, or when the user types /update. Downloads a zip, does not use git, and never sends anything anywhere.
 argument-hint: ""
 ---
 
@@ -12,19 +12,22 @@ One command does the work. You run it and report what it printed.
 bash .claude/skills/update/scripts/update.sh "$(pwd)"
 ```
 
-Run it from the project folder, so `$(pwd)` is the folder holding `sources.md`.
+Run it from the project folder, the one holding `.claude/skills/ybs-brief`.
 
 ## What it does
 
 Downloads the newest zip from GitHub and replaces the project's files with it.
 
-Three things are never overwritten:
+These are never overwritten:
 
 - `briefs/` — every brief ever made here
 - `shows/` — the transcripts, digests and topic profile
-- `sources.md` and `settings.md` — if the user's copy differs from
-  the new one, the script writes the new one and keeps theirs alongside as
-  `<name>.backup`, and says so.
+- `preferences.md` and `sources.md` — the user's own. Only a user who has no
+  copy gets the one that ships, and the script says so.
+
+`settings.md` is backed up instead: if the user's copy differs from the new
+one, the script writes the new one and keeps theirs alongside as
+`settings.md.backup`, and says so.
 
 ## What you do with the output
 
@@ -41,5 +44,5 @@ version may need a tool they do not have yet.
 
 1. **Run the script; do not do its job yourself.** Never download files another
    way, never copy them by hand, never merge two versions of a file yourself.
-2. **Never touch `briefs/` or `shows/`.**
+2. **Never touch `briefs/`, `shows/`, `preferences.md` or `sources.md`.**
 3. If the script reports a problem, report the problem. Do not retry silently.

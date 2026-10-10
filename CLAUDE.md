@@ -11,7 +11,7 @@ This is the active successor to the sibling repo `../researcherYBS/`. Evidence f
 - Per the parent `yaronBrook/CLAUDE.md`: researcherYBS's last commit is 2026-09-01 with no GitHub remote; this repo's last commit is 2026-09-12 with a remote configured (`github.com/samueleonelia/researcherYBS2`, private).
 
 ## What's inside
-- `.claude/skills/`: `autopilot` (sets up the daily scheduled tasks on the Mac it runs on, auto mode for this folder, a scheduled test email), `ybs-daily` (what each scheduled task runs: the brief, its Google Drive copy, the email to self; the only skill that sends), `ybs-brief` (morning/afternoon/evening news brief, includes its own X-list engine), `ybs-shows` (refreshes the show transcript archive and topic profile), `setup` (installs yt-dlp/Node, checks the project), `update` (pulls the newest GitHub zip, preserves `briefs/`, `shows/`, and the user's edited `preferences.md`).
+- `.claude/skills/`: `autopilot` (sets up the daily scheduled tasks on the Mac it runs on, auto mode for this folder, a scheduled test email), `ybs-daily` (what each scheduled task runs: the brief, its Google Drive copy, the email to self; the only skill that sends), `ybs-brief` (morning/afternoon/evening news brief, includes its own X-list engine), `ybs-shows` (refreshes the show transcript archive and topic profile), `setup` (installs yt-dlp/Node, checks the project), `update` (pulls the newest GitHub zip, preserves `briefs/`, `shows/`, and the user's own `preferences.md` and `sources.md`; backs up `settings.md`).
 - `briefs/`: one dated folder per brief run, each with `brief.md`.
 - `shows/`: transcript archive and `profile.json` topic profile, built by `/ybs-shows`.
 - `preferences.md`, `sources.md`, `settings.md`: the three user-editable config files (brief preferences, news sources + X lists, numeric settings/models per stage).
@@ -24,7 +24,7 @@ None configured for this folder in `~/.claude.json`. The brief work runs through
 ## Rules
 - Currently on `main`, tag `v4.10-shows-prompt`, pushed. Treat `main` as the version `/update` distributes to Yaron — verify tests before pushing.
 - Every test passes (since 2026-10-10); `/setup` treats any failure as new and tells the user to wait for Samuele.
-- `/update` must never overwrite `preferences.md`, `briefs/`, or `shows/`.
+- `/update` must never overwrite `preferences.md`, `sources.md`, `briefs/`, or `shows/`.
 
 ## Remember
 <!-- Things Samuele explicitly asked Claude to remember for this project. Claude adds items here when told "remember X". -->

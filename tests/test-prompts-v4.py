@@ -789,6 +789,62 @@ def test_setup_sources_line():
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def test_update_keeps_sources():
+    """/update never overwrites sources.md: it is the user's list of what to
+    search, and one he emptied to stop the briefs must stay empty. It ships
+    only to a user who has none, the way preferences.md does; settings.md is
+    still replaced with its old copy kept as a .backup. Run on scratch
+    folders against a zip built here and served as file://, so nothing is
+    downloaded and the real project is never touched."""
+    print("\n/update: sources.md is the user's, like preferences.md")
+    import zipfile
+    tmp = Path(tempfile.mkdtemp(prefix="ybs-update-"))
+    update = ROOT / ".claude" / "skills" / "update" / "scripts" / "update.sh"
+    shipped = (ROOT / "tests" / "fixtures" / "sources.md").read_text()
+    try:
+        zpath = tmp / "main.zip"
+        with zipfile.ZipFile(zpath, "w") as z:
+            top = "researcherYBS2-main/"
+            z.writestr(top + "sources.md", shipped)
+            z.writestr(top + "settings.md", "# Settings, the new version\n")
+            z.writestr(top + "preferences.md", "")
+            z.writestr(top + ".claude/skills/ybs-brief/SKILL.md", "the new skill\n")
+        env = {**os.environ, "YBS_UPDATE_ZIP": zpath.as_uri()}
+        edited = "# Sources\n\n1. Reason - https://reason.com/\n"
+        for name, mine in (("an edited sources.md", edited),
+                           ("an emptied sources.md", ""),
+                           ("no sources.md", None)):
+            root = tmp / name.replace(" ", "-")
+            (root / ".claude" / "skills" / "ybs-brief").mkdir(parents=True)
+            (root / ".claude" / "skills" / "ybs-brief" / "SKILL.md").write_text("old\n")
+            (root / "settings.md").write_text("# Settings, his own edit\n")
+            (root / "preferences.md").write_text("never lead with a celebrity\n")
+            if mine is not None:
+                (root / "sources.md").write_text(mine)
+            r = subprocess.run(["bash", str(update), str(root)],
+                               capture_output=True, text=True, env=env)
+            check(f"{name}: update.sh finishes", r.returncode == 0 and "DONE." in r.stdout,
+                  (r.stdout + r.stderr)[-300:])
+            got = (root / "sources.md").read_text() if (root / "sources.md").exists() else None
+            if mine is None:
+                check(f"{name}: the shipped list is put in place, and it says so",
+                      got == shipped and "You had no sources.md" in r.stdout, r.stdout[-300:])
+            else:
+                check(f"{name}: it is left exactly as he left it, with no .backup",
+                      got == mine and not (root / "sources.md.backup").exists(), repr(got)[:80])
+            check(f"{name}: preferences.md is untouched",
+                  (root / "preferences.md").read_text() == "never lead with a celebrity\n")
+            check(f"{name}: settings.md is replaced, his copy kept as .backup",
+                  (root / "settings.md").read_text() == "# Settings, the new version\n"
+                  and (root / "settings.md.backup").read_text()
+                  == "# Settings, his own edit\n")
+            check(f"{name}: the code itself is updated",
+                  (root / ".claude" / "skills" / "ybs-brief" / "SKILL.md").read_text()
+                  == "the new skill\n")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def main():
     print("prompt/code agreement")
     test_placeholders()
@@ -803,6 +859,7 @@ def main():
     test_daily_skills()
     test_sources_halves_in_skills()
     test_setup_sources_line()
+    test_update_keeps_sources()
     test_examples_are_valid_json()
 
     run_dir = fresh_run()

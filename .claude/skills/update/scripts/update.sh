@@ -6,18 +6,24 @@
 #
 # Written for the bash Apple ships (3.2). Nothing here needs a password.
 
-ZIP="https://github.com/samueleonelia/researcherYBS2/archive/refs/heads/main.zip"
+# YBS_UPDATE_ZIP overrides where the zip comes from, and only the tests set it
+# (a file:// address of a zip they built), so the copy-over can be checked
+# without the network.
+ZIP="${YBS_UPDATE_ZIP:-https://github.com/samueleonelia/researcherYBS2/archive/refs/heads/main.zip}"
 
 # The user's own work. Never replaced, never read, never deleted.
 # preferences.md is his standing instructions to the brief: it ships once, empty,
 # and after that it is his. A push must never overwrite what he taught it.
+# sources.md is his list of what to search, and the same holds: he may delete
+# any line of it, or empty it to stop the briefs, and an update that put the
+# shipped list back would start the searches and the emails again behind him.
+# Either file ships only when he has none.
 KEEP_DIRS="briefs shows"
-KEEP_FILES="preferences.md"
+KEEP_FILES="preferences.md sources.md"
 
-# The files the user is allowed to edit. The new version wins, but their copy
-# is kept beside it, so an edit is never silently lost.
-KEEP_BACKUP="settings.md
-sources.md"
+# The file the user is allowed to edit whose new version wins. His copy is
+# kept beside it, so an edit is never silently lost.
+KEEP_BACKUP="settings.md"
 
 # Files the newest version no longer ships. A copy over the top never removes
 # them, so they are named here: one line per retirement.
@@ -30,8 +36,10 @@ say() { printf '%s\n' "$1"; }
 
 main() {
   root="$1"
-  if [ ! -f "$root/sources.md" ]; then
-    say "STOP: $root does not look like the project (no sources.md)."
+  # The project is recognised by its own skills, not by sources.md: that file
+  # is the user's, and one he deleted is put back below, not a reason to stop.
+  if [ ! -f "$root/.claude/skills/ybs-brief/SKILL.md" ]; then
+    say "STOP: $root does not look like the project (no .claude/skills/ybs-brief)."
     exit 2
   fi
 
@@ -78,6 +86,7 @@ main() {
   fi
 
   say "Replacing the project files."
+  shipped=""
   for item in "$new"/* "$new"/.[!.]*; do
     [ -e "$item" ] || continue
     name=$(basename "$item")
@@ -85,7 +94,9 @@ main() {
     for k in $KEEP_DIRS; do [ "$name" = "$k" ] && skip=1; done
     # ...unless he does not have it yet, in which case the empty one ships.
     for k in $KEEP_FILES; do
-      [ "$name" = "$k" ] && [ -f "$root/$k" ] && skip=1
+      if [ "$name" = "$k" ]; then
+        if [ -f "$root/$k" ]; then skip=1; else shipped="$shipped $k"; fi
+      fi
     done
     [ "$skip" -eq 1 ] && continue
     cp -R "$item" "$root/"
@@ -131,7 +142,10 @@ main() {
   rm -rf "$tmp"
 
   say ""
-  say "DONE. Your briefs, your show archive and your preferences.md were not touched."
+  say "DONE. Your briefs, your show archive, your preferences.md and your sources.md were not touched."
+  for f in $shipped; do
+    say "You had no $f, so the one that ships with the project is now in place."
+  done
   if [ -n "$backed_up" ]; then
     say ""
     say "These files had your own changes in them. The new version is now in place,"

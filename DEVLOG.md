@@ -1070,3 +1070,12 @@ news-only copies.
   update itself completed (main() is parsed whole). Fixed for future updates
   with `main "$@"; exit $?` on one line. Yaron's next /update still runs his
   old script and may print the same harmless error.
+
+## 2026-10-10 · update.sh guard against an older update.sh
+
+- An older update.sh copying the new file over itself read on at its old
+  byte offset: an error and sometimes a second run. The new file opens with
+  7.5 KB of blank lines and `declare -F main && exit 0`: the resuming old
+  process exits quietly, a fresh run goes on. Tested with all six past
+  versions (one DONE, no error, exit 0 each) and a control without the guard
+  (two DONE, one error). Yaron's next /update will be clean too.

@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Tests for x_settings.py -- the loader for the X half of settings.md."""
 
+import os
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -12,6 +14,9 @@ import x_settings  # noqa: E402
 
 
 REAL_SETTINGS = Path(__file__).resolve().parents[5] / "settings.md"
+# The shipped sources.md, copied: the user's own copy is his to edit, and no
+# test may depend on what he left in it.
+FIXTURE_SOURCES = Path(__file__).resolve().parents[5] / "tests" / "fixtures" / "sources.md"
 
 
 class TestLoadRealSettings(unittest.TestCase):
@@ -163,12 +168,28 @@ class TestReadXLists(unittest.TestCase):
                 "## X lists\n\n1. A - https://x.com/i/lists/1\n"
                 "2. B - https://x.com/i/lists/1\n"))
 
-    def test_the_real_sources_file_names_at_least_one_list(self):
-        rows = x_settings.read_x_lists()
+    def test_the_shipped_sources_file_names_at_least_one_list(self):
+        rows = x_settings.read_x_lists(FIXTURE_SOURCES)
         self.assertTrue(rows)
         for r in rows:
             self.assertTrue(r["url"].startswith("https://x.com/i/lists/"), r["url"])
             self.assertTrue(r["name"])
+
+
+class TestSourcesOverride(unittest.TestCase):
+    """`YBS_SOURCES_FILE` is how the tests read the fixture rather than the
+    user's sources.md; the scrape must honour it the way ybs_run.py does."""
+
+    def test_the_variable_names_the_file(self):
+        with mock.patch.dict(os.environ, {"YBS_SOURCES_FILE": str(FIXTURE_SOURCES)}):
+            self.assertEqual(x_settings.default_sources_path(), FIXTURE_SOURCES)
+
+    def test_without_it_the_project_file(self):
+        env = {k: v for k, v in os.environ.items() if k != "YBS_SOURCES_FILE"}
+        with mock.patch.dict(os.environ, env, clear=True):
+            self.assertEqual(x_settings.default_sources_path().name, "sources.md")
+            self.assertEqual(x_settings.default_sources_path().parent,
+                             x_settings.project_root())
 
 
 if __name__ == "__main__":

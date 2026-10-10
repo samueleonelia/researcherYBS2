@@ -13,6 +13,7 @@ Two kinds of check:
    script, the prompt is teaching an agent to fail.
 """
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -27,6 +28,10 @@ SKILL = ROOT / ".claude" / "skills" / "ybs-brief"
 PROMPTS = SKILL / "prompts"
 SCRIPT = SKILL / "scripts" / "ybs_run.py"
 FAILURES = []
+
+# sources.md is the user's to edit, so no check here reads it: every command
+# this suite runs inherits this variable and reads the shipped list's copy.
+os.environ["YBS_SOURCES_FILE"] = str(ROOT / "tests" / "fixtures" / "sources.md")
 
 
 def check(name, cond, detail=""):

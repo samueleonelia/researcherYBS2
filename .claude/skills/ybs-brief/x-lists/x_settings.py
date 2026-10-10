@@ -28,6 +28,7 @@ Usage from the command line (mirrors ybs_run.py's `settings` subcommand):
 Python 3, standard library only.
 """
 
+import os
 import re
 import sys
 from pathlib import Path
@@ -125,7 +126,14 @@ def load_settings(path: Path = None) -> dict:
 
 
 def default_sources_path() -> Path:
-    """<root>/sources.md, where the X lists are listed."""
+    """<root>/sources.md, where the X lists are listed.
+
+    `YBS_SOURCES_FILE` overrides it, the same variable ybs_run.py reads, and
+    only the tests set it: sources.md is the user's to edit, so no test may
+    depend on what is in it."""
+    override = os.environ.get("YBS_SOURCES_FILE")
+    if override:
+        return Path(override).expanduser()
     return project_root() / "sources.md"
 
 

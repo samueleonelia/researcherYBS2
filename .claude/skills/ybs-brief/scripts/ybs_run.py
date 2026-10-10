@@ -1762,7 +1762,18 @@ X_WAIT_MINUTES = SETTINGS["x_wait_minutes_max"]
 X_LISTS_HEADING = "x lists"
 
 
-def read_sources(root: Path) -> tuple:
+def sources_path() -> Path:
+    """The sources.md every command reads. `YBS_SOURCES_FILE` overrides it, and
+    only the tests set it: the file is the user's to edit, and a test that read
+    it would fail the day he deleted a line. The tests read the copy of the
+    shipped list in tests/fixtures/ instead."""
+    override = os.environ.get("YBS_SOURCES_FILE")
+    if override:
+        return Path(override).expanduser()
+    return project_root() / "sources.md"
+
+
+def read_sources(f: Path = None) -> tuple:
     """Read sources.md. One source per line, in either of these shapes:
 
         1. Guardian - https://www.theguardian.com/
@@ -1781,7 +1792,7 @@ def read_sources(root: Path) -> tuple:
     is screened by an agent; an X list is scrolled by `x-lists/x_scrape.py`,
     and mixing the two would send a screener to x.com.
     """
-    f = root / "sources.md"
+    f = Path(f) if f else sources_path()
     if not f.exists():
         die("sources.md not found at " + str(f))
     rows, notices = [], []
@@ -1816,13 +1827,13 @@ def read_sources(root: Path) -> tuple:
     return rows, notices
 
 
-def read_x_lists(root: Path) -> list:
+def read_x_lists(f: Path = None) -> list:
     """Read the `## X lists` section of sources.md: `1. Name - https://x.com/...`.
 
     Same forgiving line shape as a news source. An empty or absent section is
     not an error: the X half then has nothing to read and says so.
     """
-    f = root / "sources.md"
+    f = Path(f) if f else sources_path()
     if not f.exists():
         die("sources.md not found at " + str(f))
     rows, section = [], ""
@@ -1848,11 +1859,11 @@ def read_x_lists(root: Path) -> list:
 
 
 def cmd_sources(args):
-    rows, notices = read_sources(project_root())
+    rows, notices = read_sources()
     for n in notices:
         print(n, file=sys.stderr)
     print(json.dumps({"sources": rows,
-                       "x_lists": read_x_lists(project_root())},
+                       "x_lists": read_x_lists()},
                       indent=2, ensure_ascii=False))
     return 0
 
@@ -1944,11 +1955,10 @@ def find_base(named: str, local_date: str, slot: str = "morning",
 
 
 def cmd_start(args):
-    root = project_root()
     # Read the source list first, and say once what is stale in it. The notice
     # goes to stderr because stdout is this command's JSON and the skill parses
     # it; a line of prose in the middle would break the run rather than warn it.
-    sources, notices = read_sources(root)
+    sources, notices = read_sources()
     for n in notices:
         print(n, file=sys.stderr)
     now, local = utc_now(), datetime.now()

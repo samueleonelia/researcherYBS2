@@ -21,6 +21,12 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / ".claude" / "skills" / "ybs-brief" / "scripts" / "ybs_run.py"
 FAILURES = []
 
+# sources.md is the user's to edit: he may delete any line, or all of them, and
+# no test may fail for it. So nothing here reads it. Every command this suite
+# runs inherits this variable and reads the copy of the shipped list instead.
+FIXTURE_SOURCES = ROOT / "tests" / "fixtures" / "sources.md"
+os.environ["YBS_SOURCES_FILE"] = str(FIXTURE_SOURCES)
+
 
 def run(*args, expect=None, env=None):
     r = subprocess.run([sys.executable, str(SCRIPT)] + [str(a) for a in args],
@@ -3539,7 +3545,8 @@ def test_email_failed():
 def test_sources_halves():
     """sources.md holds the news front pages and, at the bottom, the X lists.
     A screener agent must never be sent to x.com, so the two halves are read
-    by two commands and the X section is invisible to `read_sources`."""
+    by two commands and the X section is invisible to `read_sources`. Read
+    from the fixture, the shipped list: the user's own copy may hold anything."""
     print("\nsources: news pages and X lists stay apart")
     out, _ = run("sources")
     news = out["sources"]
@@ -3555,7 +3562,7 @@ def test_sources_halves():
 
 
 def load_script():
-    """Import ybs_run itself. `read_sources` takes a root, so a scratch
+    """Import ybs_run itself. `read_sources` takes a file, so a scratch
     sources.md can be read without a scratch copy of the whole project."""
     import importlib.util
     spec = importlib.util.spec_from_file_location("ybs_run_under_test", SCRIPT)
@@ -3575,7 +3582,7 @@ def test_sources_third_part():
         (tmp / "sources.md").write_text(
             "# Sources\n\n1. Guardian - https://www.theguardian.com/\n"
             "2. Paper - https://example.com/news/ - Sign Out\n", encoding="utf-8")
-        rows, notices = mod.read_sources(tmp)
+        rows, notices = mod.read_sources(tmp / "sources.md")
         check("both lines are read", len(rows) == 2, str(rows))
         check("no row carries a marker",
               not [r for r in rows if "marker" in r], str(rows))

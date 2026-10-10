@@ -371,7 +371,9 @@ python3 .claude/skills/ybs-brief/scripts/ybs_run.py picks-sync --run <run_dir>
 It checks the slot's own tags and ceilings, and that every note is either
 picked or dropped with a reason. A reply over the slot's ceiling is not a
 failure: the command trims it itself, smallest news items first, and records
-what it cut. One rerun on failure, quoting the check.
+what it cut. Its `warnings` are not failures either: they go to the run log
+for review, so never rerun the pick for one. One rerun on failure (`problems`,
+exit 1), quoting the check.
 
 ## Step 8 — check the figures
 

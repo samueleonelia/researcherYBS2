@@ -3384,6 +3384,29 @@ def test_daily_lock():
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def test_daily_lock_race(trials=60):
+    """Three jobs fired together by a Mac waking up race for the lock: exactly
+    one may win, every time. Each trial starts three takers at once on a free
+    lock in a runs folder of its own."""
+    print("\ndaily-lock: three jobs at the same instant")
+    doubles = 0
+    for _ in range(trials):
+        tmp = Path(tempfile.mkdtemp(prefix="ybs-runs-"))
+        try:
+            env = {**os.environ, "YBS_SKIP_SPACE_CLEANUP": "1", "YBS_RUNS_DIR": str(tmp)}
+            procs = [subprocess.Popen([sys.executable, str(SCRIPT), "daily-lock", "take",
+                                       "--slot", slot], cwd=ROOT, env=env, text=True,
+                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                     for slot in ("shows", "morning", "afternoon")]
+            won = sum(1 for pr in procs if pr.communicate()[0].strip() == "taken")
+            if won != 1:
+                doubles += 1
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+    check(f"one winner in every one of {trials} three-way races", doubles == 0,
+          f"{doubles} races ended with a winner count other than one")
+
+
 def test_email():
     """`email RUN_DIR` turns a finished brief.md into the email the scheduled
     run sends, in code, so no model retypes a brief.
@@ -3630,6 +3653,7 @@ def main():
         test_morning_check()
         test_catch_up_order()
         test_daily_lock()
+        test_daily_lock_race()
         test_email()
         test_email_failed()
     finally:

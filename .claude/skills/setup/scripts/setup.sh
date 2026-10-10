@@ -225,11 +225,14 @@ step_tests() {
   all=""
   for t in test-bookkeeping-v4 test-prompts-v4 test-shows-v4; do
     out=$(cd "$root" && python3 "tests/$t.py" 2>&1)
+    rc=$?
     n=$(printf '%s' "$out" | sed -n 's/^\([0-9][0-9]*\) FAILED.*/\1/p' | head -1)
     [ -z "$n" ] && n=0
     if ! printf '%s' "$out" | grep -q "FAILED"; then
-      # No summary line at all: the file crashed before it could count.
-      if printf '%s' "$out" | grep -q "Traceback"; then
+      # No summary line at all: the file crashed before it could count. A file
+      # that cannot even start (a syntax error, a missing file) prints no
+      # Traceback but still exits non-zero, so the exit code counts too.
+      if printf '%s' "$out" | grep -q "Traceback" || [ "$rc" -ne 0 ]; then
         say "  crashed  $t"
         all="$all
 CRASH $t"

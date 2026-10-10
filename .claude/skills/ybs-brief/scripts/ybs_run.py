@@ -49,6 +49,7 @@ Exit codes: 0 = ok, 1 = did the job but found a problem, 2 = bad usage / error.
 """
 
 import argparse
+import fcntl
 import html
 import json
 import re
@@ -4155,6 +4156,8 @@ def daily_lock_state():
     try:
         held = json.loads(path.read_text(encoding="utf-8"))
         taken = datetime.fromisoformat(held["taken_utc"].replace("Z", "+00:00"))
+        if taken.tzinfo is None:                      # a time with no zone is UTC here
+            taken = taken.replace(tzinfo=timezone.utc)
         slot = held.get("slot", "?")
     except FileNotFoundError:
         return None
@@ -4171,18 +4174,26 @@ def daily_lock_state():
 
 
 def daily_lock_take(slot: str) -> bool:
-    """Take the lock for this job; False when another job holds it."""
+    """Take the lock for this job; False when another job holds it.
+
+    Look, clear and create happen under an flock on a guard file of their own.
+    Without it, two jobs fired together by a Mac waking up could both see the
+    lock free, and the second's clearing would delete the first's new lock:
+    a reviewer saw two winners in 2 of 200 three-way races.
+    """
     path = daily_lock_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    if daily_lock_state() is None:
-        path.unlink(missing_ok=True)                  # free, or stale: clear it
-    try:
-        fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-    except FileExistsError:
-        return False
-    with os.fdopen(fd, "w", encoding="utf-8") as f:
-        json.dump({"slot": slot, "taken_utc": iso(utc_now())}, f)
-    return True
+    with open(path.with_name(DAILY_LOCK_NAME + ".guard"), "a") as guard:
+        fcntl.flock(guard, fcntl.LOCK_EX)
+        if daily_lock_state() is None:
+            path.unlink(missing_ok=True)              # free, or stale: clear it
+        try:
+            fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            return False
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump({"slot": slot, "taken_utc": iso(utc_now())}, f)
+        return True
 
 
 # Minutes a queue marker counts after it was last touched. A waiter touches

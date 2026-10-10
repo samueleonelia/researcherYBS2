@@ -1062,3 +1062,11 @@ Samuele's rule: editing sources.md must always be safe.
 `closing_utc` stamp difference on failed lanes). update.sh on copies of
 Yaron's v4.10 layout. All suites on full, trimmed, empty, X-only and
 news-only copies.
+
+## 2026-10-10 · update.sh self-overwrite
+
+- The rehearsal's /update ended with "unexpected EOF": the script replaces its
+  own file, and after main() returned bash read on from the new file. The
+  update itself completed (main() is parsed whole). Fixed for future updates
+  with `main "$@"; exit $?` on one line. Yaron's next /update still runs his
+  old script and may print the same harmless error.

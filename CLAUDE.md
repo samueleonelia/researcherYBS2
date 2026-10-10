@@ -22,7 +22,7 @@ This is the active successor to the sibling repo `../researcherYBS/`. Evidence f
 None configured for this folder in `~/.claude.json`. The brief work runs through the `ego-browser` skill (ego lite, signed into YouTube) rather than an MCP connector.
 
 ## Rules
-- Currently on `main`, tag `v4.6-yaron-patches`, pushed. Treat `main` as the version `/update` distributes to Yaron — verify tests before pushing.
+- Currently on `main`, tag `v4.8-all-tests-pass`, pushed. Treat `main` as the version `/update` distributes to Yaron — verify tests before pushing.
 - Every test passes (since 2026-10-10); `/setup` treats any failure as new and tells the user to wait for Samuele.
 - `/update` must never overwrite `preferences.md`, `briefs/`, or `shows/`.
 

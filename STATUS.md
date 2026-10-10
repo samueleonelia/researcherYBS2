@@ -1,12 +1,12 @@
 # STATUS: researcherYBS2
 
-_Updated: 2026-10-09 · Review fixes in main; rehearsal as Yaron pending_
+_Updated: 2026-10-10 · Rehearsal passed; every test passes_
 
 <!-- Rewrite this file in place. Never append. History belongs in DEVLOG.md. Keep under 60 lines. -->
 
 **What this is:** A Claude Code skill (`/ybs-brief`) that builds a news brief for Yaron Brook from six sources plus two X lists, `/ybs-shows` which keeps his show profile current, and `/autopilot` + `/ybs-daily` which run both on a schedule on his Mac and email him each brief's Google Drive link.
 
-**Right now:** `main`, tagged `v4.7-review-fixes`, pushed (on top of `v4.6-yaron-patches`: a fresh review's 7 defects fixed). Next is a rehearsal as Yaron in `../rehearsalYaron` (fresh GitHub zip, X account set to Samuele's). On top of the automatic briefs (`v4.5-autopilot`): Yaron's patches 02-07 (X list tabs and reader spaces closed, 0-link screens retried, every ego space closed at `close`), `settings.md` now ships `x_account: @yaronbrook`, and `/ybs-daily` takes a lock so jobs fired together by a waking Mac run one at a time. `update.sh` rehearsed on a copy of v4.5. Nothing yet run on Yaron's Mac.
+**Right now:** `main`, tagged `v4.8-all-tests-pass`, pushed. The rehearsal as Yaron passed on 10-10 in `../rehearsalYaron` (fresh GitHub zip): `/setup`, `/autopilot`, the scheduled test email, shows at 02:02 (no email, correct), morning at 05:43 with the Drive Doc and the email at 06:03. Every test passes. Waiting on Yaron's setup.
 
 ## Feature areas
 | Area | State | Note |
@@ -25,26 +25,22 @@ _Updated: 2026-10-09 · Review fixes in main; rehearsal as Yaron pending_
 | Evening report | ✅ working | ran live 09-10, X merged |
 | Show profile (`/ybs-shows`) | ✅ working | asks for English captions since 10-02: YouTube's AI dubs had put Arabic tracks first |
 | Settings | ✅ working | one root `settings.md` |
-| Test suite | ⚠️ partial | 4 old failures, see bugs; `/setup` names them instead of counting; `run-all.sh` stops at the first failing file |
+| Test suite | ✅ working | every test passes since 10-10; `/setup` treats any failure as new |
 | Git remote | ✅ working | github.com/samueleonelia/researcherYBS2 (private) |
 | Install (`/setup`) and update (`/update`) | ✅ working | `/update` keeps briefs/, shows/, preferences.md, and `.claude/settings.local.json` |
-| Automatic briefs (`/autopilot`, `/ybs-daily`) | ✅ tested here | `daily-lock`: one job at a time; 4 daily tasks (shows 02:00, morning 05:30, afternoon 13:00, evening 19:00); brief to Drive `YBS briefs`, email = time + link + plug; auto mode as the folder default; never run on Yaron's Mac yet |
+| Automatic briefs (`/autopilot`, `/ybs-daily`) | ✅ rehearsed | `daily-lock`: one job at a time; 4 daily tasks (shows 02:00, morning 05:30, afternoon 13:00, evening 19:00); brief to Drive `YBS briefs`, email = time + link + plug; auto mode as the folder default; never run on Yaron's Mac yet |
 
 ## Next up
 1. Yaron: connect Gmail + Google Drive, then `/update`, `/setup`, `/autopilot`; check the test email arrives unread
 2. His first real 05:30 morning email: confirm it arrived, and check the Drive Doc is complete (Claude copies a ~35 KB brief into the upload)
 3. One live `/ybs-brief afternoon`: the first real test of the `**Follows:**` pointer
 4. The 09-12 morning took 46.6 min, over the 45 ceiling: see whether the 55 judge agents at step 6 are the reason
-5. Fix the old test failures and make `run-all.sh` run every file
 
 ## Known bugs
 - On Samuele's Mac, X runs need `x_account` set back to his own handle locally: `main` ships Yaron's
-- `picks-sync` trims an over-ceiling list (by design, per Yaron's Claude); its 2 tests still expect a refusal and should be updated
-- `SKILL.md` states one number of its own instead of a `{{settings.*}}` placeholder (1 test fails)
-- A beat story picked over a passed-over topic story is not caught (1 test fails)
 - Guardian session in ego-browser is not logged in: sign-in wall on paid reads, undated links
-- `tests/run-all.sh` stops at the first failing file, so two files never run
 
 ## Blocked on you
-- Send Yaron the setup steps, and tell him the patches are in `main` (his `fixes-for-samuele` folder can go)
+- Send Yaron the reply drafted in Gmail (patches thread)
+- Delete the rehearsal: its 5 scheduled tasks (`ybs-daily-*`, `ybs-daily-test`) and `../rehearsalYaron`
 - Say when to run the afternoon live

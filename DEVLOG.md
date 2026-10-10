@@ -983,3 +983,21 @@ archive and crashed on mine once `/ybs-shows` rotated the profile.
 
 **Next**
 - Rehearsal as Yaron on Samuele's Mac in `../rehearsalYaron`.
+
+## 2026-10-10 · Rehearsal as Yaron passed; every test passes (v4.8-all-tests-pass)
+
+**Rehearsal** (Samuele's Mac, `../rehearsalYaron` = fresh GitHub zip + his
+show archive + his X handle): `/setup` all ok; `/autopilot` wrote the four
+exact permission rules and auto mode, made the four tasks with the right
+folder, and its scheduled test email arrived (22:54). Shows ran 02:02-02:07:
+10 new transcripts, all English, one show waiting for captions, profile
+rebuilt, no email (correct). Morning fired at 05:43 (the app adds a few
+minutes to a cron time), brief done 06:01 (7 stories + 5 X posts), Drive Doc
+and email at 06:03, lock freed, 1 ego space swept. Reported by the run, not
+the automation: Times of Israel behind Cloudflare "Access denied" for all 5
+reads; the orchestrator asked `x-next` early once (harmless retry).
+
+**Tests**: the four old failures fixed (see the commit): the picks trim test
+now tests the trim, the topic-over-beat rule became a `picks-sync` warning
+plus a `picks_warning` event, "50 KB" reworded in SKILL.md, `/setup`'s known
+list emptied. All suites, x-lists and `tests/run-all.sh` pass.

@@ -1024,3 +1024,10 @@ list emptied. All suites, x-lists and `tests/run-all.sh` pass.
 **Noted, not changed**
 - The topic-over-beat warning fires often on real mornings (44 across 6 of
   13): it is review material, not an error, and stays a warning.
+
+## 2026-10-10 · /ybs-shows profile prompt read from file
+
+- The rehearsal's shows run found the filled profile prompt at 92 KB and
+  launched the agent with "Read <path> and follow it" instead of pasting it.
+  SKILL.md step 5 now says so, and the profile agent's template allows that
+  one read. Same pattern /ybs-brief uses. Shows and prompt tests pass.

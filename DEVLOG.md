@@ -1001,3 +1001,26 @@ reads; the orchestrator asked `x-next` early once (harmless retry).
 now tests the trim, the topic-over-beat rule became a `picks-sync` warning
 plus a `picks_warning` event, "50 KB" reworded in SKILL.md, `/setup`'s known
 list emptied. All suites, x-lists and `tests/run-all.sh` pass.
+
+## 2026-10-10 · Second independent review (v4.9-review2)
+
+**Verified by a reviewer that wrote none of it**
+- v4.8's picks-sync change on copies of all 19 real run folders, old code vs
+  new: identical exits, output, picks.json and run.json apart from the new
+  `warnings` key and `picks_warning` events. Odd inputs do not crash it.
+- The changed tests catch the bugs they name (mutation: no trim, no warning,
+  trim to 14 each fail). setup.sh with an empty known list under bash 3.2.
+- The catch-up order in five simulated wake-up scenarios; no endless wait.
+
+**Fixed from its findings**
+- Lock race: look/clear/create now under an flock on `.daily-lock.json.guard`
+  (in briefs/, git-ignored). New test: 3 of 300 three-way races had two
+  winners on the old code, 0 of 300 now.
+- setup.sh: a test file that cannot start (syntax error, missing) exits
+  non-zero without FAILED or Traceback; it now shows as crashed, not ok.
+- A naive `taken_utc` is read as UTC instead of raising TypeError.
+- ybs-brief SKILL.md: picks-sync warnings never trigger a rerun.
+
+**Noted, not changed**
+- The topic-over-beat warning fires often on real mornings (44 across 6 of
+  13): it is review material, not an error, and stays a warning.
